@@ -874,6 +874,25 @@ tr.expand-row td {
   *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
 
+
+/* ===== Mobile / small-screen layout ===== */
+.menu-toggle{display:none}
+.sidebar-backdrop{display:none}
+@media (max-width:800px){
+  #app-shell{grid-template-columns:1fr;grid-template-areas:"topbar" "main"}
+  .sidebar{position:fixed;top:0;left:0;bottom:0;width:min(280px,85vw);transform:translateX(-105%);transition:transform 200ms ease;z-index:60;visibility:hidden}
+  body.sidebar-open .sidebar{transform:none;visibility:visible;box-shadow:0 0 40px rgba(0,0,0,.35)}
+  body.sidebar-open .sidebar-backdrop{display:block;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:55}
+  .menu-toggle{display:inline-flex;align-items:center;justify-content:center;position:fixed;top:10px;left:10px;width:40px;height:40px;border-radius:10px;border:1px solid var(--border-subtle);background:var(--bg-surface);color:var(--text-primary);font-size:20px;line-height:1;cursor:pointer;z-index:40}
+  .topbar{padding-left:58px;padding-right:12px;gap:8px}
+  .breadcrumbs{display:none}
+  .topbar-search{max-width:none}
+  .content{padding:14px 12px}
+  .page-header{flex-wrap:wrap;gap:12px}
+  .page-header-actions{flex-wrap:wrap}
+  .two-col{grid-template-columns:minmax(0,1fr)}
+  .two-col>*{min-width:0}
+}
 </style>
 </head>
 <body>
@@ -3795,5 +3814,22 @@ window.closeModal = closeModal;
 })();
 
   </script>
+<script>
+/* Mobile menu toggle: shows the sidebar as a slide-in drawer on small screens */
+(function(){
+  if(document.getElementById('menu-toggle'))return;
+  var b=document.createElement('button');
+  b.id='menu-toggle';b.type='button';b.className='menu-toggle';
+  b.setAttribute('aria-label','Toggle menu');b.textContent='\u2630';
+  document.body.appendChild(b);
+  var bd=document.createElement('div');bd.className='sidebar-backdrop';
+  document.body.appendChild(bd);
+  function closeMenu(){document.body.classList.remove('sidebar-open');}
+  b.addEventListener('click',function(){document.body.classList.toggle('sidebar-open');});
+  bd.addEventListener('click',closeMenu);
+  var nav=document.getElementById('sidebar-nav');
+  if(nav){nav.addEventListener('click',function(){setTimeout(closeMenu,80);});}
+})();
+</script>
 </body>
 </html>
