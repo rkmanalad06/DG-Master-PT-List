@@ -3642,9 +3642,22 @@ function renderWizardStep() {
       checkReady();
     });
     document.getElementById("wiz-target-select").addEventListener("change", (e) => { importWizard.targetId = e.target.value || null; checkReady(); });
+    // If the sheet/target dropdowns already show a value when this step first
+    // renders (auto-picked, or pre-filled via a "?target=" link), no native
+    // "change" event fires for it, so the state above never gets populated
+    // and Next stays stuck disabled. Force both listeners to run once for
+    // whatever's currently showing, so this works whether the user actually
+    // clicks a dropdown option or it was already selected for them.
+    ["wiz-sheet-select", "wiz-target-select"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el.value) el.dispatchEvent(new Event("change"));
+    });
     checkReady();
     footer.querySelector("#wiz-next").addEventListener("click", () => {
-      const targetHeaders = RAW_SHEETS[importWizard.targetId].headers;
+      // Falls back to the incoming file's own headers when the target sheet
+      // has no base data loaded yet (e.g. importing before the one-time
+      // roster seed has run) — 1:1 column mapping instead of a hard crash.
+      const targetHeaders = (RAW_SHEETS[importWizard.targetId] && RAW_SHEETS[importWizard.targetId].headers) || importWizard.incomingHeaders;
       importWizard.mapping = {};
       for (const h of importWizard.incomingHeaders) {
         const exact = targetHeaders.find((t) => t.toLowerCase().trim() === h.toLowerCase().trim());
