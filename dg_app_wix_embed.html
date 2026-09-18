@@ -1,0 +1,3786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DG Master Patient List</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+/* ==========================================================================
+   DESIGN TOKENS
+   ========================================================================== */
+:root {
+  --burgundy-50: #fbf2f3;
+  --burgundy-100: #f3dde0;
+  --burgundy-200: #e5b7bd;
+  --burgundy-500: #8f2a3c;
+  --burgundy-600: #7a2233;
+  --burgundy-700: #641b29;
+  --burgundy-900: #3d0f18;
+
+  --ink-900: #1a1d23;
+  --ink-800: #262a33;
+  --ink-700: #3a3f4b;
+  --ink-600: #565c6a;
+  --ink-500: #6b7182;
+  --ink-400: #8b90a0;
+  --ink-300: #b0b4c0;
+  --ink-200: #d8dae1;
+  --ink-100: #eceef2;
+  --ink-50: #f6f7f9;
+
+  --white: #ffffff;
+
+  --status-complete: #1e7d4b;
+  --status-complete-bg: #e5f5ec;
+  --status-pending: #a06a12;
+  --status-pending-bg: #fbf0dc;
+  --status-attention: #b3312c;
+  --status-attention-bg: #fbe6e5;
+  --status-progress: #2261b0;
+  --status-progress-bg: #e6effa;
+  --status-neutral: #6b7182;
+  --status-neutral-bg: #eceef2;
+
+  --bg-app: #f5f4f6;
+  --bg-surface: var(--white);
+  --bg-sunken: var(--ink-50);
+  --border-subtle: var(--ink-200);
+  --border-strong: var(--ink-300);
+
+  --text-primary: var(--ink-900);
+  --text-secondary: var(--ink-600);
+  --text-tertiary: var(--ink-400);
+  --text-on-accent: var(--white);
+  --accent: var(--burgundy-600);
+  --accent-hover: var(--burgundy-700);
+  --accent-soft: var(--burgundy-50);
+  --accent-soft-border: var(--burgundy-200);
+
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  --shadow-sm: 0 1px 2px rgba(26, 29, 35, 0.06);
+  --shadow-md: 0 4px 16px rgba(26, 29, 35, 0.08), 0 1px 2px rgba(26, 29, 35, 0.06);
+  --shadow-lg: 0 12px 32px rgba(26, 29, 35, 0.14), 0 2px 6px rgba(26, 29, 35, 0.08);
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  --sidebar-w: 280px;
+  --topbar-h: 60px;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4, p { margin: 0; }
+button { font-family: inherit; }
+::selection { background: var(--accent-soft-border); }
+
+a { color: var(--accent); text-decoration: none; }
+a.link-inline { text-decoration: underline; }
+a.link-inline:hover { color: var(--accent-hover); }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--ink-300); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-400); }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ==========================================================================
+   LAYOUT SHELL
+   ========================================================================== */
+#app-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-rows: var(--topbar-h) 1fr;
+  height: 100vh;
+  grid-template-areas: "sidebar topbar" "sidebar main";
+}
+
+.topbar {
+  grid-area: topbar;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-6);
+  gap: var(--space-5);
+  z-index: 5;
+}
+
+.topbar-search {
+  flex: 1;
+  max-width: 520px;
+  position: relative;
+}
+.topbar-search input {
+  width: 100%;
+  padding: 9px 14px 9px 38px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-sunken);
+  font-size: 13.5px;
+  color: var(--text-primary);
+  transition: border-color 160ms var(--ease-out), background 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
+}
+.topbar-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg-surface);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.topbar-search .icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.topbar-right { display: flex; align-items: center; gap: var(--space-3); margin-left: auto; }
+
+.icon-btn {
+  width: 36px; height: 36px;
+  display: grid; place-items: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 140ms var(--ease-out), transform 160ms var(--ease-out), color 140ms var(--ease-out);
+  position: relative;
+}
+.icon-btn:hover { background: var(--ink-100); color: var(--text-primary); }
+.icon-btn:active { transform: scale(0.93); }
+.icon-btn .badge-dot {
+  position: absolute; top: 4px; right: 4px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--status-attention);
+  border: 1.5px solid var(--bg-surface);
+}
+
+.sidebar {
+  grid-area: sidebar;
+  background: var(--ink-900);
+  color: var(--ink-200);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sidebar-brand {
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-5);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
+}
+.sidebar-brand .mark {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--burgundy-500), var(--burgundy-700));
+  display: grid; place-items: center;
+  color: white; font-weight: 700; font-size: 14px;
+  flex-shrink: 0;
+}
+.sidebar-brand .name { font-weight: 600; font-size: 14.5px; color: white; letter-spacing: -0.01em; }
+.sidebar-brand .subname { font-size: 11px; color: var(--ink-400); }
+
+.sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-3) var(--space-6);
+}
+
+.nav-group { margin-top: var(--space-5); }
+.nav-group:first-child { margin-top: var(--space-2); }
+.nav-group-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+  padding: 0 var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--ink-200);
+  font-size: 13px;
+  transition: background 140ms var(--ease-out), color 140ms var(--ease-out);
+  margin-bottom: 2px;
+  border: 1px solid transparent;
+}
+.nav-item:hover { background: rgba(255,255,255,0.06); color: white; }
+.nav-item.active {
+  background: rgba(143, 42, 60, 0.35);
+  color: white;
+  border-color: rgba(191, 90, 107, 0.4);
+}
+.nav-item .nav-icon { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.85; }
+.nav-item .nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-item .nav-count {
+  font-size: 10.5px;
+  color: var(--ink-400);
+  background: rgba(255,255,255,0.08);
+  padding: 1px 6px;
+  border-radius: 20px;
+  flex-shrink: 0;
+}
+.nav-item.active .nav-count { background: rgba(255,255,255,0.18); color: white; }
+.nav-item .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+main.content {
+  grid-area: main;
+  overflow-y: auto;
+  padding: var(--space-6) var(--space-8) var(--space-10);
+}
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-4);
+}
+.breadcrumbs a { color: var(--text-tertiary); text-decoration: none; cursor: pointer; }
+.breadcrumbs a:hover { color: var(--accent); }
+.breadcrumbs .sep { color: var(--ink-300); }
+.breadcrumbs .current { color: var(--text-secondary); font-weight: 500; }
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+.page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.015em; color: var(--text-primary); }
+.page-subtitle { font-size: 13.5px; color: var(--text-secondary); margin-top: 4px; max-width: 640px; }
+.page-header-actions { display: flex; gap: var(--space-2); flex-shrink: 0; }
+
+/* ==========================================================================
+   BUTTONS
+   ========================================================================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 160ms var(--ease-out), background 140ms var(--ease-out), border-color 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
+  white-space: nowrap;
+}
+.btn:hover { background: var(--ink-50); border-color: var(--border-strong); }
+.btn:active { transform: scale(0.97); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--text-on-accent); }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.danger { color: var(--status-attention); border-color: var(--status-attention-bg); }
+.btn.danger:hover { background: var(--status-attention-bg); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--ink-100); }
+.btn.sm { padding: 5px 10px; font-size: 12px; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+.btn svg { flex-shrink: 0; }
+
+/* ==========================================================================
+   CARDS / KPI
+   ========================================================================== */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+@media (max-width: 1200px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* Compact summary cards: tightened padding/gaps/type so the summary row takes
+   noticeably less vertical space, leaving more of the table below visible
+   without scrolling. */
+.kpi-card {
+  padding: 10px var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: box-shadow 180ms var(--ease-out), transform 180ms var(--ease-out);
+}
+.kpi-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.kpi-card .kpi-top { display: flex; align-items: center; justify-content: space-between; }
+.kpi-card .kpi-icon {
+  width: 26px; height: 26px; border-radius: 7px;
+  display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent);
+  flex-shrink: 0;
+}
+.kpi-card .kpi-icon svg { width: 14px; height: 14px; }
+.kpi-card .kpi-label { font-size: 10.5px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.kpi-card .kpi-value { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: var(--text-primary); line-height: 1.15; }
+.kpi-card .kpi-sub { font-size: 11px; color: var(--text-tertiary); }
+.kpi-card .kpi-sub.positive { color: var(--status-complete); }
+.kpi-card .kpi-sub.warn { color: var(--status-attention); }
+
+.section {
+  margin-bottom: var(--space-6);
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+.section-title { font-size: 15px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.01em; }
+.section-title .count { color: var(--text-tertiary); font-weight: 500; }
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (max-width: 1100px) { .two-col { grid-template-columns: 1fr; } }
+
+/* ==========================================================================
+   PROGRESS BARS / BADGES
+   ========================================================================== */
+.progress-track {
+  height: 8px;
+  background: var(--ink-100);
+  border-radius: 20px;
+  overflow: hidden;
+  position: relative;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 20px;
+  background: var(--accent);
+  transition: width 400ms var(--ease-in-out);
+}
+.progress-fill.complete { background: var(--status-complete); }
+.progress-fill.attention { background: var(--status-attention); }
+.progress-fill.progress-mid { background: var(--status-progress); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.badge .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.badge.status-complete { background: var(--status-complete-bg); color: var(--status-complete); }
+.badge.status-pending { background: var(--status-pending-bg); color: var(--status-pending); }
+.badge.status-needs-attention { background: var(--status-attention-bg); color: var(--status-attention); }
+.badge.status-not-started { background: var(--status-neutral-bg); color: var(--status-neutral); }
+.badge.status-in-progress { background: var(--status-progress-bg); color: var(--status-progress); }
+.badge.status-needs-review { background: var(--status-attention-bg); color: var(--status-attention); }
+.badge.neutral { background: var(--ink-100); color: var(--text-secondary); }
+.badge.outline { background: transparent; border: 1px solid var(--border-strong); color: var(--text-secondary); }
+
+/* ==========================================================================
+   TAB OVERVIEW TABLE (dashboard)
+   ========================================================================== */
+.tab-overview-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tab-overview-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  font-weight: 700;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  position: sticky; top: 0; background: var(--bg-surface);
+}
+.tab-overview-table td { padding: 11px 14px; border-bottom: 1px solid var(--border-subtle); vertical-align: middle; }
+.tab-overview-table tr:last-child td { border-bottom: none; }
+.tab-overview-table tr.clickable { cursor: pointer; transition: background 120ms var(--ease-out); }
+.tab-overview-table tr.clickable:hover { background: var(--bg-sunken); }
+.tab-overview-table .tab-name-cell { font-weight: 600; color: var(--text-primary); }
+.tab-overview-table .mini-progress { display: flex; align-items: center; gap: 8px; min-width: 140px; }
+.tab-overview-table .mini-progress .progress-track { flex: 1; }
+.tab-overview-table .mini-progress .pct-label { font-size: 12px; font-weight: 600; width: 34px; text-align: right; color: var(--text-secondary); }
+
+/* ==========================================================================
+   ACTION ITEMS
+   ========================================================================== */
+.action-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: background 140ms var(--ease-out), border-color 140ms var(--ease-out);
+  margin-bottom: var(--space-2);
+}
+.action-item:last-child { margin-bottom: 0; }
+.action-item:hover { background: var(--bg-sunken); border-color: var(--border-strong); }
+.action-item .sev-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.action-item .sev-dot.high { background: var(--status-attention); }
+.action-item .sev-dot.medium { background: var(--status-pending); }
+.action-item .sev-dot.low { background: var(--status-progress); }
+.action-item .text { flex: 1; font-size: 13px; color: var(--text-primary); }
+.action-item .chevron { color: var(--text-tertiary); flex-shrink: 0; }
+
+/* ==========================================================================
+   EMPTY STATES
+   ========================================================================== */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-10) var(--space-6);
+  color: var(--text-secondary);
+}
+.empty-state .icon { color: var(--ink-300); margin-bottom: var(--space-3); }
+.empty-state .title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.empty-state .desc { font-size: 12.5px; color: var(--text-tertiary); max-width: 360px; }
+
+/* ==========================================================================
+   DATA TABLE (generic, used across sheet pages / raw data / search)
+   ========================================================================== */
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+.table-search { position: relative; flex: 1; min-width: 220px; max-width: 340px; }
+.table-search input {
+  width: 100%;
+  padding: 8px 12px 8px 34px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  font-size: 13px;
+  background: var(--bg-surface);
+  transition: border-color 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
+}
+.table-search input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.table-search .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); }
+
+.filter-select {
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  max-width: 180px;
+}
+.filter-select:focus { outline: none; border-color: var(--accent); }
+
+.data-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  max-height: 62vh;
+}
+table.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.data-table th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--bg-sunken);
+  text-align: left;
+  padding: 7px 10px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-tertiary);
+  font-weight: 700;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+table.data-table th:hover { color: var(--text-secondary); }
+table.data-table th .sort-arrow { margin-left: 4px; opacity: 0.5; }
+table.data-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  white-space: nowrap;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+table.data-table tbody tr { transition: background 100ms var(--ease-out); }
+table.data-table tbody tr:hover { background: var(--bg-sunken); }
+table.data-table tbody tr:last-child td { border-bottom: none; }
+table.data-table td.name-cell { font-weight: 600; cursor: pointer; color: var(--text-primary); }
+table.data-table td.name-cell:hover { color: var(--accent); text-decoration: underline; }
+table.data-table td.inline-cell { padding: 4px 6px; }
+.inline-edit-input {
+  width: 100%;
+  min-width: 110px;
+  border: 1px solid transparent;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  padding: 5px 7px;
+  border-radius: var(--radius-sm);
+  transition: border-color 140ms var(--ease-out), background 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
+}
+.inline-edit-input:hover { background: var(--bg-sunken); border-color: var(--border-subtle); }
+.inline-edit-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg-surface);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.inline-edit-input.just-saved { animation: inline-save-flash 900ms var(--ease-out); }
+@keyframes inline-save-flash {
+  0% { background: var(--status-complete-bg); }
+  100% { background: transparent; }
+}
+table.data-table td.actions-cell { white-space: nowrap; }
+table.data-table td.actions-cell .btn { padding: 4px 8px; }
+
+/* Inline cell = text input + optional calendar-picker button, side by side */
+.inline-cell-wrap { display: flex; align-items: center; gap: 2px; }
+.inline-cell-wrap .inline-edit-input { min-width: 90px; }
+td.inline-cell.name-col { max-width: 220px; }
+td.inline-cell.name-col .inline-edit-input { min-width: 150px; font-weight: 600; }
+.cal-btn {
+  flex-shrink: 0;
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border: none; background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.cal-btn:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* Shared native date input, positioned next to whichever field was clicked */
+.shared-date-picker {
+  position: fixed;
+  z-index: 300;
+  opacity: 0;
+  pointer-events: none;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  box-shadow: var(--shadow-md);
+  font: inherit;
+  background: var(--bg-surface);
+}
+.shared-date-picker.active { opacity: 1; pointer-events: auto; }
+
+/* Expand-row "just below it" detail panel — replaces a centered modal for
+   quick viewing, so it appears right where the user is already looking. */
+tr.expand-row td {
+  background: var(--bg-sunken);
+  white-space: normal;
+  padding: 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.expand-panel { padding: 14px 16px; font-size: 12.5px; }
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-4);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+.pagination .pager-btns { display: flex; gap: 6px; }
+.pagination button {
+  width: 30px; height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: background 120ms var(--ease-out);
+}
+.pagination button:hover:not(:disabled) { background: var(--ink-100); }
+.pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ==========================================================================
+   MODALS
+   ========================================================================== */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(20, 15, 17, 0.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+  padding: var(--space-6);
+  opacity: 0;
+  transition: opacity 200ms var(--ease-out);
+}
+.modal-backdrop.open { opacity: 1; }
+.modal {
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 640px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  transform: scale(0.96);
+  opacity: 0;
+  transition: transform 220ms var(--ease-out), opacity 220ms var(--ease-out);
+}
+.modal-backdrop.open .modal { transform: scale(1); opacity: 1; }
+.modal.wide { max-width: 880px; }
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.modal-header h3 { font-size: 16px; font-weight: 700; }
+.modal-header p { font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; }
+.modal-body { padding: var(--space-6); overflow-y: auto; flex: 1; }
+.modal-footer {
+  display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2);
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.form-group { margin-bottom: var(--space-4); }
+.form-group label { display: block; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+.form-group input, .form-group select, .form-group textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  transition: border-color 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.form-hint { font-size: 11.5px; color: var(--text-tertiary); margin-top: 4px; }
+
+/* ==========================================================================
+   IMPORT WIZARD
+   ========================================================================== */
+.wizard-steps {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+}
+.wizard-step {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text-tertiary); font-weight: 600;
+}
+.wizard-step .num {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--ink-100); color: var(--text-tertiary);
+  font-size: 11px;
+  transition: background 200ms var(--ease-out), color 200ms var(--ease-out);
+}
+.wizard-step.active .num { background: var(--accent); color: white; }
+.wizard-step.done .num { background: var(--status-complete); color: white; }
+.wizard-step.active, .wizard-step.done { color: var(--text-primary); }
+.wizard-connector { flex: 1; height: 1px; background: var(--border-subtle); }
+
+.dropzone {
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-10) var(--space-6);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 160ms var(--ease-out), background 160ms var(--ease-out);
+  color: var(--text-secondary);
+}
+.dropzone:hover, .dropzone.drag-over { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone .icon { color: var(--ink-300); margin-bottom: var(--space-3); }
+
+.mapping-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mapping-table th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--text-tertiary); padding: 8px 10px; border-bottom: 1px solid var(--border-subtle); }
+.mapping-table td { padding: 8px 10px; border-bottom: 1px solid var(--border-subtle); }
+.mapping-table select { width: 100%; }
+
+.import-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); margin-bottom: var(--space-5); }
+.summary-stat { text-align: center; padding: var(--space-4); border-radius: var(--radius-md); background: var(--bg-sunken); }
+.summary-stat .num { font-size: 22px; font-weight: 700; }
+.summary-stat .lbl { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 2px; }
+.summary-stat.warn .num { color: var(--status-attention); }
+.summary-stat.good .num { color: var(--status-complete); }
+
+/* ==========================================================================
+   TOASTS
+   ========================================================================== */
+#toast-region {
+  position: fixed; bottom: var(--space-6); right: var(--space-6);
+  display: flex; flex-direction: column; gap: var(--space-2);
+  z-index: 200;
+}
+.toast {
+  background: var(--ink-900);
+  color: white;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  display: flex; align-items: center; gap: 10px;
+  min-width: 260px;
+  transform: translateY(100%);
+  opacity: 0;
+  transition: transform 300ms var(--ease-out), opacity 300ms var(--ease-out);
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.success .icon { color: #4ade80; }
+.toast.error .icon { color: #f87171; }
+
+/* ==========================================================================
+   CHARTS
+   ========================================================================== */
+.chart-card { padding: var(--space-4); min-width: 0; }
+.chart-card canvas { max-height: 210px; }
+.charts-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+}
+@media (max-width: 1300px) { .charts-row { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 700px) { .charts-row { grid-template-columns: 1fr; } }
+
+/* ==========================================================================
+   PATIENT DETAIL
+   ========================================================================== */
+.patient-header {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-5);
+  margin-bottom: var(--space-5);
+}
+.patient-avatar {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent);
+  display: grid; place-items: center; font-weight: 700; font-size: 18px;
+  flex-shrink: 0;
+}
+.patient-meta-row { display: flex; gap: var(--space-5); margin-top: 4px; flex-wrap: wrap; }
+.patient-meta-item { font-size: 12.5px; color: var(--text-secondary); }
+.patient-meta-item strong { color: var(--text-primary); font-weight: 600; }
+
+.source-record-card {
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+.source-record-card .src-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); }
+.src-field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); }
+.src-field { font-size: 12px; }
+.src-field .k { color: var(--text-tertiary); margin-bottom: 2px; }
+.src-field .v { color: var(--text-primary); font-weight: 500; }
+
+/* ==========================================================================
+   SETTINGS / COMPLETION CRITERIA
+   ========================================================================== */
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--space-4);
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-row .label { font-size: 13px; font-weight: 600; }
+.settings-row .desc { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
+
+/* ==========================================================================
+   UTILITY
+   ========================================================================== */
+.text-muted { color: var(--text-tertiary); }
+.mt-2 { margin-top: var(--space-2); }
+.mt-4 { margin-top: var(--space-4); }
+.flex { display: flex; }
+.flex-col { display: flex; flex-direction: column; }
+.items-center { align-items: center; }
+.gap-2 { gap: var(--space-2); }
+.gap-3 { gap: var(--space-3); }
+.justify-between { justify-content: space-between; }
+.hidden { display: none !important; }
+.tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 16px; height: 16px;
+  border: 2px solid var(--ink-200);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+</style>
+</head>
+<body>
+  <div id="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="mark">DG</div>
+        <div>
+          <div class="name">DG Master Pt List</div>
+          <div class="subname">Operations Console</div>
+        </div>
+      </div>
+      <nav class="sidebar-scroll" id="sidebar-nav"></nav>
+    </aside>
+
+    <header class="topbar">
+      <div class="breadcrumbs" id="breadcrumbs"></div>
+      <div class="topbar-search">
+        <span class="icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+        <input type="text" id="global-search" placeholder="Search patients across every tab... (press Enter)" />
+      </div>
+      <div class="topbar-right">
+        <button class="icon-btn" id="btn-import-topbar" title="Import Excel">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 16V4M6 10l6-6 6 6M4 20h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <a class="icon-btn" href="#/dashboard" title="Dashboard">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </a>
+      </div>
+    </header>
+
+    <main class="content" id="main-content"></main>
+  </div>
+
+  <div id="toast-region"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
+  <script>
+// AUTO-GENERATED from the source workbook. Do not hand-edit; re-run the extraction script instead.
+let RAW_SHEETS = {}; // Populated at runtime from the authenticated backend (see bootStore()) when embedded on Wix. Empty in standalone/local mode unless you paste in your own data for offline testing.
+
+
+  </script>
+  <script>
+// ============================================================================
+// SHEET METADATA — maps each real worksheet from the source workbook to how
+// the app should treat it: which fields identify a patient/record, which
+// field(s) best indicate completion, and which nav group it belongs to.
+// Completion criteria are deliberately explicit here (not invented) — where a
+// sheet has no genuine status field, mode is "manual" and the app tracks
+// user-applied status instead of fabricating a percentage.
+// ============================================================================
+
+const GROUPS = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "call-lists", label: "Call Lists" },
+  { id: "work-queues", label: "Authorizations / Work Queues" },
+  { id: "diagnosis", label: "Diagnosis" },
+  { id: "data-management", label: "Data Management" },
+];
+
+const SHEET_CONFIG = [
+  {
+    id: "call_list_upcoming",
+    label: "Call List – Upcoming Appointment",
+    shortLabel: "Upcoming Appt",
+    group: "call-lists",
+    nameField: "Patient Name",
+    acctField: "Account #",
+    dobField: "DOB",
+    phoneField: "Home Phone",
+    dateFields: ["DOB", "Last Visit w/ DG", "Next Scheduled Visit"],
+    completion: { field: "Team Member", mode: "nonblank", label: "Assigned to a team member" },
+    searchFields: ["Patient Name", "Account #", "Home Phone", "Action", "Notes"],
+    inlineFields: ["Team Member", "Notes"],
+  },
+  {
+    id: "call_list_no_upcoming",
+    label: "Call List – No Upcoming Appointment",
+    shortLabel: "No Upcoming Appt",
+    group: "call-lists",
+    nameField: "Patient Name",
+    acctField: "Account #",
+    dobField: "DOB",
+    phoneField: "Home Phone",
+    dateFields: ["DOB", "Last Visit w/ DG", "Next Scheduled Visit"],
+    completion: { field: "Team Member", mode: "nonblank", label: "Assigned to a team member" },
+    searchFields: ["Patient Name", "Account #", "Home Phone", "Action", "Notes"],
+    inlineFields: ["Team Member", "Notes"],
+  },
+  {
+    id: "dg_pharmacy",
+    label: "DG Pharmacy",
+    shortLabel: "Pharmacy",
+    group: "work-queues",
+    nameField: "Patient",
+    dateFields: ["Submission Date/Time"],
+    completion: { field: null, mode: "manual", label: "No status field in source data — tracked manually" },
+    searchFields: ["Patient", "Medication"],
+  },
+  {
+    id: "dg_infusion_pas",
+    label: "DG Infusion PAs",
+    shortLabel: "Infusion PAs",
+    group: "work-queues",
+    nameField: "Guarantor Acct No + Name",
+    nameFormat: "acct-colon-name",
+    dateFields: ["next infusion appt", "FUTURE IV APPT AFTER 10/02/2026", "next fu appt"],
+    completion: { field: "PRIOR AUTH INITIATED/DONE:", mode: "nonblank", label: "Prior auth initiated/done is filled in" },
+    searchFields: ["Guarantor Acct No + Name", "CPT Code / Description", "Provider", "ASSIGNED TO:", "FU Provider", "CORRECTIONS"],
+    inlineFields: ["PRIOR AUTH INITIATED/DONE:", "ASSIGNED TO:", "CORRECTIONS"],
+  },
+  {
+    id: "dg_osteoporosis_pas",
+    label: "DG Osteoporosis PAs",
+    shortLabel: "Osteoporosis PAs",
+    group: "work-queues",
+    nameField: "Patient Name",
+    acctField: "Acc #",
+    dateFields: ["NEXT APPT"],
+    completion: { field: "PA Status", mode: "value-not-equal", value: "NO PA", label: "PA status is not \"NO PA\"" },
+    searchFields: ["Patient Name", "Acc #", "DRUG", "INSURANCE"],
+    inlineFields: ["PA Status", "50/50 TO JP AND SU"],
+  },
+  {
+    id: "dg_biologics",
+    label: "DG Biologics",
+    shortLabel: "Biologics",
+    group: "work-queues",
+    nameField: "Guarantor Acct No + Name",
+    nameFormat: "acct-colon-name",
+    dateFields: ["next infusion appt", "FUTURE IV APPT AFTER 10/02/2026", "next fu appt"],
+    completion: { field: "PRIOR AUTH INITIATED/DONE:", mode: "nonblank", label: "Prior auth initiated/done is filled in" },
+    searchFields: ["Guarantor Acct No + Name", "CPT Code / Description", "Pay To / Billing Provider", "ASSIGNED TO:", "FU Provider"],
+    inlineFields: ["PRIOR AUTH INITIATED/DONE:", "ASSIGNED TO:"],
+  },
+  {
+    id: "ra",
+    label: "RA",
+    shortLabel: "RA",
+    group: "diagnosis",
+    diagnosisLabel: "RA",
+    nameField: "Patient Name",
+    acctField: "Acc #",
+    dobField: "DOB",
+    phoneField: "Home Phone",
+    dateFields: ["DOB"],
+    completion: { field: null, mode: "manual", label: "Roster with no status field — tracked manually" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+  },
+  {
+    id: "seronegative_ra",
+    label: "Seronegative RA",
+    shortLabel: "Seroneg. RA",
+    group: "diagnosis",
+    diagnosisLabel: "Seronegative RA",
+    nameField: "Patient Name",
+    acctField: "Acc #",
+    dobField: "DOB",
+    phoneField: "Home Phone",
+    dateFields: ["DOB"],
+    completion: { field: null, mode: "manual", label: "Roster with no status field — tracked manually" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+  },
+  {
+    id: "psoriatic_arthritis",
+    label: "Psoriatic Arthritis",
+    shortLabel: "PsA",
+    group: "diagnosis",
+    diagnosisLabel: "Psoriatic Arthritis",
+    nameField: "Patient Name",
+    acctField: "Acc #",
+    dobField: "DOB",
+    phoneField: "Home Phone",
+    dateFields: ["DOB"],
+    completion: { field: null, mode: "manual", label: "Roster with no status field — tracked manually" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+  },
+  {
+    id: "psoriasis",
+    label: "Psoriasis",
+    shortLabel: "Psoriasis",
+    group: "diagnosis",
+    diagnosisLabel: "Psoriasis",
+    nameField: "Patient Name",
+    acctField: "Acc #",
+    dobField: "DOB",
+    phoneField: "Home Phone",
+    dateFields: ["DOB"],
+    completion: { field: null, mode: "manual", label: "Roster with no status field — tracked manually" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+  },
+  {
+    id: "psa_and_psoriasis",
+    label: "PSA & Psoriasis",
+    shortLabel: "PSA & Pso.",
+    group: "diagnosis",
+    diagnosisLabel: "PsA & Psoriasis",
+    nameField: null,
+    acctField: "Patient Acct No",
+    dateFields: ["next f/u", "LAST SEEN"],
+    completion: { field: "status on buy and bill", mode: "nonblank", label: "Buy-and-bill status is filled in" },
+    searchFields: ["Patient Acct No", "Provider", "FU Provider", "PsA Diagnosis", "Psoriasis Code", "current insurance"],
+    inlineFields: ["status on buy and bill", "next f/u", "Priority"],
+  },
+  {
+    id: "pmr",
+    label: "PMR",
+    shortLabel: "PMR",
+    group: "diagnosis",
+    diagnosisLabel: "PMR",
+    nameField: "Patient Name",
+    acctField: "Acc #",
+    dobField: "DOB",
+    phoneField: "Home Phone",
+    dateFields: ["DOB"],
+    completion: { field: null, mode: "manual", label: "Roster with no status field — tracked manually" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+  },
+  {
+    id: "gca",
+    label: "GCA",
+    shortLabel: "GCA",
+    group: "diagnosis",
+    diagnosisLabel: "GCA",
+    nameField: "Patient Name",
+    acctField: "Acc #",
+    dobField: "DOB",
+    phoneField: "Home Phone",
+    dateFields: ["DOB"],
+    completion: { field: "IF NOT ON BIOLOGICS REFER TO PUTZ", mode: "flag-blank-is-complete", label: "No open referral flag" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+    inlineFields: ["IF NOT ON BIOLOGICS REFER TO PUTZ"],
+  },
+  {
+    id: "gout",
+    label: "Gout",
+    shortLabel: "Gout",
+    group: "diagnosis",
+    diagnosisLabel: "Gout",
+    nameField: "Patient Name",
+    acctField: "Acc #",
+    dobField: "DOB",
+    phoneField: "Home Phone",
+    dateFields: ["DOB", "next scheduled appt"],
+    completion: { field: "REFER TO AFD AND APPS", mode: "flag-blank-is-complete", label: "No open referral flag" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone", "whose patient? AFD/DG/JP", "last seen by"],
+    inlineFields: ["REFER TO AFD AND APPS"],
+  },
+  {
+    id: "pseudogout",
+    label: "Pseudogout",
+    shortLabel: "Pseudogout",
+    group: "diagnosis",
+    diagnosisLabel: "Pseudogout",
+    nameField: "Patient Name",
+    acctField: "Acc #",
+    dobField: "DOB",
+    phoneField: "Home Phone",
+    dateFields: ["DOB"],
+    completion: { field: "REFER TO USMANI AND APPS", mode: "flag-blank-is-complete", label: "No open referral flag" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+    inlineFields: ["REFER TO USMANI AND APPS"],
+  },
+  {
+    id: "polymyositis",
+    label: "Polymyositis",
+    shortLabel: "Polymyositis",
+    group: "diagnosis",
+    diagnosisLabel: "Polymyositis",
+    nameField: "Patient Name",
+    acctField: "Acc #",
+    dobField: "DOB",
+    phoneField: "Home Phone",
+    dateFields: ["DOB"],
+    completion: { field: "REFER TO USMANI", mode: "flag-blank-is-complete", label: "No open referral flag" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+    inlineFields: ["REFER TO USMANI"],
+  },
+  {
+    id: "osteoporosis",
+    label: "Osteoporosis",
+    shortLabel: "Osteoporosis",
+    group: "diagnosis",
+    diagnosisLabel: "Osteoporosis",
+    nameField: "Patient Name",
+    acctField: "Acc #",
+    dobField: "DOB",
+    phoneField: "Home Phone",
+    dateFields: ["DOB"],
+    completion: { field: null, mode: "manual", label: "Roster with no status field — tracked manually" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+  },
+  {
+    id: "pts_0908_0911",
+    label: "0908–0911 Patients",
+    shortLabel: "0908–0911",
+    group: "diagnosis",
+    diagnosisLabel: "0908–0911 Patients",
+    nameField: "DG Tuesday patients 9/8",
+    dobField: "dob",
+    dateFields: ["dob"],
+    completion: { field: null, mode: "manual", label: "Working list with no status field — tracked manually" },
+    searchFields: ["DG Tuesday patients 9/8", "diagnosis", "next appt"],
+  },
+  {
+    id: "all_other_dx",
+    label: "All Other DX",
+    shortLabel: "All Other DX",
+    group: "diagnosis",
+    diagnosisLabel: "All Other DX",
+    isReference: true,
+    nameField: "Diagnosis",
+    completion: { field: null, mode: "manual", label: "Reference table — not a work queue" },
+    searchFields: ["Diagnosis", "Refer To"],
+  },
+];
+
+const SHEET_BY_ID = Object.fromEntries(SHEET_CONFIG.map((s) => [s.id, s]));
+
+// Fields per sheet that should be rendered/parsed as dates in the UI (for sorting + formatting)
+function getDateFields(sheetId) {
+  return SHEET_BY_ID[sheetId]?.dateFields || [];
+}
+
+// Completion criteria options a user can switch a sheet to, exposed in the Completion Criteria settings panel.
+// Populated at runtime per-sheet from that sheet's actual headers (see app.js buildCompletionOptions).
+
+  </script>
+  <script>
+// ============================================================================
+// WIX BRIDGE — lets this exact app run two ways with no code fork:
+//   1. Standalone (double-click index.html): everything saves to localStorage,
+//      exactly as before. This is the default when the page is NOT embedded
+//      inside a Wix iframe.
+//   2. Embedded on a Wix page (inside an HTML iframe / Custom Element widget):
+//      writes are also sent up to the parent Wix page via postMessage, which
+//      Velo page code relays to backend .jsw functions that persist to a
+//      shared Wix Data collection — so every user sees the same data.
+//
+// store.js calls WixBridge.save(type, payload) instead of touching
+// localStorage directly when WixBridge.enabled is true, and WixBridge.init()
+// resolves with the shared server-side state on boot (or null if standalone).
+// ============================================================================
+
+const WixBridge = {
+  enabled: false,
+  _reqId: 0,
+  _pending: new Map(),
+  _pollHandle: null,
+
+  async init() {
+    const isEmbedded = window.self !== window.top;
+    if (!isEmbedded) return null;
+
+    window.addEventListener("message", (e) => this._onMessage(e));
+
+    // Give the parent Wix page a moment to answer "hello" — if it never does
+    // (e.g. previewing the raw HTML file inside some other iframe), fall back
+    // to plain localStorage rather than hanging forever.
+    const state = await Promise.race([
+      this._call("wixapp:init", {}),
+      new Promise((resolve) => setTimeout(() => resolve(undefined), 2500)),
+    ]);
+
+    if (state === undefined) {
+      console.warn("WixBridge: no response from parent page — running in local-only mode.");
+      return null;
+    }
+    this.enabled = true;
+    return state;
+  },
+
+  // Fire-and-forget write to the shared backend. Always resolves; failures are
+  // logged and surfaced as a toast, but never block the local UI since the
+  // local copy (localStorage) is already the source of truth for this session.
+  async save(type, payload) {
+    if (!this.enabled) return;
+    try {
+      await this._call("wixapp:" + type, payload);
+    } catch (e) {
+      console.error("WixBridge save failed:", type, e);
+      if (typeof toast === "function") toast(`Couldn't sync "${type}" to the shared site yet — saved locally only.`, "error");
+    }
+  },
+
+  // Pulls the latest shared state (used for periodic refresh so users see
+  // each other's edits without a full realtime layer).
+  async refresh() {
+    if (!this.enabled) return null;
+    try {
+      return await this._call("wixapp:refresh", {});
+    } catch (e) {
+      console.error("WixBridge refresh failed:", e);
+      return null;
+    }
+  },
+
+  startPolling(intervalMs, onUpdate) {
+    if (!this.enabled || this._pollHandle) return;
+    this._pollHandle = setInterval(async () => {
+      const state = await this.refresh();
+      if (state) onUpdate(state);
+    }, intervalMs);
+  },
+
+  _call(type, payload) {
+    return new Promise((resolve, reject) => {
+      const reqId = ++this._reqId;
+      this._pending.set(reqId, { resolve, reject });
+      window.parent.postMessage({ source: "dg-app", type, reqId, payload }, "*");
+      setTimeout(() => {
+        if (this._pending.has(reqId)) {
+          this._pending.delete(reqId);
+          reject(new Error("Wix bridge call timed out: " + type));
+        }
+      }, 10000);
+    });
+  },
+
+  _onMessage(e) {
+    const msg = e.data;
+    if (!msg || msg.source !== "dg-app-reply") return;
+    const pending = this._pending.get(msg.reqId);
+    if (!pending) return;
+    this._pending.delete(msg.reqId);
+    if (msg.error) pending.reject(new Error(msg.error));
+    else pending.resolve(msg.result);
+  },
+};
+
+  </script>
+  <script>
+// ============================================================================
+// STORE — the data layer. Wraps the embedded workbook data (RAW_SHEETS) plus
+// any client-side additions (imported rows, manual status overrides, reviewed
+// duplicates) persisted in localStorage. Nothing here mutates the original
+// workbook; imports and edits live entirely in the browser.
+// ============================================================================
+
+const LS_KEYS = {
+  imported: "dg_app_imported_rows_v1",
+  statusOverrides: "dg_app_status_overrides_v1",
+  duplicateReviews: "dg_app_duplicate_reviews_v1",
+  editedRows: "dg_app_edited_rows_v1",
+  deletedRows: "dg_app_deleted_rows_v1",
+  completionOverrides: "dg_app_completion_field_overrides_v1",
+  importLog: "dg_app_import_log_v1",
+  changeLog: "dg_app_change_log_v1",
+};
+
+const MAX_CHANGE_LOG_ENTRIES = 2000;
+
+function lsGet(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+function lsSet(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.error("Could not persist to localStorage", e);
+  }
+}
+
+const Store = {
+  imported: lsGet(LS_KEYS.imported, {}), // sheetId -> [rowObj, ...]
+  statusOverrides: lsGet(LS_KEYS.statusOverrides, {}), // uid -> status string
+  duplicateReviews: lsGet(LS_KEYS.duplicateReviews, {}), // identityKey -> {reviewed,note,excluded,keepUid}
+  editedRows: lsGet(LS_KEYS.editedRows, {}), // uid -> partial field overrides
+  deletedRows: lsGet(LS_KEYS.deletedRows, {}), // uid -> true (soft delete / archive)
+  completionOverrides: lsGet(LS_KEYS.completionOverrides, {}), // sheetId -> {field, mode, value}
+  importLog: lsGet(LS_KEYS.importLog, []), // [{ts, sheetId, fileName, added, skipped}]
+  changeLog: lsGet(LS_KEYS.changeLog, []), // [{ts, sheetId, uid, action, summary}]
+
+  persist(key) {
+    lsSet(LS_KEYS[key], this[keyToProp(key)]);
+  },
+};
+
+function keyToProp(key) {
+  return key;
+}
+
+// Called once at startup, before the first render. On Wix, this pulls the shared
+// state from the backend (via WixBridge) and it wins over whatever's cached
+// locally. Standalone, it resolves immediately and Store just keeps what
+// lsGet() already loaded above.
+async function bootStore() {
+  const serverState = await WixBridge.init();
+  if (!serverState) return;
+
+  if (serverState.rawSheets) RAW_SHEETS = serverState.rawSheets;
+
+  Store.imported = serverState.imported || {};
+  Store.statusOverrides = serverState.statusOverrides || {};
+  Store.duplicateReviews = serverState.duplicateReviews || {};
+  Store.editedRows = serverState.editedRows || {};
+  Store.deletedRows = serverState.deletedRows || {};
+  Store.completionOverrides = serverState.completionOverrides || {};
+  Store.importLog = serverState.importLog || [];
+  Store.changeLog = serverState.changeLog || [];
+
+  saveImported();
+  saveStatusOverrides();
+  saveDuplicateReviews();
+  saveEditedRows();
+  saveDeletedRows();
+  saveCompletionOverrides();
+  saveImportLog();
+  saveChangeLog();
+  invalidateCache();
+  invalidateDupCache();
+}
+
+// Polls the shared backend so users see each other's edits without a full
+// realtime layer. Skips re-rendering while a modal is open or someone is
+// mid-keystroke in an inline field, so a background sync never yanks focus.
+function startWixSync() {
+  WixBridge.startPolling(25000, (serverState) => {
+    Store.imported = serverState.imported || {};
+    Store.statusOverrides = serverState.statusOverrides || {};
+    Store.duplicateReviews = serverState.duplicateReviews || {};
+    Store.editedRows = serverState.editedRows || {};
+    Store.deletedRows = serverState.deletedRows || {};
+    Store.completionOverrides = serverState.completionOverrides || {};
+    Store.importLog = serverState.importLog || [];
+    Store.changeLog = serverState.changeLog || [];
+    saveImported(); saveStatusOverrides(); saveDuplicateReviews();
+    saveEditedRows(); saveDeletedRows(); saveCompletionOverrides(); saveImportLog(); saveChangeLog();
+    invalidateCache();
+    invalidateDupCache();
+    const modalOpen = !!document.getElementById("active-modal");
+    const typingInline = document.activeElement?.classList?.contains("inline-edit-input");
+    if (!modalOpen && !typingInline && typeof render === "function") render();
+  });
+}
+
+function saveChangeLog() { lsSet(LS_KEYS.changeLog, Store.changeLog); }
+
+// Records one line of "who did what" for the History view. uid/sheetId are
+// optional (e.g. an import touches a whole sheet, not one record). Kept
+// deliberately simple — a flat, append-only, most-recent-first list rather
+// than a full diff/undo system.
+function logChange({ sheetId, uid, action, summary }) {
+  const entry = { ts: new Date().toISOString(), sheetId: sheetId || null, uid: uid || null, action, summary };
+  Store.changeLog.unshift(entry);
+  if (Store.changeLog.length > MAX_CHANGE_LOG_ENTRIES) Store.changeLog.length = MAX_CHANGE_LOG_ENTRIES;
+  saveChangeLog();
+  WixBridge.save("changeLogEntry", entry);
+}
+
+function saveImported() { lsSet(LS_KEYS.imported, Store.imported); }
+function saveStatusOverrides() { lsSet(LS_KEYS.statusOverrides, Store.statusOverrides); }
+function saveDuplicateReviews() { lsSet(LS_KEYS.duplicateReviews, Store.duplicateReviews); }
+function saveEditedRows() { lsSet(LS_KEYS.editedRows, Store.editedRows); }
+function saveDeletedRows() { lsSet(LS_KEYS.deletedRows, Store.deletedRows); }
+function saveCompletionOverrides() { lsSet(LS_KEYS.completionOverrides, Store.completionOverrides); }
+function saveImportLog() { lsSet(LS_KEYS.importLog, Store.importLog); }
+
+// ---------------------------------------------------------------------------
+// Name / account / date normalization for identity matching
+// ---------------------------------------------------------------------------
+
+function stripAcctPrefix(raw) {
+  return String(raw || "").replace(/^\s*\d+\s*:\s*/, "");
+}
+
+function parseAcctFromColonName(raw) {
+  const m = String(raw || "").match(/^\s*(\d+)\s*:/);
+  return m ? m[1] : "";
+}
+
+function normalizeAcct(raw) {
+  if (!raw) return "";
+  const digits = String(raw).replace(/\D/g, "");
+  return digits ? digits.replace(/^0+/, "") || "0" : "";
+}
+
+function normalizeName(raw) {
+  if (!raw) return "";
+  let s = stripAcctPrefix(raw).toUpperCase();
+  s = s.replace(/[^A-Z, ]/g, " ");
+  let tokens;
+  if (s.includes(",")) {
+    const [last, rest] = s.split(",", 2);
+    tokens = [last.trim(), ...rest.trim().split(/\s+/)];
+  } else {
+    tokens = s.split(/\s+/);
+  }
+  tokens = tokens.filter(Boolean);
+  tokens.sort();
+  return tokens.join(" ");
+}
+
+function displayName(raw, format) {
+  if (!raw) return "";
+  let s = format === "acct-colon-name" ? stripAcctPrefix(raw) : raw;
+  s = s.trim();
+  if (s.includes(",")) {
+    const [last, rest] = s.split(",", 2);
+    return `${titleCase(rest.trim())} ${titleCase(last.trim())}`.trim();
+  }
+  return titleCase(s);
+}
+
+function titleCase(s) {
+  return String(s)
+    .toLowerCase()
+    .replace(/\b([a-z])/g, (m) => m.toUpperCase());
+}
+
+function normalizeDob(raw) {
+  if (!raw) return "";
+  const m = String(raw).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!m) return "";
+  const [, mo, d, y] = m;
+  return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+}
+
+function parseDateLoose(raw) {
+  if (!raw) return null;
+  const m = String(raw).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (!m) return null;
+  const [, mo, d, y, h, mi] = m;
+  return new Date(+y, +mo - 1, +d, +(h || 0), +(mi || 0));
+}
+
+// Excel stores dates as a serial day count from Dec 30 1899. Values that reach
+// this app as a raw number instead of "M/D/YYYY" text (most commonly rows
+// brought in through Import Excel, since spreadsheet libraries hand back the
+// underlying number for date-formatted cells unless told otherwise) render as
+// meaningless 5-digit numbers if left alone. Anything in a configured date
+// field that looks like one of these gets converted at the source, once, so
+// every view (table, search, sort, export, edit modal) sees a normal date.
+function looksLikeExcelSerialDate(val) {
+  if (val === null || val === undefined || val === "") return false;
+  if (typeof val === "string" && !/^\d+(\.\d+)?$/.test(val.trim())) return false;
+  const n = Number(val);
+  return Number.isFinite(n) && n > 20000 && n < 60000; // ~ year 1954 to 2064
+}
+function excelSerialToDateString(serial) {
+  const utcMs = Math.round((Number(serial) - 25569) * 86400 * 1000);
+  const dt = new Date(utcMs);
+  const wholeDaysOnly = Number(serial) === Math.floor(Number(serial));
+  const mo = dt.getUTCMonth() + 1, d = dt.getUTCDate(), y = dt.getUTCFullYear();
+  if (wholeDaysOnly) return `${mo}/${d}/${y}`;
+  const hh = dt.getUTCHours(), mm = String(dt.getUTCMinutes()).padStart(2, "0");
+  return `${mo}/${d}/${y} ${hh}:${mm}`;
+}
+function fixDateSerialsInRow(row, dateFields) {
+  if (!dateFields || !dateFields.length) return row;
+  let changed = null;
+  for (const f of dateFields) {
+    if (looksLikeExcelSerialDate(row[f])) {
+      if (!changed) changed = { ...row };
+      changed[f] = excelSerialToDateString(row[f]);
+    }
+  }
+  return changed || row;
+}
+
+// ---------------------------------------------------------------------------
+// Record materialization — merges embedded + imported rows, applies edits,
+// filters soft-deletes, and computes identity/status metadata per record.
+// ---------------------------------------------------------------------------
+
+let RECORD_CACHE = null;
+
+function getAllRecords(forceRefresh) {
+  if (RECORD_CACHE && !forceRefresh) return RECORD_CACHE;
+
+  const records = [];
+  for (const cfg of SHEET_CONFIG) {
+    const base = (RAW_SHEETS[cfg.id]?.rows || []).map((r, i) => ({ row: r, uid: `${cfg.id}#${i}` }));
+    const imported = (Store.imported[cfg.id] || []).map((r, i) => ({ row: r, uid: `${cfg.id}#imp${i}` }));
+    const all = base.concat(imported);
+
+    for (const { row, uid } of all) {
+      if (Store.deletedRows[uid]) continue;
+      const edited = Store.editedRows[uid];
+      const merged = edited ? { ...row, ...edited } : row;
+      const data = fixDateSerialsInRow(merged, cfg.dateFields);
+
+      const nameRaw = cfg.nameField ? data[cfg.nameField] : "";
+      const acctRaw = cfg.acctField
+        ? data[cfg.acctField]
+        : cfg.nameFormat === "acct-colon-name"
+        ? parseAcctFromColonName(nameRaw)
+        : "";
+
+      const name = normalizeName(nameRaw);
+      const acct = normalizeAcct(acctRaw);
+      const rawDob = cfg.dobField ? data[cfg.dobField] : "";
+      const dob = cfg.dobField ? normalizeDob(rawDob) : "";
+
+      let identityKey = null;
+      if (acct) identityKey = "A:" + acct;
+      else if (name && dob) identityKey = "ND:" + name + "|" + dob;
+
+      const weakKey = name ? "N:" + name : null;
+
+      records.push({
+        uid,
+        sheetId: cfg.id,
+        data,
+        isImported: uid.includes("#imp"),
+        displayName: nameRaw ? displayName(nameRaw, cfg.nameFormat) : "",
+        acct,
+        dob,
+        rawDob,
+        identityKey,
+        weakKey,
+        status: computeStatus(cfg, data, uid),
+      });
+    }
+  }
+  RECORD_CACHE = records;
+  return records;
+}
+
+function invalidateCache() {
+  RECORD_CACHE = null;
+}
+
+// ---------------------------------------------------------------------------
+// Completion / status computation
+// ---------------------------------------------------------------------------
+
+function getCompletionConfig(sheetId) {
+  const override = Store.completionOverrides[sheetId];
+  const base = SHEET_BY_ID[sheetId]?.completion || { field: null, mode: "manual" };
+  return override ? { ...base, ...override } : base;
+}
+
+// Returns one of: 'complete' | 'pending' | 'needs-attention' | 'not-started'
+function computeStatus(cfg, data, uid) {
+  const manual = Store.statusOverrides[uid];
+  if (manual) return manual;
+
+  if (cfg.isReference) return "not-started";
+
+  const completion = getCompletionConfig(cfg.id);
+  const val = completion.field ? String(data[completion.field] || "").trim() : "";
+
+  switch (completion.mode) {
+    case "nonblank":
+      return val ? "complete" : "pending";
+    case "value-not-equal":
+      if (!val) return "pending";
+      return val.toUpperCase() !== String(completion.value || "").toUpperCase() ? "complete" : "pending";
+    case "flag-blank-is-complete":
+      return val ? "needs-attention" : "complete";
+    case "manual":
+    default:
+      return "not-started";
+  }
+}
+
+const STATUS_META = {
+  complete: { label: "Complete", color: "var(--status-complete)" },
+  pending: { label: "Pending", color: "var(--status-pending)" },
+  "needs-attention": { label: "Needs Attention", color: "var(--status-attention)" },
+  "not-started": { label: "Not Started", color: "var(--status-neutral)" },
+  "in-progress": { label: "In Progress", color: "var(--status-progress)" },
+  "needs-review": { label: "Needs Review", color: "var(--status-attention)" },
+};
+
+function setManualStatus(uid, status) {
+  const before = getAllRecords().find((r) => r.uid === uid);
+  if (status === null) delete Store.statusOverrides[uid];
+  else Store.statusOverrides[uid] = status;
+  saveStatusOverrides();
+  invalidateCache();
+  WixBridge.save("statusOverride", { uid, status });
+  const sheetId = uid.split("#")[0];
+  const label = SHEET_BY_ID[sheetId]?.label || sheetId;
+  const who = before?.displayName || uid;
+  logChange({
+    sheetId, uid, action: "status",
+    summary: status === null
+      ? `Cleared manual status override for ${who} (${label})`
+      : `Marked ${who} (${label}) as ${STATUS_META[status]?.label || status}`,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Per-sheet stats
+// ---------------------------------------------------------------------------
+
+function getSheetStats(sheetId) {
+  const records = getAllRecords().filter((r) => r.sheetId === sheetId);
+  const total = records.length;
+  const complete = records.filter((r) => r.status === "complete").length;
+  const needsAttention = records.filter((r) => r.status === "needs-attention").length;
+  const remaining = total - complete;
+  const pct = total ? Math.round((complete / total) * 100) : 0;
+  const dupGroups = getDuplicateGroupsForSheet(sheetId);
+  const dupCount = dupGroups.reduce((sum, g) => sum + g.records.length, 0);
+
+  const cfg = SHEET_BY_ID[sheetId];
+  let sheetStatus;
+  if (cfg.isReference) sheetStatus = "reference";
+  else if (cfg.completion.mode === "manual" && complete === 0) sheetStatus = "untracked";
+  else if (pct === 100) sheetStatus = "complete";
+  else if (pct >= 60) sheetStatus = "in-progress";
+  else sheetStatus = "needs-attention";
+
+  return { total, complete, remaining, pct, needsAttention, dupCount, sheetStatus };
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate detection
+// ---------------------------------------------------------------------------
+
+let DUP_CACHE = null;
+
+// Groups records within a sheet that share at least `threshold` matching non-blank field
+// values, even when they have no reliable identity key at all (e.g. no acct#/DOB in common).
+// This is deliberately separate from the identity-key matching above: it catches the "these
+// two rows look suspiciously alike" case ("2 or 3 columns matched") rather than "these are
+// provably the same patient."
+function computeFieldOverlapGroups(sheetId) {
+  const cfg = SHEET_BY_ID[sheetId];
+  const records = getAllRecords().filter((r) => r.sheetId === sheetId);
+  if (records.length < 2 || records.length > 1200) return [];
+
+  const allFields = (RAW_SHEETS[sheetId]?.headers || []).filter((h) => h !== cfg.acctField);
+  // Only compare fields that actually distinguish records from each other. A field like a
+  // fixed instruction ("CALL (has upcoming appt...)") or a shared batch appointment date is
+  // the same across dozens of unrelated patients — matching on it says nothing about identity.
+  const compareFields = allFields.filter((f) => {
+    const vals = records.map((r) => String(r.data[f] || "").trim().toLowerCase()).filter(Boolean);
+    if (vals.length < 2) return false;
+    const distinct = new Set(vals).size;
+    return distinct / vals.length > 0.5;
+  });
+  if (compareFields.length < 2) return [];
+  const threshold = compareFields.length > 12 ? 3 : 2;
+
+  const parent = new Map(records.map((r) => [r.uid, r.uid]));
+  function find(x) { while (parent.get(x) !== x) x = parent.get(x); return x; }
+  function union(a, b) { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); }
+
+  for (let i = 0; i < records.length; i++) {
+    for (let j = i + 1; j < records.length; j++) {
+      const a = records[i], b = records[j];
+      if (a.identityKey && a.identityKey === b.identityKey) continue; // already an exact match, not "potential"
+      let matches = 0;
+      for (const f of compareFields) {
+        const va = String(a.data[f] || "").trim().toLowerCase();
+        const vb = String(b.data[f] || "").trim().toLowerCase();
+        if (va && vb && va === vb) matches++;
+      }
+      if (matches >= threshold) union(a.uid, b.uid);
+    }
+  }
+
+  const groups = new Map();
+  for (const r of records) {
+    const root = find(r.uid);
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root).push(r);
+  }
+
+  const result = [];
+  for (const recs of groups.values()) {
+    if (recs.length < 2) continue;
+    const matchedFields = compareFields.filter((f) => {
+      const vals = recs.map((r) => String(r.data[f] || "").trim().toLowerCase());
+      return vals[0] && vals.every((v) => v === vals[0]);
+    });
+    result.push({ key: "FO:" + sheetId + ":" + recs.map((r) => r.uid).sort().join(","), sheetId, records: recs, type: "field-overlap", matchedFields });
+  }
+  return result;
+}
+
+function computeDuplicateIndex(forceRefresh) {
+  if (DUP_CACHE && !forceRefresh) return DUP_CACHE;
+
+  const records = getAllRecords();
+  const byStrongKeyPerSheet = new Map(); // sheetId -> Map(key -> [records])
+  const byWeakKeyPerSheet = new Map();
+  const byStrongKeyGlobal = new Map(); // key -> [records] across all sheets
+
+  for (const r of records) {
+    if (!byStrongKeyPerSheet.has(r.sheetId)) byStrongKeyPerSheet.set(r.sheetId, new Map());
+    if (!byWeakKeyPerSheet.has(r.sheetId)) byWeakKeyPerSheet.set(r.sheetId, new Map());
+
+    if (r.identityKey) {
+      const m = byStrongKeyPerSheet.get(r.sheetId);
+      if (!m.has(r.identityKey)) m.set(r.identityKey, []);
+      m.get(r.identityKey).push(r);
+
+      if (!byStrongKeyGlobal.has(r.identityKey)) byStrongKeyGlobal.set(r.identityKey, []);
+      byStrongKeyGlobal.get(r.identityKey).push(r);
+    }
+    if (r.weakKey) {
+      const wm = byWeakKeyPerSheet.get(r.sheetId);
+      if (!wm.has(r.weakKey)) wm.set(r.weakKey, []);
+      wm.get(r.weakKey).push(r);
+    }
+  }
+
+  const exactDuplicates = []; // within same sheet, strong key match
+  const potentialDuplicates = []; // within same sheet, weak (name-only) match, not already exact
+  const crossTabGroups = []; // strong key match spanning >1 sheet
+
+  for (const [sheetId, m] of byStrongKeyPerSheet) {
+    for (const [key, recs] of m) {
+      if (recs.length > 1) {
+        exactDuplicates.push({ key, sheetId, records: recs, type: "exact" });
+      }
+    }
+  }
+
+  const exactKeysBySheet = new Map();
+  for (const d of exactDuplicates) {
+    if (!exactKeysBySheet.has(d.sheetId)) exactKeysBySheet.set(d.sheetId, new Set());
+    exactKeysBySheet.get(d.sheetId).add(d.key);
+  }
+
+  for (const [sheetId, wm] of byWeakKeyPerSheet) {
+    for (const [key, recs] of wm) {
+      if (recs.length < 2) continue;
+      // skip if these exact same records are already fully covered by a strong-key exact group
+      const strongKeys = new Set(recs.map((r) => r.identityKey).filter(Boolean));
+      const alreadyExact = strongKeys.size === 1 && exactKeysBySheet.get(sheetId)?.has([...strongKeys][0]);
+      if (alreadyExact && strongKeys.size <= 1 && new Set(recs.map(r=>r.identityKey||r.uid)).size < recs.length + 1 && recs.every(r=>r.identityKey===recs[0].identityKey)) continue;
+      // only flag as potential if there's genuine ambiguity (different or missing DOB/acct)
+      if (strongKeys.size > 1 || recs.some((r) => !r.identityKey)) {
+        potentialDuplicates.push({ key, sheetId, records: recs, type: "potential" });
+      }
+    }
+  }
+
+  for (const [key, recs] of byStrongKeyGlobal) {
+    const sheets = new Set(recs.map((r) => r.sheetId));
+    if (sheets.size > 1) {
+      crossTabGroups.push({ key, records: recs, sheets: [...sheets], type: "cross-tab" });
+    }
+  }
+
+  // Field-overlap potential duplicates (2-3+ matching columns, no reliable identity key needed)
+  const coveredUidSets = potentialDuplicates.map((g) => new Set(g.records.map((r) => r.uid)));
+  for (const sheetId of byStrongKeyPerSheet.keys()) {
+    for (const group of computeFieldOverlapGroups(sheetId)) {
+      const uidSet = new Set(group.records.map((r) => r.uid));
+      const alreadyCovered = coveredUidSets.some((s) => s.size === uidSet.size && [...uidSet].every((u) => s.has(u)));
+      if (!alreadyCovered) potentialDuplicates.push(group);
+    }
+  }
+
+  DUP_CACHE = { exactDuplicates, potentialDuplicates, crossTabGroups };
+  return DUP_CACHE;
+}
+
+function invalidateDupCache() {
+  DUP_CACHE = null;
+}
+
+function getDuplicateGroupsForSheet(sheetId) {
+  const idx = computeDuplicateIndex();
+  return [
+    ...idx.exactDuplicates.filter((g) => g.sheetId === sheetId),
+    ...idx.potentialDuplicates.filter((g) => g.sheetId === sheetId),
+  ];
+}
+
+function isGroupReviewed(key) {
+  return !!Store.duplicateReviews[key]?.reviewed;
+}
+function setGroupReview(key, patch) {
+  Store.duplicateReviews[key] = { ...(Store.duplicateReviews[key] || {}), ...patch };
+  saveDuplicateReviews();
+  WixBridge.save("duplicateReview", { key, patch: Store.duplicateReviews[key] });
+  if (patch.reviewed !== undefined) {
+    logChange({ action: "duplicate-review", summary: patch.reviewed ? `Marked duplicate group reviewed (${key})` : `Un-marked duplicate group as reviewed (${key})` });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Patient index (cross-tab identity aggregation, independent of duplicate flag)
+// ---------------------------------------------------------------------------
+
+function getPatientProfile(identityKey) {
+  const records = getAllRecords().filter((r) => r.identityKey === identityKey);
+  if (!records.length) return null;
+  const withName = records.find((r) => r.displayName) || records[0];
+  const sheetsInvolved = [...new Set(records.map((r) => r.sheetId))];
+  return {
+    identityKey,
+    displayName: withName.displayName || "(no name on file)",
+    dob: records.find((r) => r.rawDob)?.rawDob || "",
+    acct: records.find((r) => r.acct)?.acct || "",
+    records,
+    sheets: sheetsInvolved,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Global search
+// ---------------------------------------------------------------------------
+
+function globalSearch(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const records = getAllRecords();
+  const results = [];
+  for (const r of records) {
+    const cfg = SHEET_BY_ID[r.sheetId];
+    const fields = cfg.searchFields || Object.keys(r.data);
+    const hit = fields.some((f) => String(r.data[f] || "").toLowerCase().includes(q));
+    if (hit) results.push(r);
+    if (results.length >= 200) break;
+  }
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// Import
+// ---------------------------------------------------------------------------
+
+function getExistingIdentitySetForSheet(sheetId) {
+  const set = new Set();
+  for (const r of getAllRecords()) {
+    if (r.sheetId === sheetId && r.identityKey) set.add(r.identityKey);
+  }
+  return set;
+}
+
+function computeImportRowIdentity(cfg, row) {
+  const nameRaw = cfg.nameField ? row[cfg.nameField] : "";
+  const acctRaw = cfg.acctField
+    ? row[cfg.acctField]
+    : cfg.nameFormat === "acct-colon-name"
+    ? parseAcctFromColonName(nameRaw)
+    : "";
+  const name = normalizeName(nameRaw);
+  const acct = normalizeAcct(acctRaw);
+  const dob = cfg.dobField ? normalizeDob(row[cfg.dobField]) : "";
+  if (acct) return "A:" + acct;
+  if (name && dob) return "ND:" + name + "|" + dob;
+  return null;
+}
+
+function commitImport(sheetId, rows, options) {
+  const cfg = SHEET_BY_ID[sheetId];
+  const existing = getExistingIdentitySetForSheet(sheetId);
+  const toAdd = [];
+  let skipped = 0;
+
+  for (const row of rows) {
+    const identity = computeImportRowIdentity(cfg, row);
+    if (options.skipDuplicates && identity && existing.has(identity)) {
+      skipped++;
+      continue;
+    }
+    toAdd.push(row);
+    if (identity) existing.add(identity);
+  }
+
+  Store.imported[sheetId] = (Store.imported[sheetId] || []).concat(toAdd);
+  saveImported();
+  const logEntry = {
+    ts: new Date().toISOString(),
+    sheetId,
+    fileName: options.fileName || "",
+    added: toAdd.length,
+    skipped,
+  };
+  Store.importLog.unshift(logEntry);
+  saveImportLog();
+  invalidateCache();
+  invalidateDupCache();
+  if (toAdd.length) WixBridge.save("importedRows", { sheetId, rows: toAdd });
+  WixBridge.save("importLogEntry", logEntry);
+  logChange({
+    sheetId, action: "import",
+    summary: `Imported ${toAdd.length} record(s) into ${cfg.label}${options.fileName ? ` from "${options.fileName}"` : ""}${skipped ? ` (${skipped} skipped as duplicates)` : ""}`,
+  });
+  return { added: toAdd.length, skipped };
+}
+
+// ---------------------------------------------------------------------------
+// Edit / soft-delete
+// ---------------------------------------------------------------------------
+
+function updateRecord(uid, patch) {
+  const before = getAllRecords().find((r) => r.uid === uid);
+  Store.editedRows[uid] = { ...(Store.editedRows[uid] || {}), ...patch };
+  saveEditedRows();
+  invalidateCache();
+  invalidateDupCache();
+  WixBridge.save("editedRow", { uid, patch: Store.editedRows[uid] });
+  const sheetId = uid.split("#")[0];
+  const label = SHEET_BY_ID[sheetId]?.label || sheetId;
+  const who = before?.displayName || uid;
+  const fields = Object.keys(patch).join(", ");
+  logChange({ sheetId, uid, action: "edit", summary: `Edited ${who} (${label}) — ${fields}` });
+}
+
+function softDeleteRecord(uid) {
+  const before = getAllRecords().find((r) => r.uid === uid);
+  Store.deletedRows[uid] = true;
+  saveDeletedRows();
+  invalidateCache();
+  invalidateDupCache();
+  WixBridge.save("deletedRow", { uid, deleted: true });
+  const sheetId = uid.split("#")[0];
+  const label = SHEET_BY_ID[sheetId]?.label || sheetId;
+  logChange({ sheetId, uid, action: "archive", summary: `Archived ${before?.displayName || uid} (${label})` });
+}
+
+function restoreRecord(uid) {
+  delete Store.deletedRows[uid];
+  saveDeletedRows();
+  invalidateCache();
+  invalidateDupCache();
+  WixBridge.save("deletedRow", { uid, deleted: false });
+  const sheetId = uid.split("#")[0];
+  const label = SHEET_BY_ID[sheetId]?.label || sheetId;
+  const after = getAllRecords().find((r) => r.uid === uid);
+  logChange({ sheetId, uid, action: "restore", summary: `Restored ${after?.displayName || uid} (${label})` });
+}
+
+function setCompletionCriteria(sheetId, field, mode, value) {
+  Store.completionOverrides[sheetId] = { field, mode, value };
+  saveCompletionOverrides();
+  invalidateCache();
+  WixBridge.save("completionOverride", { sheetId, config: Store.completionOverrides[sheetId] });
+  logChange({ sheetId, action: "completion-criteria", summary: `Changed completion criteria for ${SHEET_BY_ID[sheetId]?.label || sheetId} to "${field || "none"}" (${mode})` });
+}
+function resetCompletionCriteria(sheetId) {
+  delete Store.completionOverrides[sheetId];
+  saveCompletionOverrides();
+  invalidateCache();
+  WixBridge.save("completionOverride", { sheetId, config: null });
+  logChange({ sheetId, action: "completion-criteria", summary: `Reset completion criteria for ${SHEET_BY_ID[sheetId]?.label || sheetId} to default` });
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard-wide aggregate stats
+// ---------------------------------------------------------------------------
+
+function getDashboardStats() {
+  const records = getAllRecords();
+  const patientSheets = SHEET_CONFIG.filter((s) => !s.isReference);
+  const totalRecords = records.length;
+
+  const identityKeys = new Set(records.filter((r) => r.identityKey).map((r) => r.identityKey));
+  const totalUniquePatients = identityKeys.size;
+
+  const dupIdx = computeDuplicateIndex();
+  const duplicateRecordCount =
+    dupIdx.exactDuplicates.reduce((s, g) => s + g.records.length, 0) +
+    dupIdx.potentialDuplicates.reduce((s, g) => s + g.records.length, 0);
+
+  const perSheet = patientSheets.map((s) => ({ id: s.id, ...getSheetStats(s.id) }));
+  const trackable = perSheet.filter((s) => s.sheetStatus !== "untracked" && s.sheetStatus !== "reference");
+  const totalComplete = trackable.reduce((sum, s) => sum + s.complete, 0);
+  const totalTrackableRecords = trackable.reduce((sum, s) => sum + s.total, 0);
+  const overallPct = totalTrackableRecords ? Math.round((totalComplete / totalTrackableRecords) * 100) : 0;
+
+  const completedTabs = perSheet.filter((s) => s.sheetStatus === "complete").length;
+  const attentionTabs = perSheet.filter((s) => s.sheetStatus === "needs-attention").length;
+
+  return {
+    totalRecords,
+    totalUniquePatients,
+    duplicateRecordCount,
+    totalTabs: patientSheets.length,
+    completedTabs,
+    attentionTabs,
+    overallPct,
+    recordsRemaining: totalTrackableRecords - totalComplete,
+    perSheet,
+  };
+}
+
+function getActionItems() {
+  const items = [];
+  const dupIdx = computeDuplicateIndex();
+  const unreviewedExact = dupIdx.exactDuplicates.filter((g) => !isGroupReviewed(g.key));
+  const unreviewedPotential = dupIdx.potentialDuplicates.filter((g) => !isGroupReviewed(g.key));
+
+  if (unreviewedExact.length) {
+    items.push({
+      id: "dup-exact",
+      severity: "high",
+      text: `${unreviewedExact.reduce((s, g) => s + g.records.length, 0)} exact duplicate record(s) across ${unreviewedExact.length} group(s) need review`,
+      route: { view: "duplicates" },
+    });
+  }
+  if (unreviewedPotential.length) {
+    items.push({
+      id: "dup-potential",
+      severity: "medium",
+      text: `${unreviewedPotential.reduce((s, g) => s + g.records.length, 0)} potential duplicate record(s) across ${unreviewedPotential.length} group(s) need review`,
+      route: { view: "duplicates" },
+    });
+  }
+
+  const specialPendingText = {
+    call_list_upcoming: (n) => `${n} patient(s) with an upcoming appointment have not been called yet`,
+    call_list_no_upcoming: (n) => `${n} patient(s) with no upcoming appointment still need a letter or follow-up`,
+  };
+
+  for (const cfg of SHEET_CONFIG) {
+    if (cfg.isReference) continue;
+    const stats = getSheetStats(cfg.id);
+    if (stats.needsAttention > 0) {
+      items.push({
+        id: "attn-" + cfg.id,
+        severity: "high",
+        text: `${stats.needsAttention} record(s) in ${cfg.label} are flagged and need attention`,
+        route: { view: "sheet", sheetId: cfg.id },
+      });
+    }
+    // Field-driven tabs (nonblank / value-not-equal) surface their own pending work as an
+    // action item too — e.g. upcoming appointments nobody has called yet.
+    if ((cfg.completion.mode === "nonblank" || cfg.completion.mode === "value-not-equal") && stats.remaining > 0) {
+      const text = specialPendingText[cfg.id]
+        ? specialPendingText[cfg.id](stats.remaining)
+        : `${stats.remaining} record(s) in ${cfg.label} still need: ${cfg.completion.label}`;
+      items.push({
+        id: "pending-" + cfg.id,
+        severity: cfg.id === "call_list_upcoming" ? "high" : "medium",
+        text,
+        route: { view: "sheet", sheetId: cfg.id },
+      });
+    }
+  }
+
+  const missingPhone = getAllRecords().filter((r) => {
+    const cfg = SHEET_BY_ID[r.sheetId];
+    return cfg.phoneField && cfg.nameField && r.displayName && !r.data[cfg.phoneField];
+  });
+  if (missingPhone.length) {
+    items.push({
+      id: "missing-phone",
+      severity: "low",
+      text: `${missingPhone.length} patient record(s) are missing a phone number`,
+      route: { view: "raw-data" },
+    });
+  }
+
+  return items.sort((a, b) => sevRank(a.severity) - sevRank(b.severity));
+}
+function sevRank(s) {
+  return { high: 0, medium: 1, low: 2 }[s] ?? 3;
+}
+
+  </script>
+  <script>
+// ============================================================================
+// APP — routing, rendering, and interaction wiring. Vanilla JS, no build step.
+// ============================================================================
+
+const $root = document.getElementById("main-content");
+const $sidebar = document.getElementById("sidebar-nav");
+const $breadcrumbs = document.getElementById("breadcrumbs");
+
+let activeCharts = [];
+function destroyCharts() {
+  activeCharts.forEach((c) => c.destroy());
+  activeCharts = [];
+}
+
+// ---------------------------------------------------------------------------
+// Small utilities
+// ---------------------------------------------------------------------------
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function formatJsDate(d) {
+  const mo = d.getMonth() + 1, day = d.getDate(), y = d.getFullYear();
+  const hh = d.getHours(), mm = d.getMinutes();
+  if (hh === 0 && mm === 0) return `${mo}/${day}/${y}`;
+  return `${mo}/${day}/${y} ${hh}:${String(mm).padStart(2, "0")}`;
+}
+function debounce(fn, ms) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), ms);
+  };
+}
+function fmtNum(n) {
+  return n.toLocaleString();
+}
+function statusBadge(status) {
+  const meta = STATUS_META[status] || STATUS_META["not-started"];
+  return `<span class="badge status-${status}"><span class="dot" style="background:${meta.color}"></span>${meta.label}</span>`;
+}
+function initials(name) {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  return (parts[0][0] + (parts[1]?.[0] || "")).toUpperCase();
+}
+function toast(message, type = "success") {
+  const region = document.getElementById("toast-region");
+  const el = document.createElement("div");
+  el.className = `toast ${type}`;
+  const icon = type === "success"
+    ? '<svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    : '<svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 8v5M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  el.innerHTML = `${icon}<span>${esc(message)}</span>`;
+  region.appendChild(el);
+  requestAnimationFrame(() => el.classList.add("show"));
+  setTimeout(() => {
+    el.classList.remove("show");
+    setTimeout(() => el.remove(), 320);
+  }, 3200);
+}
+
+// ---------------------------------------------------------------------------
+// Router
+// ---------------------------------------------------------------------------
+function parseHash() {
+  const raw = location.hash.replace(/^#\/?/, "");
+  const [pathPart, queryPart] = raw.split("?");
+  const parts = pathPart.split("/").filter(Boolean);
+  const query = Object.fromEntries(new URLSearchParams(queryPart || ""));
+  return { view: parts[0] || "dashboard", param: parts[1] ? decodeURIComponent(parts[1]) : null, query };
+}
+function navigate(path) {
+  location.hash = path;
+}
+window.addEventListener("hashchange", render);
+
+// ---------------------------------------------------------------------------
+// Sidebar
+// ---------------------------------------------------------------------------
+function renderSidebar() {
+  const { view, param } = parseHash();
+  const stats = getDashboardStats();
+  const statsById = Object.fromEntries(stats.perSheet.map((s) => [s.id, s]));
+
+  let html = "";
+  html += navItem("dashboard", null, view, param, icon("grid"), "Dashboard");
+
+  for (const group of GROUPS.filter((g) => g.id !== "dashboard" && g.id !== "data-management")) {
+    const sheets = SHEET_CONFIG.filter((s) => s.group === group.id);
+    if (!sheets.length) continue;
+    html += `<div class="nav-group"><div class="nav-group-label">${esc(group.label)}</div>`;
+    for (const s of sheets) {
+      const st = statsById[s.id];
+      html += navItem("sheet", s.id, view, param, sheetIcon(s.id), s.label, st);
+    }
+    html += `</div>`;
+  }
+
+  html += `<div class="nav-group"><div class="nav-group-label">Data Management</div>`;
+  html += navItem("raw-data", null, view, param, icon("database"), "Raw Data Center");
+  html += navItem("duplicates", null, view, param, icon("copy"), "Duplicate Management", null, computeDuplicateIndex().exactDuplicates.length + computeDuplicateIndex().potentialDuplicates.length);
+  html += navItem("import-export", null, view, param, icon("upload"), "Import / Export");
+  html += navItem("history", null, view, param, icon("history"), "Change History");
+  html += `</div>`;
+
+  $sidebar.innerHTML = html;
+}
+
+function navItem(view, param, curView, curParam, iconHtml, label, stats, badgeCount) {
+  const isActive = view === curView && (param || null) === (curParam || null);
+  let countHtml = "";
+  if (stats) {
+    if (stats.sheetStatus === "untracked" || stats.sheetStatus === "reference") {
+      countHtml = `<span class="nav-count">${stats.total}</span>`;
+    } else {
+      countHtml = `<span class="nav-count">${stats.pct}%</span>`;
+    }
+  } else if (badgeCount) {
+    countHtml = `<span class="nav-count">${badgeCount}</span>`;
+  }
+  const dotColor = stats ? statusDotColor(stats.sheetStatus) : null;
+  const href = param ? `#/${view}/${encodeURIComponent(param)}` : `#/${view}`;
+  return `<a class="nav-item ${isActive ? "active" : ""}" href="${href}">
+    ${dotColor ? `<span class="status-dot" style="background:${dotColor}"></span>` : `<span class="nav-icon">${iconHtml}</span>`}
+    <span class="nav-label">${esc(label)}</span>
+    ${countHtml}
+  </a>`;
+}
+function statusDotColor(status) {
+  return { complete: "var(--status-complete)", "needs-attention": "var(--status-attention)", "in-progress": "var(--status-progress)", untracked: "var(--status-neutral)", reference: "var(--status-neutral)" }[status] || "var(--status-neutral)";
+}
+function sheetIcon() {
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+}
+function icon(name) {
+  const icons = {
+    grid: '<path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+    database: '<ellipse cx="12" cy="5" rx="8" ry="3" stroke="currentColor" stroke-width="2"/><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" stroke="currentColor" stroke-width="2"/>',
+    copy: '<rect x="9" y="9" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="2"/>',
+    upload: '<path d="M12 16V4M6 10l6-6 6 6M4 20h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+    history: '<path d="M3 3v5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 7v5l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+  };
+  return `<svg viewBox="0 0 24 24" fill="none">${icons[name] || ""}</svg>`;
+}
+
+// ---------------------------------------------------------------------------
+// Main render dispatcher
+// ---------------------------------------------------------------------------
+function render() {
+  destroyCharts();
+  const { view, param, query } = parseHash();
+  renderSidebar();
+
+  const crumbs = [{ label: "Dashboard", href: "#/dashboard" }];
+  window.scrollTo?.(0, 0);
+  $root.scrollTop = 0;
+
+  if (view === "dashboard") {
+    crumbs.length = 0;
+    renderBreadcrumbs([{ label: "Dashboard" }]);
+    $root.innerHTML = renderDashboard();
+    initDashboardCharts();
+    wireDashboard();
+  } else if (view === "sheet") {
+    const cfg = SHEET_BY_ID[param];
+    if (!cfg) return notFound();
+    renderBreadcrumbs([{ label: GROUPS.find((g) => g.id === cfg.group)?.label, href: "#/dashboard" }, { label: cfg.label }]);
+    $root.innerHTML = renderSheetPage(cfg);
+    wireSheetPage(cfg);
+  } else if (view === "raw-data") {
+    renderBreadcrumbs([{ label: "Data Management" }, { label: "Raw Data Center" }]);
+    $root.innerHTML = renderRawData(query);
+    wireRawData();
+  } else if (view === "duplicates") {
+    renderBreadcrumbs([{ label: "Data Management" }, { label: "Duplicate Management" }]);
+    $root.innerHTML = renderDuplicates();
+    wireDuplicates();
+  } else if (view === "import-export") {
+    renderBreadcrumbs([{ label: "Data Management" }, { label: "Import / Export" }]);
+    $root.innerHTML = renderImportExport();
+    wireImportExport();
+  } else if (view === "history") {
+    if (query.uid && historyState.uidFilter !== query.uid) { historyState.uidFilter = query.uid; historyState.page = 1; }
+    renderBreadcrumbs([{ label: "Data Management" }, { label: "Change History" }]);
+    $root.innerHTML = renderChangeHistory();
+    wireChangeHistory();
+  } else if (view === "patient") {
+    const profile = getPatientProfile(param);
+    if (!profile) return notFound();
+    renderBreadcrumbs([{ label: "Data Management", href: "#/raw-data" }, { label: profile.displayName }]);
+    $root.innerHTML = renderPatientDetail(profile);
+    wirePatientDetail(profile);
+  } else if (view === "search") {
+    renderBreadcrumbs([{ label: "Search Results" }]);
+    $root.innerHTML = renderSearchResults(query.q || "");
+    wireGenericTableClicks();
+  } else {
+    notFound();
+  }
+}
+function notFound() {
+  $root.innerHTML = `<div class="empty-state" style="margin-top:80px">${emptyIcon()}<div class="title">Page not found</div><div class="desc">That view doesn't exist. <a href="#/dashboard">Go to Dashboard</a></div></div>`;
+}
+function renderBreadcrumbs(items) {
+  $breadcrumbs.innerHTML = items
+    .map((it, i) => {
+      const isLast = i === items.length - 1;
+      const sep = i > 0 ? `<span class="sep">/</span>` : "";
+      return sep + (isLast || !it.href ? `<span class="${isLast ? "current" : ""}">${esc(it.label)}</span>` : `<a href="${it.href}">${esc(it.label)}</a>`);
+    })
+    .join("");
+}
+function emptyIcon() {
+  return `<svg class="icon" width="40" height="40" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+}
+
+// ============================================================================
+// DASHBOARD
+// ============================================================================
+function renderDashboard() {
+  const stats = getDashboardStats();
+  const actionItems = getActionItems();
+
+  const kpis = [
+    { label: "Total Records", value: fmtNum(stats.totalRecords), icon: "records", sub: `Across ${stats.totalTabs} tabs` },
+    { label: "Unique Patients", value: fmtNum(stats.totalUniquePatients), icon: "users", sub: "Matched by account # / name+DOB" },
+    { label: "Duplicates", value: fmtNum(stats.duplicateRecordCount), icon: "copy", sub: stats.duplicateRecordCount ? "Needs review" : "None found", cls: stats.duplicateRecordCount ? "warn" : "positive" },
+    { label: "Overall Completion", value: stats.overallPct + "%", icon: "check", sub: `${fmtNum(stats.recordsRemaining)} records remaining` },
+  ];
+
+  return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Dashboard</div>
+        <div class="page-subtitle">Live overview of the DG Master Patient List, computed from the current dataset.</div>
+      </div>
+      <div class="page-header-actions">
+        <a class="btn" href="#/import-export">${uploadIconSvg()} Import Excel</a>
+        <a class="btn primary" href="#/raw-data">${dbIconSvg()} Browse Raw Data</a>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      ${kpis.map((k) => kpiCard(k)).join("")}
+    </div>
+
+    <div class="two-col">
+      <div>
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">Tab Overview <span class="count">— % of work left for each tab</span></div>
+          </div>
+          <div class="card" style="overflow:auto">
+            <table class="tab-overview-table">
+              <thead><tr><th>Tab</th><th>Records</th><th>Progress</th><th>Duplicates</th><th>Status</th></tr></thead>
+              <tbody>
+                ${stats.perSheet.map((s) => tabOverviewRow(s)).join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section">
+          <div class="section-header"><div class="section-title">Action Items <span class="count">${actionItems.length}</span></div></div>
+          <div class="card" style="padding:var(--space-3)">
+            ${actionItems.length ? actionItems.map(actionItemRow).join("") : emptyStateHtml("All caught up", "No outstanding action items right now.")}
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-header"><div class="section-title">Snapshot</div></div>
+          <div class="card" style="padding:var(--space-5)">
+            <div class="flex justify-between" style="margin-bottom:10px"><span class="text-muted">Completed tabs</span><strong>${stats.completedTabs} / ${stats.totalTabs}</strong></div>
+            <div class="flex justify-between" style="margin-bottom:10px"><span class="text-muted">Tabs needing attention</span><strong style="color:var(--status-attention)">${stats.attentionTabs}</strong></div>
+            <div class="flex justify-between"><span class="text-muted">Records left to process</span><strong>${fmtNum(stats.recordsRemaining)}</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header"><div class="section-title">Visual Analytics</div></div>
+      <div class="charts-row" id="charts-region">
+        <div class="card chart-card"><div class="section-title" style="margin-bottom:12px">Records by Tab</div><canvas id="chart-records-by-tab"></canvas></div>
+        <div class="card chart-card"><div class="section-title" style="margin-bottom:12px">Completion % by Tab</div><canvas id="chart-completion-by-tab"></canvas></div>
+        <div class="card chart-card"><div class="section-title" style="margin-bottom:12px">Diagnosis Distribution</div><canvas id="chart-diagnosis"></canvas></div>
+        <div class="card chart-card"><div class="section-title" style="margin-bottom:12px">Duplicate Records by Tab</div><canvas id="chart-dup-by-tab"></canvas></div>
+      </div>
+    </div>
+  `;
+}
+function kpiCard(k) {
+  return `<div class="card kpi-card">
+    <div class="kpi-top"><span class="kpi-label">${esc(k.label)}</span><span class="kpi-icon">${kpiIconSvg(k.icon)}</span></div>
+    <div class="kpi-value">${k.value}</div>
+    <div class="kpi-sub ${k.cls || ""}">${esc(k.sub)}</div>
+  </div>`;
+}
+function kpiIconSvg(name) {
+  const paths = {
+    records: '<path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+    users: '<circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 8.5a3 3 0 1 1 3.8 2.9M21 20c0-2.5-1.7-4.6-4-5.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+    copy: '<rect x="9" y="9" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="2"/>',
+    check: '<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M8.5 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+  };
+  return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none">${paths[name] || ""}</svg>`;
+}
+function uploadIconSvg() { return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 16V4M6 10l6-6 6 6M4 20h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
+function dbIconSvg() { return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><ellipse cx="12" cy="5" rx="8" ry="3" stroke="currentColor" stroke-width="2"/><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5" stroke="currentColor" stroke-width="2"/></svg>`; }
+
+function tabOverviewRow(s) {
+  const cfg = SHEET_BY_ID[s.id];
+  const untracked = s.sheetStatus === "untracked";
+  const barClass = s.pct === 100 ? "complete" : s.pct >= 60 ? "progress-mid" : "";
+  return `<tr class="clickable" onclick="navigate('sheet/${s.id}')">
+    <td class="tab-name-cell">${esc(cfg.label)}</td>
+    <td>${s.total}</td>
+    <td>
+      <div class="mini-progress">
+        <div class="progress-track"><div class="progress-fill ${barClass}" style="width:${untracked ? 0 : s.pct}%"></div></div>
+        <span class="pct-label">${untracked ? "—" : s.pct + "%"}</span>
+      </div>
+    </td>
+    <td>${s.dupCount ? `<span class="badge status-needs-attention">${s.dupCount}</span>` : `<span class="text-muted">0</span>`}</td>
+    <td>${tabStatusBadge(s.sheetStatus)}</td>
+  </tr>`;
+}
+function tabStatusBadge(status) {
+  const map = {
+    complete: ["status-complete", "Complete"],
+    "in-progress": ["status-in-progress", "In Progress"],
+    "needs-attention": ["status-needs-attention", "Needs Attention"],
+    untracked: ["status-not-started", "Manual Tracking"],
+    reference: ["neutral", "Reference"],
+  };
+  const [cls, label] = map[status] || map.untracked;
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+function actionItemRow(item) {
+  const href = item.route.view === "sheet" ? `#/sheet/${item.route.sheetId}` : `#/${item.route.view}`;
+  return `<a class="action-item" href="${href}" style="text-decoration:none">
+    <span class="sev-dot ${item.severity}"></span>
+    <span class="text">${esc(item.text)}</span>
+    <span class="chevron">${chevronSvg()}</span>
+  </a>`;
+}
+function chevronSvg() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
+function emptyStateHtml(title, desc) {
+  return `<div class="empty-state">${emptyIcon()}<div class="title">${esc(title)}</div><div class="desc">${esc(desc)}</div></div>`;
+}
+
+function initDashboardCharts() {
+  if (typeof Chart === "undefined") {
+    const region = document.getElementById("charts-region");
+    if (region) {
+      region.style.gridTemplateColumns = "1fr";
+      region.innerHTML = `<div class="card">${emptyStateHtml("Charts unavailable offline", "The charting library couldn't load (no internet access). Everything else in this app still works fully offline.")}</div>`;
+    }
+    return;
+  }
+  const stats = getDashboardStats();
+  const palette = ["#8f2a3c", "#2261b0", "#a06a12", "#1e7d4b", "#6b7182", "#b3312c", "#4c3b8f", "#0f766e", "#9a3412", "#334155"];
+  Chart.defaults.font.family = "Inter, system-ui, sans-serif";
+  Chart.defaults.font.size = 11.5;
+  Chart.defaults.color = "#6b7182";
+
+  const recCtx = document.getElementById("chart-records-by-tab");
+  if (recCtx) {
+    activeCharts.push(new Chart(recCtx, {
+      type: "bar",
+      data: {
+        labels: stats.perSheet.map((s) => SHEET_BY_ID[s.id].shortLabel),
+        datasets: [{ data: stats.perSheet.map((s) => s.total), backgroundColor: "#8f2a3c", borderRadius: 4, maxBarThickness: 22 }],
+      },
+      options: baseBarOptions(),
+    }));
+  }
+  const compCtx = document.getElementById("chart-completion-by-tab");
+  if (compCtx) {
+    const trackable = stats.perSheet.filter((s) => s.sheetStatus !== "untracked");
+    activeCharts.push(new Chart(compCtx, {
+      type: "bar",
+      data: {
+        labels: trackable.map((s) => SHEET_BY_ID[s.id].shortLabel),
+        datasets: [{ data: trackable.map((s) => s.pct), backgroundColor: "#2261b0", borderRadius: 4, maxBarThickness: 22 }],
+      },
+      options: { ...baseBarOptions(), scales: { ...baseBarOptions().scales, y: { max: 100, ticks: { callback: (v) => v + "%" } } } },
+    }));
+  }
+  const dxCtx = document.getElementById("chart-diagnosis");
+  if (dxCtx) {
+    const counts = {};
+    for (const cfg of SHEET_CONFIG) {
+      if (!cfg.diagnosisLabel) continue;
+      counts[cfg.diagnosisLabel] = getSheetStats(cfg.id).total;
+    }
+    const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    activeCharts.push(new Chart(dxCtx, {
+      type: "doughnut",
+      data: { labels: entries.map((e) => e[0]), datasets: [{ data: entries.map((e) => e[1]), backgroundColor: palette, borderWidth: 2, borderColor: "#fff" }] },
+      options: { plugins: { legend: { position: "right", labels: { boxWidth: 10, padding: 8 } } }, cutout: "62%" },
+    }));
+  }
+  const dupCtx = document.getElementById("chart-dup-by-tab");
+  if (dupCtx) {
+    const withDups = stats.perSheet.filter((s) => s.dupCount > 0);
+    if (withDups.length) {
+      activeCharts.push(new Chart(dupCtx, {
+        type: "bar",
+        data: { labels: withDups.map((s) => SHEET_BY_ID[s.id].shortLabel), datasets: [{ data: withDups.map((s) => s.dupCount), backgroundColor: "#b3312c", borderRadius: 4, maxBarThickness: 22 }] },
+        options: baseBarOptions(),
+      }));
+    } else {
+      dupCtx.parentElement.innerHTML = `<div class="section-title" style="margin-bottom:12px">Duplicate Records by Tab</div>` + emptyStateHtml("No duplicates", "No duplicate records were detected in any tab.");
+    }
+  }
+}
+function baseBarOptions() {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: "#eceef2" } } },
+  };
+}
+function wireDashboard() {}
+
+// ============================================================================
+// SHEET PAGE (generic, used for every worksheet tab)
+// ============================================================================
+const sheetPageState = {}; // sheetId -> { search, sort:{field,dir}, page, pageSize }
+
+function getSheetPageState(sheetId) {
+  if (!sheetPageState[sheetId]) sheetPageState[sheetId] = { search: "", sort: null, page: 1, pageSize: 25 };
+  return sheetPageState[sheetId];
+}
+
+function renderSheetPage(cfg) {
+  const stats = getSheetStats(cfg.id);
+  const dupGroups = getDuplicateGroupsForSheet(cfg.id);
+  const untracked = cfg.completion.mode === "manual";
+
+  return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">${esc(cfg.label)}</div>
+        <div class="page-subtitle">${esc(sheetDescription(cfg))}</div>
+      </div>
+      <div class="page-header-actions">
+        ${!cfg.isReference ? `<button class="btn" id="btn-completion-criteria">${gearIconSvg()} Completion Criteria</button>` : ""}
+        <button class="btn" id="btn-export-sheet">${downloadIconSvg()} Export</button>
+        ${!cfg.isReference ? `<a class="btn primary" href="#/import-export?target=${cfg.id}">${uploadIconSvg()} Import Records</a>` : ""}
+      </div>
+    </div>
+
+    ${!cfg.isReference ? `
+    <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+      ${kpiCard({ label: "Total Records", value: fmtNum(stats.total), icon: "records", sub: cfg.label })}
+      ${untracked
+        ? kpiCard({ label: "Manually Tracked", value: `${stats.complete}/${stats.total}`, icon: "check", sub: "No source status field" })
+        : kpiCard({ label: "Complete", value: fmtNum(stats.complete), icon: "check", sub: `${stats.pct}% of records`, cls: "positive" })}
+      ${cfg.completion.mode === "flag-blank-is-complete"
+        ? kpiCard({ label: "Needs Attention", value: fmtNum(stats.needsAttention), icon: "records", sub: cfg.completion.label, cls: stats.needsAttention ? "warn" : "positive" })
+        : kpiCard({ label: "Remaining", value: fmtNum(stats.remaining), icon: "records", sub: "Not yet complete" })}
+      ${kpiCard({ label: "Duplicates", value: fmtNum(stats.dupCount), icon: "copy", sub: stats.dupCount ? "Review in Duplicate Management" : "None found", cls: stats.dupCount ? "warn" : "positive" })}
+    </div>` : ""}
+
+    ${dupGroups.length ? `<div class="card" style="padding:12px 16px;margin-bottom:20px;border-color:var(--status-attention-bg);background:var(--status-attention-bg)">
+      <span style="color:var(--status-attention);font-weight:600;font-size:13px">⚠ ${dupGroups.reduce((s,g)=>s+g.records.length,0)} record(s) in this tab are part of a duplicate group.</span>
+      <a class="link-inline" href="#/duplicates" style="margin-left:8px;font-size:12.5px">Review duplicates →</a>
+    </div>` : ""}
+
+    <div id="sheet-table-region"></div>
+  `;
+}
+
+function sheetDescription(cfg) {
+  if (cfg.isReference) return "Reference lookup table from the source workbook — not a patient roster.";
+  const c = cfg.completion;
+  return c.mode === "manual" ? "No status field exists in the source data for this tab — completion is tracked manually below." : `Completion is derived from: "${c.field}" (${c.label}).`;
+}
+
+function wireSheetPage(cfg) {
+  renderSheetTable(cfg);
+  document.getElementById("btn-export-sheet")?.addEventListener("click", () => exportSheetToExcel(cfg.id));
+  document.getElementById("btn-completion-criteria")?.addEventListener("click", () => openCompletionCriteriaModal(cfg));
+}
+
+function getSheetColumns(cfg) {
+  const headers = RAW_SHEETS[cfg.id]?.headers || [];
+  return headers;
+}
+
+function renderSheetTable(cfg) {
+  const state = getSheetPageState(cfg.id);
+  const allRecords = getAllRecords().filter((r) => r.sheetId === cfg.id);
+  const columns = getSheetColumns(cfg);
+
+  let filtered = allRecords;
+  if (state.search) {
+    const q = state.search.toLowerCase();
+    const fields = cfg.searchFields || columns;
+    filtered = filtered.filter((r) => fields.some((f) => String(r.data[f] || "").toLowerCase().includes(q)));
+  }
+  if (state.statusFilter) {
+    filtered = filtered.filter((r) => r.status === state.statusFilter);
+  }
+  if (state.sort) {
+    const { field, dir } = state.sort;
+    filtered = [...filtered].sort((a, b) => {
+      const va = field === "__status" ? a.status : a.data[field] || "";
+      const vb = field === "__status" ? b.status : b.data[field] || "";
+      const da = parseDateLoose(va), db = parseDateLoose(vb);
+      let cmp;
+      if (da && db) cmp = da - db;
+      else cmp = String(va).localeCompare(String(vb), undefined, { numeric: true });
+      return dir === "asc" ? cmp : -cmp;
+    });
+  }
+
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / state.pageSize));
+  state.page = Math.min(state.page, totalPages);
+  const pageStart = (state.page - 1) * state.pageSize;
+  const pageRows = filtered.slice(pageStart, pageStart + state.pageSize);
+
+  const showStatusCol = !cfg.isReference;
+  // Every column from the source sheet is shown — nothing from the original
+  // Excel file is hidden or dropped, even on wide sheets (those just scroll
+  // horizontally; see .data-table-wrap).
+  const displayCols = columns;
+
+  const region = document.getElementById("sheet-table-region");
+  region.innerHTML = `
+    <div class="table-toolbar">
+      <div class="table-search">
+        <span class="icon">${searchIconSvg()}</span>
+        <input type="text" id="sheet-search-input" placeholder="Search ${esc(cfg.label)}…" value="${esc(state.search)}" />
+      </div>
+      ${showStatusCol ? `
+      <select class="filter-select" id="sheet-status-filter">
+        <option value="">All statuses</option>
+        ${Object.keys(STATUS_META).map((s) => `<option value="${s}" ${state.statusFilter === s ? "selected" : ""}>${STATUS_META[s].label}</option>`).join("")}
+      </select>` : ""}
+      <button class="btn sm ghost" id="reset-filters" title="Clear search, filters, and sorting; go back to page 1">${resetIconSvg()} Reset</button>
+      <span class="text-muted" style="margin-left:auto;font-size:12.5px">${fmtNum(total)} record${total === 1 ? "" : "s"}</span>
+    </div>
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead><tr>
+          ${displayCols.map((c) => `<th data-field="${esc(c)}">${esc(c)}${sortArrow(state, c)}</th>`).join("")}
+          ${showStatusCol ? `<th data-field="__status">Status${sortArrow(state, "__status")}</th>` : ""}
+          <th>Actions</th>
+        </tr></thead>
+        <tbody>
+          ${pageRows.length ? pageRows.map((r) => sheetRowHtml(cfg, r, displayCols, showStatusCol)).join("") : `<tr><td colspan="${displayCols.length + 2}"><div class="empty-state">${emptyIcon()}<div class="title">No records match your filters</div><div class="desc">Try clearing search or status filters.</div></div></td></tr>`}
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <span>Page ${state.page} of ${totalPages}</span>
+      <div class="pager-btns">
+        <button data-page="1" ${state.page === 1 ? "disabled" : ""}>«</button>
+        <button data-page="${state.page - 1}" ${state.page === 1 ? "disabled" : ""}>‹</button>
+        <button data-page="${state.page + 1}" ${state.page === totalPages ? "disabled" : ""}>›</button>
+        <button data-page="${totalPages}" ${state.page === totalPages ? "disabled" : ""}>»</button>
+      </div>
+    </div>
+  `;
+
+  region.querySelector("#sheet-search-input").addEventListener("input", debounce((e) => {
+    state.search = e.target.value;
+    state.page = 1;
+    renderSheetTable(cfg);
+  }, 220));
+  region.querySelector("#sheet-status-filter")?.addEventListener("change", (e) => {
+    state.statusFilter = e.target.value || null;
+    state.page = 1;
+    renderSheetTable(cfg);
+  });
+  region.querySelector("#reset-filters")?.addEventListener("click", () => {
+    state.search = ""; state.statusFilter = null; state.sort = null; state.page = 1;
+    renderSheetTable(cfg);
+    toast("Filters and sorting reset");
+  });
+  region.querySelectorAll("thead th[data-field]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const field = th.dataset.field;
+      if (state.sort?.field === field) state.sort.dir = state.sort.dir === "asc" ? "desc" : "asc";
+      else state.sort = { field, dir: "asc" };
+      renderSheetTable(cfg);
+    });
+  });
+  region.querySelectorAll(".pager-btns button").forEach((b) => {
+    b.addEventListener("click", () => { state.page = +b.dataset.page; renderSheetTable(cfg); });
+  });
+  region.querySelectorAll("[data-action='toggle-expand']").forEach((el) => {
+    el.addEventListener("click", () => {
+      const uid = el.dataset.uid;
+      if (expandedRows.has(uid)) expandedRows.delete(uid);
+      else expandedRows.add(uid);
+      renderSheetTable(cfg);
+    });
+  });
+  region.querySelectorAll("[data-action='edit-record']").forEach((el) => {
+    el.addEventListener("click", () => openEditModal(el.dataset.uid, () => renderSheetTable(cfg)));
+  });
+  region.querySelectorAll("[data-action='mark-complete']").forEach((el) => {
+    el.addEventListener("click", () => { setManualStatus(el.dataset.uid, "complete"); toast("Marked complete"); renderSheetTable(cfg); renderSidebar(); });
+  });
+  region.querySelectorAll("[data-action='mark-pending']").forEach((el) => {
+    el.addEventListener("click", () => { setManualStatus(el.dataset.uid, "pending"); toast("Marked pending"); renderSheetTable(cfg); renderSidebar(); });
+  });
+  region.querySelectorAll("[data-action='delete-record']").forEach((el) => {
+    el.addEventListener("click", () => confirmDialog(
+      "Archive this record?",
+      "It will be hidden from all views but can be restored later. This does not modify the original workbook.",
+      () => { softDeleteRecord(el.dataset.uid); toast("Record archived"); renderSheetTable(cfg); renderSidebar(); }
+    ));
+  });
+  region.querySelectorAll(".inline-edit-input").forEach((input) => {
+    const commit = () => {
+      const uid = input.dataset.uid;
+      const field = input.dataset.field;
+      const newVal = input.value;
+      const rec = getAllRecords().find((r) => r.uid === uid);
+      if (!rec || (rec.data[field] || "") === newVal) return;
+      updateRecord(uid, { [field]: newVal });
+      // editing the field that drives this sheet's completion should let the source field
+      // speak for itself again, rather than leaving a stale manual override in place
+      if (cfg.completion?.field === field) setManualStatus(uid, null);
+      toast(`Saved "${field}"`);
+      renderSheetTable(cfg);
+      renderSidebar();
+    };
+    input.addEventListener("blur", commit);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+      if (e.key === "Escape") { input.value = getAllRecords().find((r) => r.uid === input.dataset.uid)?.data[input.dataset.field] || ""; input.blur(); }
+    });
+  });
+  region.querySelectorAll(".cal-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const textInput = btn.parentElement.querySelector(".inline-edit-input");
+      openDatePickerFor(textInput);
+    });
+  });
+}
+function sortArrow(state, field) {
+  if (state.sort?.field !== field) return "";
+  return `<span class="sort-arrow">${state.sort.dir === "asc" ? "▲" : "▼"}</span>`;
+}
+// Rows expanded to show the "just below it" detail panel (profile/history
+// links). Transient — resets on a full page reload, not persisted.
+const expandedRows = new Set();
+
+function sheetRowHtml(cfg, r, displayCols, showStatusCol) {
+  const dateFieldsSet = new Set(cfg.dateFields || []);
+  const totalCols = displayCols.length + (showStatusCol ? 1 : 0) + 1;
+  const isExpanded = expandedRows.has(r.uid);
+
+  const mainRow = `<tr data-row-for="${r.uid}">
+    ${displayCols.map((c) => {
+      const val = r.data[c] || "";
+      const isDate = dateFieldsSet.has(c);
+      const isNameCol = c === cfg.nameField;
+      return `<td class="inline-cell${isNameCol ? " name-col" : ""}">
+        <div class="inline-cell-wrap">
+          <input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" />
+          ${isDate ? `<button type="button" class="cal-btn" data-uid="${r.uid}" data-field="${esc(c)}" title="Pick a date">${calendarIconSvg()}</button>` : ""}
+        </div>
+      </td>`;
+    }).join("")}
+    ${showStatusCol ? `<td>${statusBadge(r.status)}</td>` : ""}
+    <td class="actions-cell">
+      <button class="btn sm ghost" data-action="toggle-expand" data-uid="${r.uid}" title="${isExpanded ? "Hide details" : "View details"}">${isExpanded ? chevronUpSvg() : chevronDownSvg()}</button>
+      <button class="btn sm ghost" data-action="edit-record" data-uid="${r.uid}" title="Edit in a form">${editIconSvg()}</button>
+      ${!cfg.isReference && r.status !== "complete" ? `<button class="btn sm ghost" data-action="mark-complete" data-uid="${r.uid}" title="Mark complete">${checkIconSvg()}</button>` : ""}
+      ${!cfg.isReference && r.status === "complete" ? `<button class="btn sm ghost" data-action="mark-pending" data-uid="${r.uid}" title="Mark pending">${undoIconSvg()}</button>` : ""}
+      <button class="btn sm ghost" data-action="delete-record" data-uid="${r.uid}" title="Archive">${trashIconSvg()}</button>
+    </td>
+  </tr>`;
+
+  if (!isExpanded) return mainRow;
+
+  return mainRow + `<tr class="expand-row" data-expand-for="${r.uid}"><td colspan="${totalCols}">
+    <div class="expand-panel">
+      <strong>${esc(r.displayName || "This record")}</strong>
+      <span class="text-muted" style="margin-left:8px">${esc(cfg.label)}${r.isImported ? " · Imported" : ""}</span>
+      <div class="flex gap-3 mt-2" style="flex-wrap:wrap">
+        ${r.identityKey ? `<a class="link-inline" href="#/patient/${encodeURIComponent(r.identityKey)}">View full patient profile across all tabs →</a>` : ""}
+        <a class="link-inline" href="#/history?uid=${encodeURIComponent(r.uid)}">View change history for this record →</a>
+      </div>
+    </div>
+  </td></tr>`;
+}
+function searchIconSvg() { return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`; }
+function calendarIconSvg() { return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 3v4M8 3v4M3 10h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`; }
+function chevronDownSvg() { return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
+function chevronUpSvg() { return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M18 15l-6-6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
+
+// ---------------------------------------------------------------------------
+// Shared native date picker — one hidden <input type="date"> reused for every
+// calendar button, positioned right under whichever text field was clicked.
+// Selecting a date writes "M/D/YYYY" back into that field and fires the same
+// blur-triggered save the field already has, so no separate save path is needed.
+// ---------------------------------------------------------------------------
+let sharedDateInput = null;
+function getSharedDateInput() {
+  if (sharedDateInput) return sharedDateInput;
+  sharedDateInput = document.createElement("input");
+  sharedDateInput.type = "date";
+  sharedDateInput.className = "shared-date-picker";
+  document.body.appendChild(sharedDateInput);
+  sharedDateInput.addEventListener("blur", () => sharedDateInput.classList.remove("active"));
+  return sharedDateInput;
+}
+function toISODateInput(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function openDatePickerFor(textInput) {
+  if (!textInput) return;
+  const picker = getSharedDateInput();
+  const rect = textInput.getBoundingClientRect();
+  picker.style.left = rect.left + "px";
+  picker.style.top = rect.bottom + 4 + "px";
+  picker.style.width = Math.max(rect.width, 120) + "px";
+  const parsed = parseDateLoose(textInput.value);
+  picker.value = parsed ? toISODateInput(parsed) : "";
+  picker.onchange = () => {
+    if (picker.value) {
+      const [y, m, d] = picker.value.split("-");
+      textInput.value = `${+m}/${+d}/${y}`;
+      textInput.dispatchEvent(new Event("blur"));
+    }
+    picker.classList.remove("active");
+  };
+  picker.classList.add("active");
+  picker.focus();
+  if (typeof picker.showPicker === "function") {
+    try { picker.showPicker(); } catch (e) {}
+  }
+}
+function resetIconSvg() { return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 12a9 9 0 1 0 3-6.7M3 3v5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
+function editIconSvg() { return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
+function checkIconSvg() { return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
+function undoIconSvg() { return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
+function trashIconSvg() { return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
+function downloadIconSvg() { return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 4v12M6 12l6 6 6-6M4 20h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
+function gearIconSvg() { return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="1.6"/></svg>`; }
+
+// ============================================================================
+// MODALS (generic)
+// ============================================================================
+function openModal(innerHtml, opts = {}) {
+  closeModal();
+  const backdrop = document.createElement("div");
+  backdrop.className = "modal-backdrop";
+  backdrop.id = "active-modal";
+  backdrop.innerHTML = `<div class="modal ${opts.wide ? "wide" : ""}">${innerHtml}</div>`;
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => backdrop.classList.add("open"));
+  backdrop.addEventListener("mousedown", (e) => { if (e.target === backdrop) closeModal(); });
+  document.addEventListener("keydown", escCloseHandler);
+  return backdrop;
+}
+function escCloseHandler(e) { if (e.key === "Escape") closeModal(); }
+function closeModal() {
+  const m = document.getElementById("active-modal");
+  if (!m) return;
+  m.id = ""; // free up the id immediately so a modal opened right after this one is unambiguous during the fade-out
+  m.classList.remove("open");
+  document.removeEventListener("keydown", escCloseHandler);
+  setTimeout(() => m.remove(), 180);
+}
+function confirmDialog(title, desc, onConfirm) {
+  const modal = openModal(`
+    <div class="modal-header"><div><h3>${esc(title)}</h3><p>${esc(desc)}</p></div></div>
+    <div class="modal-footer">
+      <button class="btn" id="confirm-cancel">Cancel</button>
+      <button class="btn danger" id="confirm-ok">Confirm</button>
+    </div>
+  `);
+  modal.querySelector("#confirm-cancel").addEventListener("click", closeModal);
+  modal.querySelector("#confirm-ok").addEventListener("click", () => { onConfirm(); closeModal(); });
+}
+
+function openRecordModal(uid) {
+  const r = getAllRecords().find((x) => x.uid === uid);
+  if (!r) return;
+  const cfg = SHEET_BY_ID[r.sheetId];
+  const fields = Object.keys(r.data).filter((k) => r.data[k]);
+  openModal(`
+    <div class="modal-header">
+      <div><h3>${esc(r.displayName || r.data[cfg.nameField] || "Record")}</h3><p>${esc(cfg.label)} ${r.isImported ? "· Imported" : ""}</p></div>
+      ${statusBadge(r.status)}
+    </div>
+    <div class="modal-body">
+      <div class="src-field-grid">
+        ${fields.map((f) => `<div class="src-field"><div class="k">${esc(f)}</div><div class="v">${esc(r.data[f])}</div></div>`).join("")}
+      </div>
+      <div class="mt-4 flex gap-3" style="flex-wrap:wrap">
+        ${r.identityKey ? `<a class="link-inline" href="#/patient/${encodeURIComponent(r.identityKey)}" onclick="closeModal()">View full patient profile across all tabs →</a>` : ""}
+        <a class="link-inline" href="#/history?uid=${encodeURIComponent(r.uid)}" onclick="closeModal()">View change history for this record →</a>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" id="modal-close-btn">Close</button>
+      <button class="btn primary" id="modal-edit-btn">Edit Record</button>
+    </div>
+  `, { wide: true });
+  document.getElementById("modal-close-btn").addEventListener("click", closeModal);
+  document.getElementById("modal-edit-btn").addEventListener("click", () => openEditModal(uid, () => render()));
+}
+
+function openEditModal(uid, onSaved) {
+  const r = getAllRecords().find((x) => x.uid === uid);
+  if (!r) return;
+  const cfg = SHEET_BY_ID[r.sheetId];
+  const columns = getSheetColumns(cfg);
+  openModal(`
+    <div class="modal-header"><div><h3>Edit Record</h3><p>${esc(cfg.label)}</p></div></div>
+    <div class="modal-body">
+      <form id="edit-form">
+        ${columns.map((c) => `
+          <div class="form-group">
+            <label>${esc(c)}</label>
+            <input type="text" name="${esc(c)}" value="${esc(r.data[c] || "")}" />
+          </div>
+        `).join("")}
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" id="edit-cancel">Cancel</button>
+      <button class="btn primary" id="edit-save">Save Changes</button>
+    </div>
+  `, { wide: true });
+  document.getElementById("edit-cancel").addEventListener("click", closeModal);
+  document.getElementById("edit-save").addEventListener("click", () => {
+    const form = document.getElementById("edit-form");
+    const patch = {};
+    columns.forEach((c) => { patch[c] = form.elements[c].value; });
+    updateRecord(uid, patch);
+    toast("Record updated");
+    closeModal();
+    onSaved?.();
+    renderSidebar();
+  });
+}
+
+function openCompletionCriteriaModal(cfg) {
+  const columns = getSheetColumns(cfg);
+  const current = getCompletionConfig(cfg.id);
+  openModal(`
+    <div class="modal-header"><div><h3>Completion Criteria</h3><p>${esc(cfg.label)} — define what "complete" means for this tab.</p></div></div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Mode</label>
+        <select id="crit-mode">
+          <option value="manual" ${current.mode === "manual" ? "selected" : ""}>Manual tracking only (no field)</option>
+          <option value="nonblank" ${current.mode === "nonblank" ? "selected" : ""}>Complete when field is filled in</option>
+          <option value="value-not-equal" ${current.mode === "value-not-equal" ? "selected" : ""}>Complete when field is filled and not equal to a value</option>
+          <option value="flag-blank-is-complete" ${current.mode === "flag-blank-is-complete" ? "selected" : ""}>Complete when flag field is blank (flag = needs attention)</option>
+        </select>
+      </div>
+      <div class="form-group" id="crit-field-group">
+        <label>Field</label>
+        <select id="crit-field">
+          <option value="">— none —</option>
+          ${columns.map((c) => `<option value="${esc(c)}" ${current.field === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="form-group" id="crit-value-group">
+        <label>Value to compare against (for "not equal to a value" mode)</label>
+        <input type="text" id="crit-value" value="${esc(current.value || "")}" placeholder='e.g. "NO PA"' />
+      </div>
+      <p class="form-hint">Manual overrides you set per-record (Mark Complete / Mark Pending) always take precedence over this criteria.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" id="crit-reset">Reset to Default</button>
+      <button class="btn" id="crit-cancel">Cancel</button>
+      <button class="btn primary" id="crit-save">Save Criteria</button>
+    </div>
+  `);
+  document.getElementById("crit-cancel").addEventListener("click", closeModal);
+  document.getElementById("crit-reset").addEventListener("click", () => { resetCompletionCriteria(cfg.id); toast("Reset to default criteria"); closeModal(); render(); });
+  document.getElementById("crit-save").addEventListener("click", () => {
+    const mode = document.getElementById("crit-mode").value;
+    const field = document.getElementById("crit-field").value || null;
+    const value = document.getElementById("crit-value").value;
+    setCompletionCriteria(cfg.id, field, mode, value);
+    toast("Completion criteria updated");
+    closeModal();
+    render();
+  });
+}
+
+// ============================================================================
+// RAW DATA CENTER
+// ============================================================================
+const rawDataState = { search: "", groupFilter: "all", sourceFilter: "", sort: null, page: 1, pageSize: 30 };
+
+function renderRawData(query) {
+  const groups = [
+    { id: "all", label: "All Records" },
+    { id: "call-lists", label: "Call Lists" },
+    { id: "work-queues", label: "Authorizations" },
+    { id: "diagnosis", label: "Diagnosis" },
+  ];
+  return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Raw Data Center</div>
+        <div class="page-subtitle">Every record across the workbook in one searchable, filterable table.</div>
+      </div>
+      <div class="page-header-actions">
+        <button class="btn" id="btn-export-raw">${downloadIconSvg()} Export Filtered</button>
+      </div>
+    </div>
+    <div class="flex gap-2 mt-2" style="margin-bottom:16px">
+      ${groups.map((g) => `<button class="btn sm ${rawDataState.groupFilter === g.id ? "primary" : ""}" data-group="${g.id}">${esc(g.label)}</button>`).join("")}
+    </div>
+    <div id="raw-data-table-region"></div>
+  `;
+}
+
+function wireRawData() {
+  document.querySelectorAll("[data-group]").forEach((b) => {
+    b.addEventListener("click", () => { rawDataState.groupFilter = b.dataset.group; rawDataState.page = 1; render(); });
+  });
+  document.getElementById("btn-export-raw")?.addEventListener("click", () => exportRawDataToExcel());
+  renderRawDataTable();
+}
+
+function renderRawDataTable() {
+  let records = getAllRecords();
+  if (rawDataState.groupFilter !== "all") {
+    records = records.filter((r) => SHEET_BY_ID[r.sheetId].group === rawDataState.groupFilter);
+  }
+  if (rawDataState.sourceFilter) {
+    records = records.filter((r) => r.sheetId === rawDataState.sourceFilter);
+  }
+  if (rawDataState.search) {
+    const q = rawDataState.search.toLowerCase();
+    records = records.filter((r) => {
+      const cfg = SHEET_BY_ID[r.sheetId];
+      return (cfg.searchFields || Object.keys(r.data)).some((f) => String(r.data[f] || "").toLowerCase().includes(q));
+    });
+  }
+  if (rawDataState.sort) {
+    const { field, dir } = rawDataState.sort;
+    const valueOf = {
+      __name: (r) => r.displayName || "",
+      __source: (r) => SHEET_BY_ID[r.sheetId].label,
+      __status: (r) => r.status,
+    }[field];
+    records = [...records].sort((a, b) => {
+      const cmp = String(valueOf(a)).localeCompare(String(valueOf(b)), undefined, { numeric: true });
+      return dir === "asc" ? cmp : -cmp;
+    });
+  }
+
+  const sourceOptions = [...new Set(getAllRecords().map((r) => r.sheetId))].filter((id) => rawDataState.groupFilter === "all" || SHEET_BY_ID[id].group === rawDataState.groupFilter);
+
+  const total = records.length;
+  const totalPages = Math.max(1, Math.ceil(total / rawDataState.pageSize));
+  rawDataState.page = Math.min(rawDataState.page, totalPages);
+  const pageRows = records.slice((rawDataState.page - 1) * rawDataState.pageSize, rawDataState.page * rawDataState.pageSize);
+
+  const region = document.getElementById("raw-data-table-region");
+  region.innerHTML = `
+    <div class="table-toolbar">
+      <div class="table-search"><span class="icon">${searchIconSvg()}</span><input type="text" id="raw-search" placeholder="Search all records…" value="${esc(rawDataState.search)}" /></div>
+      <select class="filter-select" id="raw-source-filter">
+        <option value="">All source tabs</option>
+        ${sourceOptions.map((id) => `<option value="${id}" ${rawDataState.sourceFilter === id ? "selected" : ""}>${esc(SHEET_BY_ID[id].label)}</option>`).join("")}
+      </select>
+      <button class="btn sm ghost" id="reset-raw-filters" title="Clear search, filters, and sorting; go back to page 1">${resetIconSvg()} Reset</button>
+      <span class="text-muted" style="margin-left:auto;font-size:12.5px">${fmtNum(total)} records</span>
+    </div>
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead><tr>
+          <th data-field="__name">Patient / Record${sortArrow(rawDataState, "__name")}</th>
+          <th data-field="__source">Source Tab${sortArrow(rawDataState, "__source")}</th>
+          <th>Identifier</th>
+          <th data-field="__status">Status${sortArrow(rawDataState, "__status")}</th>
+          <th>Actions</th>
+        </tr></thead>
+        <tbody>
+          ${pageRows.length ? pageRows.map(rawRowHtml).join("") : `<tr><td colspan="5"><div class="empty-state">${emptyIcon()}<div class="title">No records match your filters</div></div></td></tr>`}
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <span>Page ${rawDataState.page} of ${totalPages}</span>
+      <div class="pager-btns">
+        <button data-page="1" ${rawDataState.page === 1 ? "disabled" : ""}>«</button>
+        <button data-page="${rawDataState.page - 1}" ${rawDataState.page === 1 ? "disabled" : ""}>‹</button>
+        <button data-page="${rawDataState.page + 1}" ${rawDataState.page === totalPages ? "disabled" : ""}>›</button>
+        <button data-page="${totalPages}" ${rawDataState.page === totalPages ? "disabled" : ""}>»</button>
+      </div>
+    </div>
+  `;
+  region.querySelector("#raw-search").addEventListener("input", debounce((e) => { rawDataState.search = e.target.value; rawDataState.page = 1; renderRawDataTable(); }, 220));
+  region.querySelector("#raw-source-filter").addEventListener("change", (e) => { rawDataState.sourceFilter = e.target.value; rawDataState.page = 1; renderRawDataTable(); });
+  region.querySelector("#reset-raw-filters").addEventListener("click", () => {
+    rawDataState.search = ""; rawDataState.sourceFilter = ""; rawDataState.sort = null; rawDataState.page = 1; rawDataState.groupFilter = "all";
+    render();
+    toast("Filters and sorting reset");
+  });
+  region.querySelectorAll("thead th[data-field]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const field = th.dataset.field;
+      if (rawDataState.sort?.field === field) rawDataState.sort.dir = rawDataState.sort.dir === "asc" ? "desc" : "asc";
+      else rawDataState.sort = { field, dir: "asc" };
+      renderRawDataTable();
+    });
+  });
+  region.querySelectorAll(".pager-btns button").forEach((b) => b.addEventListener("click", () => { rawDataState.page = +b.dataset.page; renderRawDataTable(); }));
+  wireGenericTableClicks();
+}
+function rawRowHtml(r) {
+  const cfg = SHEED(r);
+  return `<tr>
+    <td class="name-cell" data-action="view-record" data-uid="${r.uid}">${esc(r.displayName || "(no name)")}</td>
+    <td><span class="badge outline">${esc(SHEET_BY_ID[r.sheetId].label)}</span></td>
+    <td>${esc(r.acct ? "#" + r.acct : r.rawDob || "—")}</td>
+    <td>${statusBadge(r.status)}</td>
+    <td class="actions-cell">${r.identityKey ? `<a class="btn sm ghost" href="#/patient/${encodeURIComponent(r.identityKey)}">Profile</a>` : ""}</td>
+  </tr>`;
+}
+function SHEED(r) { return SHEET_BY_ID[r.sheetId]; }
+
+function wireGenericTableClicks() {
+  document.querySelectorAll("[data-action='view-record']").forEach((el) => {
+    el.addEventListener("click", () => openRecordModal(el.dataset.uid));
+  });
+}
+
+// ============================================================================
+// DUPLICATE MANAGEMENT
+// ============================================================================
+function renderDuplicates() {
+  const idx = computeDuplicateIndex();
+  const tabs = [
+    { id: "exact", label: "Exact Duplicates", groups: idx.exactDuplicates },
+    { id: "potential", label: "Potential Duplicates", groups: idx.potentialDuplicates },
+    { id: "cross-tab", label: "Same Patient, Multiple Tabs", groups: idx.crossTabGroups },
+  ];
+  if (!window.__dupTab) window.__dupTab = "exact";
+
+  return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Duplicate Management</div>
+        <div class="page-subtitle">Nothing is deleted automatically. Review each group, compare records, and decide what to keep.</div>
+      </div>
+    </div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
+      ${kpiCard({ label: "Exact Duplicates", value: fmtNum(idx.exactDuplicates.length), icon: "copy", sub: fmtNum(idx.exactDuplicates.reduce((s,g)=>s+g.records.length,0)) + " records", cls: idx.exactDuplicates.length ? "warn" : "positive" })}
+      ${kpiCard({ label: "Potential Duplicates", value: fmtNum(idx.potentialDuplicates.length), icon: "copy", sub: fmtNum(idx.potentialDuplicates.reduce((s,g)=>s+g.records.length,0)) + " records" })}
+      ${kpiCard({ label: "Same Patient, Multiple Tabs", value: fmtNum(idx.crossTabGroups.length), icon: "users", sub: "Cross-referenced, not necessarily errors" })}
+    </div>
+    <div class="flex gap-2" style="margin-bottom:16px">
+      ${tabs.map((t) => `<button class="btn sm ${window.__dupTab === t.id ? "primary" : ""}" data-dup-tab="${t.id}">${esc(t.label)} (${t.groups.length})</button>`).join("")}
+    </div>
+    <div id="dup-list-region"></div>
+  `;
+}
+
+function wireDuplicates() {
+  document.querySelectorAll("[data-dup-tab]").forEach((b) => b.addEventListener("click", () => { window.__dupTab = b.dataset.dupTab; render(); }));
+  renderDupList();
+}
+
+function renderDupList() {
+  const idx = computeDuplicateIndex();
+  const groups = { exact: idx.exactDuplicates, potential: idx.potentialDuplicates, "cross-tab": idx.crossTabGroups }[window.__dupTab] || [];
+  const region = document.getElementById("dup-list-region");
+  if (!groups.length) {
+    region.innerHTML = `<div class="card">${emptyStateHtml("Nothing here", "No groups found in this category.")}</div>`;
+    return;
+  }
+  region.innerHTML = groups.map((g) => dupGroupCard(g)).join("");
+  region.querySelectorAll("[data-action='review-group']").forEach((el) => {
+    el.addEventListener("click", () => { setGroupReview(el.dataset.key, { reviewed: true }); toast("Marked as reviewed"); render(); });
+  });
+  region.querySelectorAll("[data-action='unreview-group']").forEach((el) => {
+    el.addEventListener("click", () => { setGroupReview(el.dataset.key, { reviewed: false }); render(); });
+  });
+  region.querySelectorAll("[data-action='view-record']").forEach((el) => el.addEventListener("click", () => openRecordModal(el.dataset.uid)));
+  region.querySelectorAll("[data-action='archive-from-group']").forEach((el) => {
+    el.addEventListener("click", () => confirmDialog("Archive this record?", "It will be hidden from all views but can be restored later.", () => {
+      softDeleteRecord(el.dataset.uid); invalidateDupCache(); toast("Record archived"); render();
+    }));
+  });
+}
+function dupGroupCard(g) {
+  const reviewed = isGroupReviewed(g.key);
+  const label = g.type === "cross-tab" ? `Found in: ${g.sheets.map((s) => SHEET_BY_ID[s].label).join(", ")}` : `${g.records.length} records in ${SHEET_BY_ID[g.sheetId].label}`;
+  const reasonHtml = g.type === "field-overlap"
+    ? `<div class="text-muted" style="font-size:12px;margin-bottom:10px">Flagged because ${g.matchedFields.length} column(s) matched exactly: ${g.matchedFields.map((f) => `<strong>${esc(f)}</strong>`).join(", ") || "(name only)"}</div>`
+    : "";
+  return `<div class="card" style="padding:var(--space-4);margin-bottom:var(--space-3)">
+    <div class="flex justify-between items-center" style="margin-bottom:10px">
+      <div>
+        <strong>${esc(g.records[0].displayName || "(no name)")}</strong>
+        <span class="text-muted" style="margin-left:8px;font-size:12px">${esc(label)}</span>
+      </div>
+      <div class="flex gap-2">
+        ${reviewed ? `<span class="badge status-complete">Reviewed</span><button class="btn sm ghost" data-action="unreview-group" data-key="${esc(g.key)}">Undo</button>`
+          : `<button class="btn sm" data-action="review-group" data-key="${esc(g.key)}">Mark Reviewed</button>`}
+      </div>
+    </div>
+    ${reasonHtml}
+    <div class="src-field-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">
+      ${g.records.map((r) => `<div class="card" style="padding:10px;background:var(--bg-sunken)">
+        <div class="flex justify-between items-center" style="margin-bottom:6px">
+          <span class="badge outline">${esc(SHEET_BY_ID[r.sheetId].label)}</span>
+          ${statusBadge(r.status)}
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary)">${r.acct ? "Acct #" + esc(r.acct) : ""} ${r.rawDob ? "· DOB " + esc(r.rawDob) : ""}</div>
+        <div class="flex gap-2 mt-2">
+          <button class="btn sm ghost" data-action="view-record" data-uid="${r.uid}">View</button>
+          <button class="btn sm ghost" data-action="archive-from-group" data-uid="${r.uid}">Archive</button>
+        </div>
+      </div>`).join("")}
+    </div>
+  </div>`;
+}
+
+// ============================================================================
+// PATIENT DETAIL
+// ============================================================================
+function renderPatientDetail(profile) {
+  return `
+    <div class="page-header">
+      <div class="page-title">Patient Profile</div>
+    </div>
+    <div class="card patient-header">
+      <div class="patient-avatar">${initials(profile.displayName)}</div>
+      <div>
+        <h2 style="font-size:18px;font-weight:700">${esc(profile.displayName)}</h2>
+        <div class="patient-meta-row">
+          ${profile.dob ? `<span class="patient-meta-item"><strong>DOB:</strong> ${esc(profile.dob)}</span>` : ""}
+          ${profile.acct ? `<span class="patient-meta-item"><strong>Account #:</strong> ${esc(profile.acct)}</span>` : ""}
+          <span class="patient-meta-item"><strong>Appears in:</strong> ${profile.sheets.length} tab${profile.sheets.length === 1 ? "" : "s"}</span>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-header"><div class="section-title">Source Records</div></div>
+      ${profile.records.map((r) => sourceRecordCard(r)).join("")}
+    </div>
+  `;
+}
+function sourceRecordCard(r) {
+  const cfg = SHEET_BY_ID[r.sheetId];
+  const fields = Object.keys(r.data).filter((k) => r.data[k]);
+  return `<div class="card source-record-card">
+    <div class="src-head">
+      <span class="badge outline">${esc(cfg.label)}</span>
+      ${statusBadge(r.status)}
+    </div>
+    <div class="src-field-grid">
+      ${fields.map((f) => `<div class="src-field"><div class="k">${esc(f)}</div><div class="v">${esc(r.data[f])}</div></div>`).join("")}
+    </div>
+  </div>`;
+}
+function wirePatientDetail() {}
+
+// ============================================================================
+// SEARCH RESULTS
+// ============================================================================
+function renderSearchResults(q) {
+  const results = globalSearch(q);
+  return `
+    <div class="page-header"><div class="page-title">Search Results</div><div class="page-subtitle">"${esc(q)}" — ${results.length} match${results.length === 1 ? "" : "es"}</div></div>
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Patient / Record</th><th>Source Tab</th><th>Identifier</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>${results.length ? results.map(rawRowHtml).join("") : `<tr><td colspan="5"><div class="empty-state">${emptyIcon()}<div class="title">No results</div><div class="desc">No records matched "${esc(q)}".</div></div></td></tr>`}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ============================================================================
+// IMPORT / EXPORT
+// ============================================================================
+function renderImportExport() {
+  return `
+    <div class="page-header">
+      <div><div class="page-title">Import / Export</div><div class="page-subtitle">Bring in new records from an Excel file, or export the current dataset.</div></div>
+    </div>
+    <div class="two-col">
+      <div>
+        <div class="card" style="padding:var(--space-6);margin-bottom:var(--space-5)">
+          <div class="section-title" style="margin-bottom:6px">Import Data</div>
+          <p class="text-muted" style="margin-bottom:16px;font-size:13px">Add records from another Excel workbook. You'll pick the worksheet, confirm the columns line up, preview what's new, and check for duplicates before anything is added.</p>
+          <button class="btn primary" id="btn-open-import-wizard">${uploadIconSvg()} Import Excel</button>
+        </div>
+        <div class="card" style="padding:var(--space-6)">
+          <div class="section-title" style="margin-bottom:6px">Export Data</div>
+          <p class="text-muted" style="margin-bottom:16px;font-size:13px">Export the full dataset, or just one tab, back to Excel or CSV.</p>
+          <div class="flex gap-2">
+            <button class="btn" id="btn-export-all-xlsx">${downloadIconSvg()} Export All (Excel)</button>
+            <button class="btn" id="btn-export-all-csv">${downloadIconSvg()} Export All (CSV)</button>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="section-header"><div class="section-title">Import History</div></div>
+        <div class="card" style="padding:var(--space-3)">
+          ${Store.importLog.length ? Store.importLog.slice(0, 20).map((l) => `
+            <div class="action-item" style="cursor:default">
+              <span class="sev-dot low"></span>
+              <span class="text">${esc(l.fileName || "Import")} → ${esc(SHEET_BY_ID[l.sheetId]?.label || l.sheetId)}: <strong>${l.added} added</strong>${l.skipped ? `, ${l.skipped} skipped as duplicates` : ""}</span>
+            </div>
+          `).join("") : emptyStateHtml("No imports yet", "Imported files will show up here.")}
+        </div>
+      </div>
+    </div>
+  `;
+}
+function wireImportExport() {
+  document.getElementById("btn-open-import-wizard").addEventListener("click", openImportWizard);
+  document.getElementById("btn-export-all-xlsx").addEventListener("click", () => exportAllToExcel());
+  document.getElementById("btn-export-all-csv").addEventListener("click", () => exportAllToCsv());
+}
+
+// ============================================================================
+// CHANGE HISTORY
+// ============================================================================
+const historyState = { sheetFilter: "", actionFilter: "", uidFilter: "", page: 1, pageSize: 40 };
+const HISTORY_ACTION_LABELS = {
+  status: "Status change",
+  edit: "Edit",
+  archive: "Archive",
+  restore: "Restore",
+  "completion-criteria": "Completion criteria",
+  "duplicate-review": "Duplicate review",
+  import: "Import",
+};
+
+function renderChangeHistory() {
+  const sheetsWithHistory = [...new Set(Store.changeLog.map((e) => e.sheetId).filter(Boolean))];
+  return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Change History</div>
+        <div class="page-subtitle">Every status change, edit, import, archive, and duplicate review made in this app, most recent first.</div>
+      </div>
+    </div>
+    <div class="table-toolbar">
+      <select class="filter-select" id="hist-sheet-filter">
+        <option value="">All tabs</option>
+        ${sheetsWithHistory.map((id) => `<option value="${id}" ${historyState.sheetFilter === id ? "selected" : ""}>${esc(SHEET_BY_ID[id]?.label || id)}</option>`).join("")}
+      </select>
+      <select class="filter-select" id="hist-action-filter">
+        <option value="">All change types</option>
+        ${Object.entries(HISTORY_ACTION_LABELS).map(([k, v]) => `<option value="${k}" ${historyState.actionFilter === k ? "selected" : ""}>${esc(v)}</option>`).join("")}
+      </select>
+      <button class="btn sm ghost" id="hist-reset">${resetIconSvg()} Reset</button>
+      <span class="text-muted" style="margin-left:auto;font-size:12.5px" id="hist-count"></span>
+    </div>
+    ${historyState.uidFilter ? `<div class="card" style="padding:10px 14px;margin-bottom:14px;background:var(--accent-soft);border-color:var(--accent-soft-border)">
+      Showing history for one record only. <a class="link-inline" href="#/history" id="hist-clear-uid">Show all history →</a>
+    </div>` : ""}
+    <div id="history-list-region"></div>
+  `;
+}
+
+function wireChangeHistory() {
+  document.getElementById("hist-sheet-filter").addEventListener("change", (e) => { historyState.sheetFilter = e.target.value; historyState.page = 1; renderHistoryList(); });
+  document.getElementById("hist-action-filter").addEventListener("change", (e) => { historyState.actionFilter = e.target.value; historyState.page = 1; renderHistoryList(); });
+  document.getElementById("hist-reset").addEventListener("click", () => {
+    historyState.sheetFilter = ""; historyState.actionFilter = ""; historyState.uidFilter = ""; historyState.page = 1;
+    render();
+    toast("Filters reset");
+  });
+  document.getElementById("hist-clear-uid")?.addEventListener("click", () => { historyState.uidFilter = ""; });
+  renderHistoryList();
+}
+
+function renderHistoryList() {
+  let entries = Store.changeLog;
+  if (historyState.uidFilter) entries = entries.filter((e) => e.uid === historyState.uidFilter);
+  if (historyState.sheetFilter) entries = entries.filter((e) => e.sheetId === historyState.sheetFilter);
+  if (historyState.actionFilter) entries = entries.filter((e) => e.action === historyState.actionFilter);
+
+  const total = entries.length;
+  const totalPages = Math.max(1, Math.ceil(total / historyState.pageSize));
+  historyState.page = Math.min(historyState.page, totalPages);
+  const pageRows = entries.slice((historyState.page - 1) * historyState.pageSize, historyState.page * historyState.pageSize);
+
+  document.getElementById("hist-count").textContent = `${fmtNum(total)} change${total === 1 ? "" : "s"}`;
+
+  const region = document.getElementById("history-list-region");
+  if (!total) {
+    region.innerHTML = `<div class="card">${emptyStateHtml("No changes yet", "Once someone edits a record, marks something complete, imports data, or reviews a duplicate, it'll show up here.")}</div>`;
+    return;
+  }
+  region.innerHTML = `
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead><tr><th>When</th><th>Type</th><th>Tab</th><th>What changed</th></tr></thead>
+        <tbody>
+          ${pageRows.map((e) => `<tr>
+            <td>${esc(formatHistoryTs(e.ts))}</td>
+            <td><span class="badge outline">${esc(HISTORY_ACTION_LABELS[e.action] || e.action)}</span></td>
+            <td>${e.sheetId ? esc(SHEET_BY_ID[e.sheetId]?.label || e.sheetId) : "—"}</td>
+            <td style="white-space:normal;max-width:520px">${esc(e.summary)}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <span>Page ${historyState.page} of ${totalPages}</span>
+      <div class="pager-btns">
+        <button data-page="1" ${historyState.page === 1 ? "disabled" : ""}>«</button>
+        <button data-page="${historyState.page - 1}" ${historyState.page === 1 ? "disabled" : ""}>‹</button>
+        <button data-page="${historyState.page + 1}" ${historyState.page === totalPages ? "disabled" : ""}>›</button>
+        <button data-page="${totalPages}" ${historyState.page === totalPages ? "disabled" : ""}>»</button>
+      </div>
+    </div>
+  `;
+  region.querySelectorAll(".pager-btns button").forEach((b) => b.addEventListener("click", () => { historyState.page = +b.dataset.page; renderHistoryList(); }));
+}
+function formatHistoryTs(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return sameDay ? `Today, ${time}` : `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}, ${time}`;
+}
+
+function exportSheetToExcel(sheetId) {
+  if (typeof XLSX === "undefined") return toast("Export library did not load (no internet access?)", "error");
+  const cfg = SHEET_BY_ID[sheetId];
+  const rows = getAllRecords().filter((r) => r.sheetId === sheetId).map((r) => r.data);
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, cfg.label.slice(0, 31));
+  XLSX.writeFile(wb, `${cfg.label.replace(/[^\w\- ]/g, "")}.xlsx`);
+  toast("Exported " + cfg.label);
+}
+function exportRawDataToExcel() {
+  if (typeof XLSX === "undefined") return toast("Export library did not load (no internet access?)", "error");
+  let records = getAllRecords();
+  if (rawDataState.groupFilter !== "all") records = records.filter((r) => SHEET_BY_ID[r.sheetId].group === rawDataState.groupFilter);
+  if (rawDataState.sourceFilter) records = records.filter((r) => r.sheetId === rawDataState.sourceFilter);
+  const rows = records.map((r) => ({ "Source Tab": SHEET_BY_ID[r.sheetId].label, ...r.data, Status: STATUS_META[r.status].label }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Raw Data Export");
+  XLSX.writeFile(wb, "raw_data_export.xlsx");
+  toast("Exported raw data");
+}
+function exportAllToExcel() {
+  if (typeof XLSX === "undefined") return toast("Export library did not load (no internet access?)", "error");
+  const wb = XLSX.utils.book_new();
+  for (const cfg of SHEET_CONFIG) {
+    const rows = getAllRecords().filter((r) => r.sheetId === cfg.id).map((r) => r.data);
+    if (!rows.length) continue;
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, cfg.label.slice(0, 31));
+  }
+  XLSX.writeFile(wb, "dg_master_pt_list_export.xlsx");
+  toast("Exported full workbook");
+}
+function exportAllToCsv() {
+  if (typeof XLSX === "undefined") return toast("Export library did not load (no internet access?)", "error");
+  const rows = getAllRecords().map((r) => ({ "Source Tab": SHEET_BY_ID[r.sheetId].label, ...r.data, Status: STATUS_META[r.status].label }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const csv = XLSX.utils.sheet_to_csv(ws);
+  const blob = new Blob([csv], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "dg_master_pt_list_export.csv";
+  a.click();
+  toast("Exported CSV");
+}
+
+// ---------------------------------------------------------------------------
+// Import Wizard
+// ---------------------------------------------------------------------------
+const importWizard = { step: 1, workbook: null, sheetNames: [], selectedSheet: null, targetId: null, incomingHeaders: [], incomingRows: [], mapping: {}, fileName: "" };
+
+function resetWizard() {
+  Object.assign(importWizard, { step: 1, workbook: null, sheetNames: [], selectedSheet: null, targetId: null, incomingHeaders: [], incomingRows: [], mapping: {}, fileName: "" });
+}
+
+function openImportWizard() {
+  resetWizard();
+  const { view, query } = parseHash();
+  if (query.target) importWizard.targetId = query.target;
+  renderWizardModal();
+}
+
+function renderWizardModal() {
+  const steps = ["Choose File", "Select Sheet & Target", "Map Columns", "Preview & Confirm"];
+  const modal = openModal(`
+    <div class="modal-header">
+      <div><h3>Import Records from Excel</h3><p>Step ${importWizard.step} of 4</p></div>
+    </div>
+    <div class="modal-body">
+      <div class="wizard-steps">
+        ${steps.map((s, i) => `
+          <div class="wizard-step ${importWizard.step === i + 1 ? "active" : importWizard.step > i + 1 ? "done" : ""}">
+            <span class="num">${importWizard.step > i + 1 ? "✓" : i + 1}</span><span>${esc(s)}</span>
+          </div>
+          ${i < steps.length - 1 ? `<div class="wizard-connector"></div>` : ""}
+        `).join("")}
+      </div>
+      <div id="wizard-step-body"></div>
+    </div>
+    <div class="modal-footer" id="wizard-footer"></div>
+  `, { wide: true });
+  renderWizardStep();
+}
+
+function renderWizardStep() {
+  const body = document.getElementById("wizard-step-body");
+  const footer = document.getElementById("wizard-footer");
+  if (importWizard.step === 1) {
+    body.innerHTML = `
+      <div class="dropzone" id="dropzone">
+        ${uploadIconIllus()}
+        <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px">Click to choose an Excel file</div>
+        <div style="font-size:12px">.xlsx or .xls — the file never leaves your browser</div>
+        <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none" />
+      </div>
+      <div id="file-status" class="mt-4"></div>
+    `;
+    footer.innerHTML = `<button class="btn" id="wiz-cancel">Cancel</button><button class="btn primary" id="wiz-next" disabled>Next</button>`;
+    footer.querySelector("#wiz-cancel").addEventListener("click", closeModal);
+    const dz = document.getElementById("dropzone");
+    const fileInput = document.getElementById("file-input");
+    dz.addEventListener("click", () => fileInput.click());
+    dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("drag-over"); });
+    dz.addEventListener("dragleave", () => dz.classList.remove("drag-over"));
+    dz.addEventListener("drop", (e) => { e.preventDefault(); dz.classList.remove("drag-over"); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+    fileInput.addEventListener("change", (e) => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+    function handleFile(file) {
+      if (typeof XLSX === "undefined") { toast("Excel library did not load (no internet access?)", "error"); return; }
+      importWizard.fileName = file.name;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const wb = XLSX.read(ev.target.result, { type: "array", cellDates: true });
+          importWizard.workbook = wb;
+          importWizard.sheetNames = wb.SheetNames;
+          document.getElementById("file-status").innerHTML = `<div class="badge status-complete">✓ ${esc(file.name)} — ${wb.SheetNames.length} worksheet(s) found</div>`;
+          footer.querySelector("#wiz-next").disabled = false;
+        } catch (err) {
+          document.getElementById("file-status").innerHTML = `<div class="badge status-needs-attention">Could not read this file: ${esc(err.message)}</div>`;
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+    footer.querySelector("#wiz-next").addEventListener("click", () => { importWizard.step = 2; renderWizardStep(); updateWizardChrome(); });
+  }
+
+  else if (importWizard.step === 2) {
+    body.innerHTML = `
+      <div class="form-group">
+        <label>Which worksheet has the data you want to import?</label>
+        <select id="wiz-sheet-select">
+          <option value="">— choose a worksheet —</option>
+          ${importWizard.sheetNames.map((n) => `<option value="${esc(n)}" ${importWizard.selectedSheet === n ? "selected" : ""}>${esc(n)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Which tab should these records be added to?</label>
+        <select id="wiz-target-select">
+          <option value="">— choose a destination tab —</option>
+          ${SHEET_CONFIG.filter((s) => !s.isReference).map((s) => `<option value="${s.id}" ${importWizard.targetId === s.id ? "selected" : ""}>${esc(s.label)}</option>`).join("")}
+        </select>
+      </div>
+      <div id="wiz-preview-mini"></div>
+    `;
+    footer.innerHTML = `<button class="btn" id="wiz-back">Back</button><button class="btn primary" id="wiz-next" disabled>Next</button>`;
+    footer.querySelector("#wiz-back").addEventListener("click", () => { importWizard.step = 1; renderWizardStep(); updateWizardChrome(); });
+    const checkReady = () => { footer.querySelector("#wiz-next").disabled = !(importWizard.selectedSheet && importWizard.targetId); };
+    document.getElementById("wiz-sheet-select").addEventListener("change", (e) => {
+      importWizard.selectedSheet = e.target.value || null;
+      if (importWizard.selectedSheet) {
+        const ws = importWizard.workbook.Sheets[importWizard.selectedSheet];
+        // cellDates:true (set at XLSX.read) turns date-formatted cells into real JS Date
+        // objects here instead of raw Excel serial numbers — format them to plain
+        // M/D/YYYY text now so nothing downstream ever sees a number like "45932".
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: "" }).map((row) => {
+          const out = {};
+          for (const [k, v] of Object.entries(row)) out[k] = v instanceof Date ? formatJsDate(v) : v;
+          return out;
+        });
+        importWizard.incomingRows = rows;
+        importWizard.incomingHeaders = rows.length ? Object.keys(rows[0]) : [];
+        document.getElementById("wiz-preview-mini").innerHTML = `<p class="form-hint">${rows.length} row(s) found, ${importWizard.incomingHeaders.length} column(s): ${importWizard.incomingHeaders.slice(0, 8).map(esc).join(", ")}${importWizard.incomingHeaders.length > 8 ? "…" : ""}</p>`;
+      }
+      checkReady();
+    });
+    document.getElementById("wiz-target-select").addEventListener("change", (e) => { importWizard.targetId = e.target.value || null; checkReady(); });
+    checkReady();
+    footer.querySelector("#wiz-next").addEventListener("click", () => {
+      const targetHeaders = RAW_SHEETS[importWizard.targetId].headers;
+      importWizard.mapping = {};
+      for (const h of importWizard.incomingHeaders) {
+        const exact = targetHeaders.find((t) => t.toLowerCase().trim() === h.toLowerCase().trim());
+        importWizard.mapping[h] = exact || "";
+      }
+      importWizard.step = 3;
+      renderWizardStep();
+      updateWizardChrome();
+    });
+  }
+
+  else if (importWizard.step === 3) {
+    const targetHeaders = RAW_SHEETS[importWizard.targetId].headers;
+    const matchedCount = Object.values(importWizard.mapping).filter(Boolean).length;
+    body.innerHTML = `
+      <p class="form-hint" style="margin-bottom:12px">${matchedCount} / ${importWizard.incomingHeaders.length} incoming columns matched automatically. Review and adjust below — columns set to "Do not import" are skipped.</p>
+      <table class="mapping-table">
+        <thead><tr><th>Incoming Column</th><th></th><th>Maps To</th><th>Status</th></tr></thead>
+        <tbody>
+          ${importWizard.incomingHeaders.map((h) => `
+            <tr>
+              <td>${esc(h)}</td>
+              <td>→</td>
+              <td>
+                <select data-map-col="${esc(h)}">
+                  <option value="">Do not import</option>
+                  ${targetHeaders.map((t) => `<option value="${esc(t)}" ${importWizard.mapping[h] === t ? "selected" : ""}>${esc(t)}</option>`).join("")}
+                </select>
+              </td>
+              <td>${importWizard.mapping[h] ? `<span class="badge status-complete">Matched</span>` : `<span class="badge status-not-started">Skipped</span>`}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+      <div class="mt-4">
+        ${targetHeaders.filter((t) => !Object.values(importWizard.mapping).includes(t)).length ? `<p class="form-hint">Target columns with no incoming match (will stay blank for imported rows): ${targetHeaders.filter((t) => !Object.values(importWizard.mapping).includes(t)).map(esc).join(", ")}</p>` : ""}
+      </div>
+    `;
+    footer.innerHTML = `<button class="btn" id="wiz-back">Back</button><button class="btn primary" id="wiz-next">Next: Preview</button>`;
+    footer.querySelector("#wiz-back").addEventListener("click", () => { importWizard.step = 2; renderWizardStep(); updateWizardChrome(); });
+    body.querySelectorAll("[data-map-col]").forEach((sel) => {
+      sel.addEventListener("change", (e) => {
+        importWizard.mapping[sel.dataset.mapCol] = e.target.value;
+        renderWizardStep();
+      });
+    });
+    footer.querySelector("#wiz-next").addEventListener("click", () => { importWizard.step = 4; renderWizardStep(); updateWizardChrome(); });
+  }
+
+  else if (importWizard.step === 4) {
+    const cfg = SHEET_BY_ID[importWizard.targetId];
+    const mappedRows = importWizard.incomingRows.map((row) => {
+      const out = {};
+      for (const [src, dest] of Object.entries(importWizard.mapping)) {
+        if (dest) out[dest] = String(row[src] ?? "");
+      }
+      return out;
+    });
+    const existing = getExistingIdentitySetForSheet(importWizard.targetId);
+    let dupCount = 0;
+    for (const row of mappedRows) {
+      const identity = computeImportRowIdentity(cfg, row);
+      if (identity && existing.has(identity)) dupCount++;
+    }
+    const newCount = mappedRows.length - dupCount;
+    body.innerHTML = `
+      <div class="import-summary-grid">
+        <div class="summary-stat"><div class="num">${mappedRows.length}</div><div class="lbl">Records Found</div></div>
+        <div class="summary-stat good"><div class="num">${newCount}</div><div class="lbl">New Records</div></div>
+        <div class="summary-stat ${dupCount ? "warn" : ""}"><div class="num">${dupCount}</div><div class="lbl">Potential Duplicates</div></div>
+        <div class="summary-stat"><div class="num">${Object.values(importWizard.mapping).filter(Boolean).length}</div><div class="lbl">Columns Matched</div></div>
+      </div>
+      ${dupCount ? `
+      <div class="form-group">
+        <label>How should duplicates be handled?</label>
+        <select id="dup-handling">
+          <option value="skip">Skip exact duplicates (import ${newCount} new only)</option>
+          <option value="all">Import all ${mappedRows.length} records anyway</option>
+        </select>
+      </div>` : ""}
+      <p class="form-hint">Preview of the first 5 mapped rows:</p>
+      <div class="data-table-wrap" style="max-height:220px">
+        <table class="data-table">
+          <thead><tr>${Object.values(importWizard.mapping).filter(Boolean).map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>
+          <tbody>${mappedRows.slice(0, 5).map((r) => `<tr>${Object.values(importWizard.mapping).filter(Boolean).map((h) => `<td>${esc(r[h])}</td>`).join("")}</tr>`).join("")}</tbody>
+        </table>
+      </div>
+    `;
+    footer.innerHTML = `<button class="btn" id="wiz-back">Back</button><button class="btn danger" id="wiz-do-cancel">Cancel Import</button><button class="btn primary" id="wiz-confirm">Import ${newCount || mappedRows.length} Record(s)</button>`;
+    footer.querySelector("#wiz-back").addEventListener("click", () => { importWizard.step = 3; renderWizardStep(); updateWizardChrome(); });
+    footer.querySelector("#wiz-do-cancel").addEventListener("click", closeModal);
+    footer.querySelector("#wiz-confirm").addEventListener("click", () => {
+      const skipDup = document.getElementById("dup-handling") ? document.getElementById("dup-handling").value === "skip" : true;
+      const result = commitImport(importWizard.targetId, mappedRows, { skipDuplicates: skipDup, fileName: importWizard.fileName });
+      toast(`Imported ${result.added} record(s)${result.skipped ? `, skipped ${result.skipped} duplicate(s)` : ""}`);
+      closeModal();
+      render();
+    });
+  }
+}
+function updateWizardChrome() {
+  const modal = document.querySelector("#active-modal .modal");
+  if (!modal) return;
+  modal.querySelector(".modal-header p").textContent = `Step ${importWizard.step} of 4`;
+  modal.querySelectorAll(".wizard-step").forEach((el, i) => {
+    el.classList.toggle("active", importWizard.step === i + 1);
+    el.classList.toggle("done", importWizard.step > i + 1);
+    el.querySelector(".num").textContent = importWizard.step > i + 1 ? "✓" : String(i + 1);
+  });
+}
+function uploadIconIllus() { return `<div class="icon">${'<svg width="40" height="40" viewBox="0 0 24 24" fill="none"><path d="M12 16V4M6 10l6-6 6 6M4 20h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'}</div>`; }
+
+// ============================================================================
+// TOP BAR SEARCH
+// ============================================================================
+document.getElementById("global-search").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const q = e.target.value.trim();
+    if (q) navigate(`search?q=${encodeURIComponent(q)}`);
+  }
+});
+document.getElementById("btn-import-topbar").addEventListener("click", openImportWizard);
+
+// ============================================================================
+// BOOT
+// ============================================================================
+window.navigate = navigate;
+window.closeModal = closeModal;
+
+(async function boot() {
+  $root.innerHTML = `<div class="empty-state" style="margin-top:120px"><div class="spinner" style="width:28px;height:28px;border-width:3px;margin:0 auto 16px"></div><div class="title">Loading…</div></div>`;
+  await bootStore();
+  render();
+  startWixSync();
+})();
+
+  </script>
+</body>
+</html>
