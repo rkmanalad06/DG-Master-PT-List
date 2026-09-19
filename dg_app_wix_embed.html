@@ -1095,6 +1095,8 @@ td.cl-action-td { white-space: normal; }
 .dg-cal-foot{display:flex;justify-content:space-between;margin-top:8px}
 .dg-cal-foot button{border:none;border-radius:6px;background:transparent;color:var(--accent,#7a2233);font:inherit;font-size:12.5px;font-weight:600;padding:4px 8px;cursor:pointer}
 .dg-cal-foot button:hover{background:var(--accent-soft,#f3dde0)}
+.cl-stat-sub{display:block;font-size:11px;line-height:1.3;color:var(--text-tertiary,#8b8b9a);margin:2px 0 6px;font-weight:400}
+.cl-stat-static{cursor:default}
 </style>
 </head>
 <body>
@@ -1162,7 +1164,7 @@ function ensureDefaultSheets() {
 
 function openAddRowModal(cfg) {
   const base = (RAW_SHEETS[cfg.id] && RAW_SHEETS[cfg.id].headers) || [];
-  const isCall = !!(cfg.completion && cfg.completion.mode === "call-outcome");
+  const isCall = !!(cfg.completion && (cfg.completion.mode === "call-outcome" || cfg.completion.mode === "transition"));
   const skipCol = isCall ? cfg.completion.field : null;
   const fields = base.filter((h) => h && h !== skipCol);
   const dateSet = new Set(cfg.dateFields || []);
@@ -1258,7 +1260,7 @@ const SHEET_CONFIG = [
     dobField: "DOB",
     phoneField: "Home Phone",
     dateFields: ["DOB", "Last Visit w/ DG", "Next Scheduled Visit"],
-    completion: { field: "Team Member", mode: "nonblank", label: "Assigned to a team member" },
+    completion: { field: "Action", mode: "transition", label: "Transition marked complete" },
     searchFields: ["Patient Name", "Account #", "Home Phone", "Action", "Notes"],
     inlineFields: ["Team Member", "Notes"],
   },
@@ -1917,7 +1919,7 @@ function getCompletionConfig(sheetId) {
 
 // Returns one of: 'complete' | 'pending' | 'needs-attention' | 'not-started'
 function computeStatus(cfg, data, uid) {
-  if (cfg.id === CALL_SHEET_ID) return CALL_GENERIC_STATUS[callInfo(data).status];
+  if (isCallSheet(cfg.id)) return clWith(cfg.id, () => CALL_GENERIC_STATUS[callInfo(data).status]);
 
   const manual = Store.statusOverrides[uid];
   if (manual) return manual;
@@ -2387,7 +2389,7 @@ function getActionItems() {
 
   const specialPendingText = {
     call_list_upcoming: (n) => `${n} patient(s) with an upcoming appointment still need a call outcome`,
-    call_list_no_upcoming: (n) => `${n} patient(s) with no upcoming appointment still need a letter or follow-up`,
+    call_list_no_upcoming: (n) => `${n} patient(s) with no upcoming appointment still need their transition completed`,
   };
 
   for (const cfg of SHEET_CONFIG) {
@@ -2403,7 +2405,7 @@ function getActionItems() {
     }
     // Field-driven tabs (nonblank / value-not-equal) surface their own pending work as an
     // action item too — e.g. upcoming appointments nobody has called yet.
-    if ((cfg.completion.mode === "nonblank" || cfg.completion.mode === "value-not-equal" || cfg.completion.mode === "call-outcome") && stats.remaining > 0) {
+    if ((cfg.completion.mode === "nonblank" || cfg.completion.mode === "value-not-equal" || cfg.completion.mode === "call-outcome" || cfg.completion.mode === "transition") && stats.remaining > 0) {
       const text = specialPendingText[cfg.id]
         ? specialPendingText[cfg.id](stats.remaining)
         : `${stats.remaining} record(s) in ${cfg.label} still need: ${cfg.completion.label}`;
@@ -2605,7 +2607,7 @@ function render() { ensureDefaultSheets();
     if (!cfg) return notFound();
     renderBreadcrumbs([{ label: GROUPS.find((g) => g.id === cfg.group)?.label, href: "#/dashboard" }, { label: cfg.label }]);
     clClosePopover();
-    if (cfg.id === CALL_SHEET_ID) {
+    if (isCallSheet(cfg.id)) { clUse(cfg.id);
       $root.innerHTML = renderCallListPage(cfg);
       wireCallListPage(cfg);
     } else {
@@ -4167,7 +4169,39 @@ function uploadIconIllus() { return `<div class="icon">${'<svg width="40" height
 // These extra fields are saved through the same shared "edited row" channel as
 // every other inline edit, so they sync to all users with no backend change.
 // ============================================================================
-const CALL_SHEET_ID = "call_list_upcoming";
+let CALL_SHEET_ID = "call_list_upcoming";
+let clLastSheet = "call_list_upcoming";
+const TRANSITION_PILLS = { needs: { tone: "attn", label: "Needs Assignment" }, assigned: { tone: "violet", label: "Assigned" }, scheduled: { tone: "blue", label: "Scheduled" }, complete: { tone: "green", label: "Transition Complete" } };
+function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming"; }
+function clIsTransition() { return CALL_SHEET_ID === "call_list_no_upcoming"; }
+function clWith(id, fn) { const prev = CALL_SHEET_ID; CALL_SHEET_ID = id; try { return fn(); } finally { CALL_SHEET_ID = prev; } }
+function clUse(id) {
+  CALL_SHEET_ID = id;
+  if (clLastSheet !== id) { clLastSheet = id; Object.assign(clState, { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1 }); }
+  CL.LAYOUT_UID = CL.LAYOUT_UID.replace(/call_list_\w+$/, id);
+  CL.LS_LAYOUT = id === "call_list_upcoming" ? "dg_call_layout_v1" : "dg_call_layout_v1_" + id;
+}
+function clAssignSt(data) {
+  const k = callInfo(data).assigned ? "assigned" : "pending";
+  const st = CALL_STATUS_BY_KEY[k];
+  return clIsTransition() && k === "pending" ? { ...st, label: "Pending" } : st;
+}
+function clStatusOptions() {
+  return clIsTransition()
+    ? [{ key: "pending", label: "Pending" }, { key: "assigned", label: "Assigned" }, { key: "scheduled", label: "Scheduled" }, { key: "complete", label: "Transition Complete" }]
+    : CALL_STATUSES;
+}
+function clPaintTransitionPopover(rec, initial) {
+  const d = rec.data; const info = callInfo(d);
+  const check = '<svg class="cl-check" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  let h = '<div class="cl-pop-title">' + esc(rec.displayName || "Set action") + '</div>';
+  h += '<div class="cl-pop-note" style="background:var(--bg-subtle,#f3f3f6);color:var(--text-secondary,#55556a);border-color:transparent">Automatic: Needs Assignment until a Team Member is entered, Assigned once one is, and Scheduled once a Next Scheduled Visit is entered. Use the button below only when the transition work is finished.</div>';
+  h += '<div class="cl-opts" role="group" aria-label="Transition"><button type="button" class="cl-opt cl-tone-green' + (info.done ? " on" : "") + '" data-cl-act="complete" data-f="act-complete" aria-pressed="' + info.done + '"><span class="cl-dot"></span>Transition Complete' + (info.done ? check : "") + '</button></div>';
+  if (info.done) h += '<div class="cl-pop-foot"><button type="button" class="cl-link-btn muted" data-cl-clear data-f="clear">Reopen (back to automatic)</button></div>';
+  clPopover.el.innerHTML = h;
+  clPlacePopover();
+  if (initial) { const b = clPopover.el.querySelector(".cl-opt"); if (b) b.focus(); }
+}
 const CL = {
   ACTION: "Action",
   TEAM: "Team Member",
@@ -4198,11 +4232,19 @@ const CALL_STATUSES = [
 ];
 // Tiles/filters: pending + assigned come from the Team Member column; the rest mirror the Action column pill.
 function clStatusMatch(data, key) {
+  if (clIsTransition()) {
+    const i = callInfo(data);
+    if (key === "pending") return !i.assigned;
+    if (key === "assigned") return i.assigned;
+    if (key === "scheduled") return i.scheduled;
+    if (key === "complete") return i.done;
+    return true;
+  }
   if (key === "pending" || key === "assigned") return (callInfo(data).assigned ? "assigned" : "pending") === key;
   return callPill(data).key === key;
 }
 const CALL_STATUS_BY_KEY = Object.fromEntries(CALL_STATUSES.map((s) => [s.key, s]));
-const CALL_GENERIC_STATUS = { pending: "pending", assigned: "pending", progress: "in-progress", confirmed: "complete", refused: "complete", resched: "complete", attention: "needs-attention" };
+const CALL_GENERIC_STATUS = { needs: "pending", scheduled: "pending", complete: "complete", pending: "pending", assigned: "pending", progress: "in-progress", confirmed: "complete", refused: "complete", resched: "complete", attention: "needs-attention" };
 const CALL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 const clState = { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1, pageSize: 50 };
@@ -4236,6 +4278,13 @@ function clDaysPhrase(days) {
 // One place that turns a record's fields into its call status. Needs Attention
 // is deliberately never applied once Confirmed / Refused / Resched is recorded.
 function callInfo(data) {
+  if (clIsTransition()) {
+    const assigned = !!String(data[CL.TEAM] || "").trim();
+    const scheduled = !!String(data[CL.NEXT] || "").trim();
+    const done = /complete/i.test(String(data[CL.ACTION] || ""));
+    const tkey = done ? "complete" : scheduled ? "scheduled" : assigned ? "assigned" : "needs";
+    return { key: tkey, done, days: null, flagged: false, assigned, scheduled, status: tkey };
+  }
   const key = callActionKey(data[CL.ACTION]);
   const done = key === "confirmed" || key === "refused" || key === "resched";
   const nextDate = parseDateLoose(data[CL.NEXT]);
@@ -4257,6 +4306,11 @@ function callReminder(data) {
   return { state: days === 0 ? "today" : days < 0 ? "overdue" : "upcoming", days, date: d };
 }
 function callPill(data) {
+  if (clIsTransition()) {
+    const ti = callInfo(data);
+    const tp = TRANSITION_PILLS[ti.key];
+    return { key: ti.key, tone: tp.tone, label: tp.label };
+  }
   const info = callInfo(data);
   if (info.key === "progress") {
     const n = data[CL.ATTEMPT] || "1";
@@ -4289,11 +4343,11 @@ function clReminderChip(data, uid) {
 function clRecords() { return getAllRecords().filter((r) => r.sheetId === CALL_SHEET_ID); }
 function clRecord(uid) { return getAllRecords().find((r) => r.uid === uid); }
 function clStats(records) {
-  const s = { total: records.length, toCall: 0, remToday: 0, remOverdue: 0, remUpcoming: 0 };
+  const s = { total: records.length, toCall: 0, remToday: 0, remOverdue: 0, remUpcoming: 0, scheduled: 0 };
   CALL_STATUSES.forEach((x) => { s[x.key] = 0; });
   for (const r of records) {
     const i = callInfo(r.data);
-    s[i.assigned ? "assigned" : "pending"]++; if (i.done) s._done = (s._done || 0) + 1; { const pk = callPill(r.data).key; if (pk === "progress" || pk === "confirmed" || pk === "refused" || pk === "attention") s[pk]++; }
+    s[i.assigned ? "assigned" : "pending"]++; if (i.scheduled) s.scheduled++; if (i.done) s._done = (s._done || 0) + 1; { const pk = callPill(r.data).key; if (pk === "progress" || pk === "confirmed" || pk === "refused" || pk === "attention") s[pk]++; }
     if (i.key === "call") s.toCall++;
     const rm = callReminder(r.data);
     if (rm?.state === "today") s.remToday++;
@@ -4374,7 +4428,36 @@ function clMoveColumn(cfg, from, to, after) {
 function chevronSmallSvg() { return `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
 function plusIconSvg() { return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`; }
 
+function clTransitionKpiHtml() {
+  const s = clStats(clRecords());
+  const pctOf = (n) => (s.total ? Math.round((n / s.total) * 100) : 0);
+  const tiles = [
+    { key: "", tone: "gray", label: "Total Patients", n: s.total, sub: "Requiring transition", nopct: true },
+    { key: "assigned", tone: "violet", label: "Assigned", n: s.assigned, sub: "Team Member assigned" },
+    { key: "pending", tone: "attn", label: "Unassigned", n: s.pending, sub: "Still need a Team Member" },
+    { key: "scheduled", tone: "blue", label: "Scheduled", n: s.scheduled, sub: "Have a Next Scheduled Visit" },
+    { key: "complete", tone: "green", label: "Transition Complete", n: s.done, sub: "Transition work completed" },
+  ];
+  const bar = (label, p) => `<span class="cl-stat-bar" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p}"><span class="cl-stat-bar-fill" style="width:${p}%"></span></span>`;
+  const tile = (t) => {
+    const p = t.nopct ? (s.total ? 100 : 0) : pctOf(t.n);
+    return `<button type="button" class="cl-stat cl-tone-${t.tone}" data-cl-status="${t.key}" aria-pressed="${t.key !== "" && clState.statusFilter === t.key}" title="${esc(t.sub)}">
+      <span class="cl-stat-count">${fmtNum(t.n)}${t.nopct ? "" : `<span class="cl-stat-pct" title="Share of all patients">${p}%</span>`}</span>
+      <span class="cl-stat-label"><span class="cl-dot"></span>${esc(t.label)}</span>
+      <span class="cl-stat-sub">${esc(t.sub)}</span>
+      ${bar(t.label + " share of total", p)}
+    </button>`;
+  };
+  const comp = `<div class="cl-stat cl-tone-green cl-stat-static" title="Percent of patients whose transition is complete">
+      <span class="cl-stat-count">${s.pct}%</span>
+      <span class="cl-stat-label"><span class="cl-dot"></span>Completion %</span>
+      <span class="cl-stat-sub">${fmtNum(s.done)} of ${fmtNum(s.total)} transitioned</span>
+      ${bar("Completion percentage", s.pct)}
+    </div>`;
+  return `<div class="cl-stats" role="group" aria-label="Transition summary">${tiles.map(tile).join("")}${comp}</div>`;
+}
 function clKpiHtml() {
+  if (clIsTransition()) return clTransitionKpiHtml();
   const s = clStats(clRecords());
   const remChip = (key, tone, label, n) =>
     `<button type="button" class="cl-chip cl-tone-${tone}" data-cl-remind="${key}" aria-pressed="${clState.remindFilter === key}">${label} <b>${n}</b></button>`;
@@ -4424,7 +4507,7 @@ function renderCallListPage(cfg) {
     <div class="page-header">
       <div>
         <div class="page-title">${esc(cfg.label)}</div>
-        <div class="page-subtitle">Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.</div>
+        <div class="page-subtitle">${clIsTransition() ? "Enter a Team Member for each patient. Status updates automatically: Pending until a Team Member is entered, then Assigned, and the patient moves to Scheduled once a Next Scheduled Visit is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
       </div>
       <div class="page-header-actions">
         <button class="btn" id="cl-add-row">+ Add Row</button> <button class="btn" id="cl-export">${downloadIconSvg()} Export</button>
@@ -4444,9 +4527,9 @@ function renderCallListPage(cfg) {
       </div>
       <select class="filter-select" id="cl-filter-status" aria-label="Filter by status">
         <option value="">All statuses</option>
-        ${CALL_STATUSES.map((s) => `<option value="${s.key}" ${clState.statusFilter === s.key ? "selected" : ""}>${esc(s.label)}</option>`).join("")}
+        ${clStatusOptions().map((s) => `<option value="${s.key}" ${clState.statusFilter === s.key ? "selected" : ""}>${esc(s.label)}</option>`).join("")}
       </select>
-      <select class="filter-select" id="cl-filter-remind" aria-label="Filter by callback reminder">
+      <select class="filter-select" id="cl-filter-remind" aria-label="Filter by callback reminder" ${clIsTransition() ? 'style="display:none"' : ""}>
         <option value="">All reminders</option>
         <option value="today" ${clState.remindFilter === "today" ? "selected" : ""}>Callback due today</option>
         <option value="overdue" ${clState.remindFilter === "overdue" ? "selected" : ""}>Callback overdue</option>
@@ -4479,7 +4562,7 @@ function clFilteredRows(cfg) {
     rows = rows.filter((r) =>
       fields.some((f) => String(r.data[f] || "").toLowerCase().includes(q)) ||
       callPill(r.data).label.toLowerCase().includes(q) ||
-      CALL_STATUS_BY_KEY[callInfo(r.data).assigned ? "assigned" : "pending"].label.toLowerCase().includes(q));
+      clAssignSt(r.data).label.toLowerCase().includes(q));
   }
   if (clState.statusFilter) rows = rows.filter((r) => clStatusMatch(r.data, clState.statusFilter));
   if (clState.remindFilter) rows = rows.filter((r) => callReminder(r.data)?.state === clState.remindFilter);
@@ -4501,7 +4584,7 @@ function clFilteredRows(cfg) {
 
 function clStatusBadge(data) {
   const info = callInfo(data);
-  const st = CALL_STATUS_BY_KEY[info.assigned ? "assigned" : "pending"];
+  const st = clAssignSt(data);
   let title = st.label;
   if (info.status === "attention") title = `Needs Attention: next visit ${clDaysPhrase(info.days)}, no outcome recorded`;
   return `<span class="cl-badge cl-tone-${st.tone}" title="${esc(title)}"><span class="cl-dot"></span>${esc(st.label)}</span>`;
@@ -4590,7 +4673,7 @@ function clRenderTable(cfg) {
 
   const emptyMsg = everything.length
     ? `<div class="empty-state">${emptyIcon()}<div class="title">No records match your filters</div><div class="desc">Try clearing the search or status filters.</div></div>`
-    : `<div class="empty-state">${emptyIcon()}<div class="title">No patients on this call list yet</div><div class="desc">Use Import Records to bring in the upcoming-appointment call list.</div></div>`;
+    : `<div class="empty-state">${emptyIcon()}<div class="title">No patients on this call list yet</div><div class="desc">${clIsTransition() ? "Use Import Records or Add Row to bring in the patients who need a transition." : "Use Import Records to bring in the upcoming-appointment call list."}</div></div>`;
 
   region.innerHTML = `
     <datalist id="cl-team-list">${teams.map((t) => `<option value="${esc(t)}"></option>`).join("")}</datalist>
@@ -4799,7 +4882,8 @@ let clJustResized = false;
 function clSoftRefresh() {
   const { view, param } = parseHash();
   const region = document.getElementById("cl-table-region");
-  if (view !== "sheet" || param !== CALL_SHEET_ID || !region) return false;
+  if (view !== "sheet" || !isCallSheet(param) || !region) return false;
+  clUse(param);
   if (clPopover) return true; // don't pull the menu out from under someone; the next sync catches up
   const wrap = region.querySelector(".cl-table-wrap");
   const pos = wrap ? { top: wrap.scrollTop, left: wrap.scrollLeft } : null;
@@ -4819,9 +4903,9 @@ function clExport(cfg) {
   const rows = clFilteredRows(cfg).map((r) => {
     const o = {};
     cols.forEach((c) => { o[c] = c === CL.ACTION ? callPill(r.data).label : r.data[c] || ""; });
-    o["Status"] = CALL_STATUS_BY_KEY[callInfo(r.data).assigned ? "assigned" : "pending"].label;
+    o["Status"] = clAssignSt(r.data).label;
     const rm = callReminder(r.data);
-    o["Reminder Date"] = rm?.date ? clFmtMDY(rm.date) : "";
+    if (!clIsTransition()) o["Reminder Date"] = rm?.date ? clFmtMDY(rm.date) : "";
     return o;
   });
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -4947,6 +5031,7 @@ function clChooseAction(uid, key) {
   const rec = clRecord(uid);
   if (!rec) return;
   const d = rec.data;
+  if (clIsTransition()) { clApply(uid, { [CL.ACTION]: callInfo(d).done ? "" : "Transition Complete" }, { toast: callInfo(d).done ? "Reopened" : "Marked Transition Complete" }); clPaintPopover(); return; }
   if (key === "resched") { clClosePopover(); clOpenReschedModal(uid); return; }
   const a = CALL_ACTIONS.find((x) => x.key === key);
   if (key === "progress") {
@@ -4961,6 +5046,7 @@ function clPaintPopover(initial) {
   const rec = clRecord(clPopover.uid);
   if (!rec) { clClosePopover(); return; }
   const d = rec.data;
+  if (clIsTransition()) { clPaintTransitionPopover(rec, initial); return; }
   const info = callInfo(d);
   const stored = info.key;
   const hadFocus = document.activeElement?.closest?.(".cl-popover") ? document.activeElement.dataset.f : null;
