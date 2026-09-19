@@ -1097,6 +1097,11 @@ td.cl-action-td { white-space: normal; }
 .dg-cal-foot button:hover{background:var(--accent-soft,#f3dde0)}
 .cl-stat-sub{display:block;font-size:11px;line-height:1.3;color:var(--text-tertiary,#8b8b9a);margin:2px 0 6px;font-weight:400}
 .cl-stat-static{cursor:default}
+.cl-selall{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--text-secondary);cursor:pointer;user-select:none;white-space:nowrap}
+.cl-selall input,.cl-sel-td input,.cl-sel-th input{width:16px;height:16px;margin:0;cursor:pointer;accent-color:var(--accent)}
+table.cl-table th.cl-sel-th,table.cl-table td.cl-sel-td{text-align:center;padding-left:8px;padding-right:8px}
+table.cl-table tbody tr.cl-row-sel{background:var(--accent-soft,#f3dde0)}
+table.cl-table tbody tr.cl-row-sel:hover{background:var(--accent-soft,#f3dde0)}
 .cl-pill.cl-static{cursor:default}
 .cl-stats.cl-stats-4{grid-template-columns:repeat(4,minmax(0,1fr))}
 @media (max-width:900px){.cl-stats.cl-stats-4{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -4179,7 +4184,7 @@ function clIsTransition() { return CALL_SHEET_ID === "call_list_no_upcoming"; }
 function clWith(id, fn) { const prev = CALL_SHEET_ID; CALL_SHEET_ID = id; try { return fn(); } finally { CALL_SHEET_ID = prev; } }
 function clUse(id) {
   CALL_SHEET_ID = id;
-  if (clLastSheet !== id) { clLastSheet = id; Object.assign(clState, { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1 }); }
+  if (clLastSheet !== id) { clLastSheet = id; clSel.clear(); Object.assign(clState, { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1 }); }
   CL.LAYOUT_UID = CL.LAYOUT_UID.replace(/call_list_\w+$/, id);
   CL.LS_LAYOUT = id === "call_list_upcoming" ? "dg_call_layout_v1" : "dg_call_layout_v1_" + id;
 }
@@ -4237,6 +4242,64 @@ const CALL_STATUS_BY_KEY = Object.fromEntries(CALL_STATUSES.map((s) => [s.key, s
 const CALL_GENERIC_STATUS = { "t-assigned": "complete", "t-unassigned": "pending", pending: "pending", assigned: "pending", progress: "in-progress", confirmed: "complete", refused: "complete", resched: "complete", attention: "needs-attention" };
 const CALL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+const clSel = new Set();
+let clSelTotal = 0;
+const CL_SEL_COL_W = 46;
+function clSyncSel() {
+  const n = clSel.size;
+  const all = clSelTotal > 0 && n === clSelTotal;
+  document.querySelectorAll("#cl-selall, .cl-sel-all").forEach((cb) => { cb.checked = all; cb.indeterminate = n > 0 && !all; cb.disabled = clSelTotal === 0; });
+  const btn = document.getElementById("cl-del-sel");
+  if (btn) {
+    btn.disabled = n === 0;
+    const c = btn.querySelector(".cl-del-n");
+    if (c) c.textContent = n ? " (" + n + ")" : "";
+  }
+}
+function clSelectAll(cfg, on) {
+  clSel.clear();
+  if (on) clFilteredRows(cfg).forEach((r) => clSel.add(r.uid));
+  document.querySelectorAll("#cl-table-region .cl-sel").forEach((cb) => {
+    const sel = clSel.has(cb.dataset.uid);
+    cb.checked = sel;
+    const tr = cb.closest("tr");
+    if (tr) tr.classList.toggle("cl-row-sel", sel);
+  });
+  clSyncSel();
+}
+function clDeleteMany(uids) {
+  const byUid = new Map(getAllRecords().map((r) => [r.uid, r]));
+  const label = (SHEET_BY_ID[CALL_SHEET_ID] || {}).label || CALL_SHEET_ID;
+  uids.forEach((uid) => { Store.deletedRows[uid] = true; });
+  saveDeletedRows();
+  invalidateCache();
+  invalidateDupCache();
+  uids.forEach((uid) => WixBridge.save("deletedRow", { uid, deleted: true }));
+  if (uids.length <= 25) {
+    uids.forEach((uid) => {
+      const before = byUid.get(uid);
+      logChange({ sheetId: CALL_SHEET_ID, uid, action: "archive", summary: `Archived ${(before && before.displayName) || uid} (${label})` });
+    });
+  } else {
+    logChange({ sheetId: CALL_SHEET_ID, action: "archive", summary: `Archived ${uids.length} records (${label})` });
+  }
+}
+function clDeleteSelected(cfg) {
+  const uids = [...clSel];
+  const n = uids.length;
+  if (!n) return;
+  confirmDialog(
+    `Delete ${n} record${n === 1 ? "" : "s"}?`,
+    `${n === 1 ? "This record" : "These " + n + " records"} will be hidden from all views but can be restored later. This does not modify the original workbook.`,
+    () => {
+      clDeleteMany(uids);
+      clSel.clear();
+      toast(`Deleted ${n} record${n === 1 ? "" : "s"}`);
+      clRenderTable(cfg);
+      clRefreshKpi();
+      renderSidebar();
+    });
+}
 const clState = { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1, pageSize: 50 };
 
 // ---------------------------------------------------------------------------
@@ -4519,6 +4582,8 @@ function renderCallListPage(cfg) {
       </select>
       <button class="btn sm ghost" id="cl-reset" title="Clear search, filters and sorting">${resetIconSvg()} Reset</button>
       <button class="btn sm" id="cl-add-col" title="Add an editable column">${plusIconSvg()} Add Column</button>
+ <label class="cl-selall" title="Select every record that matches the current filters"><input type="checkbox" id="cl-selall" /> Select all</label>
+ <button class="btn sm danger" id="cl-del-sel" disabled title="Delete the selected records">${trashIconSvg()} Delete selected<span class="cl-del-n"></span></button>
       <div class="cl-toolbar-right">
         <span class="cl-rv-label" id="cl-rv-label">Record view</span>
         <div class="cl-seg" role="group" aria-labelledby="cl-rv-label" id="cl-rv">
@@ -4585,7 +4650,7 @@ function clActionCellHtml(r) {
 }
 function clRowClass(r) {
   const info = callInfo(r.data);
-  return (info.key === "progress" ? "cl-row-progress " : "") + (info.status === "attention" ? "cl-row-attn" : "");
+  return (info.key === "progress" ? "cl-row-progress " : "") + (info.status === "attention" ? "cl-row-attn" : "") + (clSel.has(r.uid) ? " cl-row-sel" : "");
 }
 function clRowHtml(cfg, r, cols) {
   const isExpanded = expandedRows.has(r.uid);
@@ -4601,15 +4666,14 @@ function clRowHtml(cfg, r, cols) {
       </div>
     </td>`;
   }).join("");
-  const main = `<tr data-row-for="${r.uid}" class="${clRowClass(r)}">${cells}
+  const main = `<tr data-row-for="${r.uid}" class="${clRowClass(r)}"><td class="cl-sel-td"><input type="checkbox" class="cl-sel" data-uid="${r.uid}" ${clSel.has(r.uid) ? "checked" : ""} aria-label="Select ${esc(r.displayName || "record")}" /></td>${cells}
     <td class="actions-cell">
       <button class="btn sm ghost" data-action="toggle-expand" data-uid="${r.uid}" title="${isExpanded ? "Hide details" : "View details"}" aria-label="${isExpanded ? "Hide details" : "View details"}">${isExpanded ? chevronUpSvg() : chevronDownSvg()}</button>
       <button class="btn sm ghost" data-action="edit-record" data-uid="${r.uid}" title="Edit in a form" aria-label="Edit in a form">${editIconSvg()}</button>
-      <button class="btn sm ghost" data-action="delete-record" data-uid="${r.uid}" title="Archive" aria-label="Archive record">${trashIconSvg()}</button>
     </td>
   </tr>`;
   if (!isExpanded) return main;
-  return main + `<tr class="expand-row" data-expand-for="${r.uid}"><td colspan="${cols.length + 1}">
+  return main + `<tr class="expand-row" data-expand-for="${r.uid}"><td colspan="${cols.length + 2}">
     <div class="expand-panel">
       <strong>${esc(r.displayName || "This record")}</strong>
       <span class="text-muted" style="margin-left:8px">${esc(cfg.label)}${r.isImported ? " · Imported" : ""}</span>
@@ -4639,6 +4703,7 @@ function clRenderTable(cfg) {
   const customNames = new Set(clCustomColumns().map((c) => c.name));
   const everything = clRecords();
   const rows = clFilteredRows(cfg);
+  { const okUids = new Set(rows.map((r) => r.uid)); [...clSel].forEach((u) => { if (!okUids.has(u)) clSel.delete(u); }); clSelTotal = rows.length; }
   const total = rows.length;
 
   const all = clState.pageSize === "all";
@@ -4649,7 +4714,7 @@ function clRenderTable(cfg) {
   const pageRows = rows.slice(start, start + size);
 
   const widths = cols.map((c) => clWidth(cfg, c));
-  const tableW = widths.reduce((a, b) => a + b, 0) + CL_ACTIONS_COL_W;
+  const tableW = widths.reduce((a, b) => a + b, 0) + CL_ACTIONS_COL_W + CL_SEL_COL_W;
   const teams = [...new Set(everything.map((r) => String(r.data[CL.TEAM] || "").trim()).filter(Boolean))].sort();
 
   const th = (c) => `<th data-col="${esc(c)}" draggable="true" title="Drag to reorder · drag the edge to resize · click to sort">
@@ -4665,10 +4730,10 @@ function clRenderTable(cfg) {
     <datalist id="cl-team-list">${teams.map((t) => `<option value="${esc(t)}"></option>`).join("")}</datalist>
     <div class="data-table-wrap cl-table-wrap">
       <table class="data-table cl-table" style="width:${tableW}px">
-        <colgroup>${cols.map((c, i) => `<col data-col="${esc(c)}" style="width:${widths[i]}px">`).join("")}<col style="width:${CL_ACTIONS_COL_W}px"></colgroup>
-        <thead><tr>${cols.map(th).join("")}<th style="cursor:default">Actions</th></tr></thead>
+        <colgroup><col style="width:${CL_SEL_COL_W}px">${cols.map((c, i) => `<col data-col="${esc(c)}" style="width:${widths[i]}px">`).join("")}<col style="width:${CL_ACTIONS_COL_W}px"></colgroup>
+        <thead><tr><th class="cl-sel-th" style="cursor:default"><input type="checkbox" class="cl-sel-all" aria-label="Select all" title="Select all" /></th>${cols.map(th).join("")}<th style="cursor:default">Actions</th></tr></thead>
         <tbody>
-          ${pageRows.length ? pageRows.map((r) => clRowHtml(cfg, r, cols)).join("") : `<tr><td colspan="${cols.length + 1}">${emptyMsg}</td></tr>`}
+          ${pageRows.length ? pageRows.map((r) => clRowHtml(cfg, r, cols)).join("") : `<tr><td colspan="${cols.length + 2}">${emptyMsg}</td></tr>`}
         </tbody>
       </table>
     </div>
@@ -4684,6 +4749,7 @@ function clRenderTable(cfg) {
     </div>`}
   `;
 
+  clSyncSel();
   const count = document.getElementById("cl-count");
   if (count) count.textContent = `${fmtNum(total)} record${total === 1 ? "" : "s"}${total !== everything.length ? ` of ${fmtNum(everything.length)}` : ""}`;
   document.querySelectorAll("#cl-rv button").forEach((b) => b.setAttribute("aria-pressed", String(String(clState.pageSize) === b.dataset.size)));
@@ -4723,6 +4789,18 @@ function wireCallListPage(cfg) {
     toast("Filters and sorting reset");
   });
   document.getElementById("cl-add-col").addEventListener("click", () => clOpenAddColumnModal(cfg));
+ document.getElementById("cl-selall").addEventListener("change", (e) => clSelectAll(cfg, e.target.checked));
+ document.getElementById("cl-del-sel").addEventListener("click", () => clDeleteSelected(cfg));
+ region.addEventListener("change", (e) => {
+ const cb = e.target;
+ if (!cb.classList || !cb.classList.contains) return;
+ if (cb.classList.contains("cl-sel-all")) { clSelectAll(cfg, cb.checked); return; }
+ if (!cb.classList.contains("cl-sel")) return;
+ if (cb.checked) clSel.add(cb.dataset.uid); else clSel.delete(cb.dataset.uid);
+ const tr = cb.closest("tr");
+ if (tr) tr.classList.toggle("cl-row-sel", cb.checked);
+ clSyncSel();
+ });
   document.getElementById("cl-add-row")?.addEventListener("click", () => openAddRowModal(cfg)); document.getElementById("cl-export").addEventListener("click", () => clExport(cfg));
   document.getElementById("cl-rv").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-size]");
