@@ -1103,6 +1103,13 @@ table.cl-table.cl-wrapmode tbody td{vertical-align:top}
 textarea.cl-wrap-input{display:block;width:100%;min-width:0;box-sizing:border-box;resize:none;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.4;font-size:13px;min-height:32px}
 .cl-corr-btn{font-size:11.5px;padding:2px 9px;margin-left:7px}
 .cl-kpi-wrap.cl-kpi-static{position:static}
+.cl-corr-td.cl-corr-resolved{background:#e5f5ec}
+.cl-corr-td.cl-corr-notresolved{background:#fbe6e5}
+.cl-corr-td.cl-corr-resolved textarea.cl-wrap-input,.cl-corr-td.cl-corr-notresolved textarea.cl-wrap-input{background:transparent}
+.cl-corr-row{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.cl-mini{font:inherit;font-size:11px;font-weight:600;line-height:1.3;padding:2px 8px;border-radius:999px;cursor:pointer;color:var(--t-fg);background:transparent;border:1px solid var(--t-bd)}
+.cl-mini:hover{background:var(--t-bg)}
+.cl-corr-final{font-size:12px;font-weight:700;color:var(--t-fg);background:none}
 .cl-selall{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--text-secondary);cursor:pointer;user-select:none;white-space:nowrap}
 .cl-selall input,.cl-sel-td input,.cl-sel-th input{width:16px;height:16px;margin:0;cursor:pointer;accent-color:var(--accent)}
 table.cl-table th.cl-sel-th,table.cl-table td.cl-sel-td{text-align:center;padding-left:8px;padding-right:8px}
@@ -1153,6 +1160,7 @@ table.cl-table tbody tr.cl-row-sel:hover{background:var(--accent-soft,#f3dde0)}
 // AUTO-GENERATED from the source workbook. Do not hand-edit; re-run the extraction script instead.
 let RAW_SHEETS = {};
 function defaultHeadersForSheet(cfg) {
+  if (Array.isArray(cfg.defaultHeaders) && cfg.defaultHeaders.length) return cfg.defaultHeaders.slice();
   const out = [];
   const add = (h) => { if (h && typeof h === "string" && !out.includes(h)) out.push(h); };
   add(cfg.nameField); add(cfg.dobField); add(cfg.acctField); add(cfg.phoneField);
@@ -1297,8 +1305,9 @@ const SHEET_CONFIG = [
     nameFormat: "acct-colon-name",
     dateFields: ["next infusion appt", "FUTURE IV APPT AFTER 10/02/2026", "next fu appt"],
     completion: { field: "PRIOR AUTH INITIATED/DONE:", mode: "nonblank", label: "Prior auth initiated/done is filled in" },
-    searchFields: ["Guarantor Acct No + Name", "CPT Code / Description", "Provider", "ASSIGNED TO:", "FU Provider", "CORRECTIONS"],
-    inlineFields: ["PRIOR AUTH INITIATED/DONE:", "ASSIGNED TO:", "CORRECTIONS"],
+    searchFields: ["Guarantor Acct No + Name", "CPT Code / Description", "ASSIGNED TO:", "PRIOR AUTH INITIATED/DONE:", "FU Provider", "Team Member", "CORRECTIONS"],
+    inlineFields: ["PRIOR AUTH INITIATED/DONE:", "ASSIGNED TO:", "Team Member", "CORRECTIONS"],
+    defaultHeaders: ["Guarantor Acct No + Name", "CPT Code / Description", "next infusion appt", "FUTURE IV APPT AFTER 10/02/2026", "ASSIGNED TO:", "PRIOR AUTH INITIATED/DONE:", "next fu appt", "FU Provider", "Team Member", "CORRECTIONS"],
   },
   {
     id: "dg_osteoporosis_pas",
@@ -4192,7 +4201,9 @@ function clAssignSt(data) {
 function clStatusOptions() {
   if (clIsInfusion()) return [
     { key: "pending", label: "Unassigned" }, { key: "assigned", label: "Assigned" },
-    { key: "correction", label: "Corrections: In progress" }, { key: "resolved", label: "Corrections: Resolved" },
+    { key: "correction", label: "Corrections: All open" }, { key: "corr-pending", label: "Corrections: Pending" },
+    { key: "corr-progress", label: "Corrections: In progress" }, { key: "resolved", label: "Corrections: Resolved" },
+    { key: "notresolved", label: "Corrections: Not resolved" },
     { key: "pa-sent", label: "Prior Auth: Sent" }, { key: "pa-resubmit", label: "Prior Auth: Resubmit" },
     { key: "pa-approved", label: "Prior Auth: Approved" }, { key: "pa-others", label: "Prior Auth: Others" },
   ];
@@ -4234,8 +4245,11 @@ function clStatusMatch(data, key) {
     const i = callInfo(data);
     if (key === "pending") return !i.assigned;
     if (key === "assigned") return i.assigned;
-    if (key === "correction") return i.corr === "progress";
+    if (key === "correction") return !!i.corr && i.corr !== "resolved";
+    if (key === "corr-pending") return i.corr === "pending";
+    if (key === "corr-progress") return i.corr === "progress";
     if (key === "resolved") return i.corr === "resolved";
+    if (key === "notresolved") return i.corr === "notresolved";
     if (key.startsWith("pa-")) return i.key === key.slice(3);
     return true;
   }
@@ -4315,7 +4329,7 @@ const CL_CORR_FIELD = "CORRECTIONS";
 const CL_CORR_STATUS = "CORRECTION STATUS";
 const CL_PA_FIELD = "PRIOR AUTH INITIATED/DONE:";
 function clIsInfusion() { return CALL_SHEET_ID === "dg_infusion_pas"; }
-function clTeamField(id) { return id === "dg_infusion_pas" ? "ASSIGNED TO:" : "Team Member"; }
+function clTeamField(id) { return "Team Member"; }
 function clPaKey(v) {
   const s = String(v || "").trim().toLowerCase();
   if (!s) return "";
@@ -4328,55 +4342,72 @@ function clIsWrapCol(c) { return c !== CL_CORR_STATUS && /correction|note|descri
 function clCorrBtnHtml(r) {
   const i = callInfo(r.data);
   if (!i.corr) return "";
-  const res = i.corr === "resolved";
-  return `<button type="button" class="cl-pill cl-corr-btn cl-tone-${res ? "green" : "yellow"}" data-cl-corr data-uid="${r.uid}" aria-pressed="${res}" title="${res ? "Resolved. Click to mark In Progress." : "In progress. Click to mark Resolved."}"><span aria-hidden="true">${res ? "✓" : "✕"}</span> ${res ? "Resolved" : "In progress"}</button>`;
+  const uid = r.uid;
+  if (i.corr === "resolved" || i.corr === "notresolved") {
+    const res = i.corr === "resolved";
+    return `<span class="cl-corr-row"><span class="cl-corr-final cl-tone-${res ? "green" : "red"}"><span aria-hidden="true">${res ? "✓" : "✕"}</span> ${res ? "Resolved" : "Not resolved"}</span><button type="button" class="cl-link-btn muted" data-cl-corr="progress" data-uid="${uid}" title="Move back to In progress">Reopen</button></span>`;
+  }
+  const pending = i.corr === "pending";
+  const pill = `<span class="cl-pill cl-static cl-tone-${pending ? "gray" : "yellow"}">${pending ? "Pending" : "In progress"}</span>`;
+  const b = (key, tone, label) => `<button type="button" class="cl-mini cl-tone-${tone}" data-cl-corr="${key}" data-uid="${uid}">${label}</button>`;
+  return `<span class="cl-corr-row">${pill}${pending ? b("progress", "yellow", "In progress") : ""}${b("resolved", "green", "✓ Resolved")}${b("notresolved", "red", "✕ Not resolved")}</span>`;
 }
 function clCorrLabel(data) {
-  const i = callInfo(data);
-  return i.corr === "resolved" ? "Resolved" : i.corr ? "In Progress" : "";
+  const s = callInfo(data).corr;
+  return { pending: "Pending", progress: "In Progress", resolved: "Resolved", notresolved: "Not Resolved" }[s] || "";
 }
 function clWrapCellHtml(cfg, r, c) {
   const val = r.data[c] || "";
   const isCorr = c === CL_CORR_FIELD;
-  return `<td class="inline-cell cl-wrap-td${isCorr ? " cl-corr-td" : ""}" data-col="${esc(c)}"><div class="cl-wrap-cell"><textarea class="inline-edit-input cl-wrap-input" rows="1" data-uid="${r.uid}" data-field="${esc(c)}" placeholder="—" aria-label="${esc(c)}">${esc(val)}</textarea>${isCorr ? `<span class="cl-corr-slot">${clCorrBtnHtml(r)}</span>` : ""}</div></td>`;
+  const st = isCorr ? callInfo(r.data).corr : "";
+  const stCls = st === "resolved" || st === "notresolved" ? " cl-corr-" + st : "";
+  return `<td class="inline-cell cl-wrap-td${isCorr ? " cl-corr-td" : ""}${stCls}" data-col="${esc(c)}"><div class="cl-wrap-cell"><textarea class="inline-edit-input cl-wrap-input" rows="1" data-uid="${r.uid}" data-field="${esc(c)}" placeholder="—" aria-label="${esc(c)}">${esc(val)}</textarea>${isCorr ? `<span class="cl-corr-slot">${clCorrBtnHtml(r)}</span>` : ""}</div></td>`;
 }
 function clGrow(ta) { ta.style.height = "auto"; ta.style.height = (ta.scrollHeight + 2) + "px"; }
 function clGrowAll() { document.querySelectorAll("#cl-table-region textarea.cl-wrap-input").forEach(clGrow); }
 function clRefreshCorr(tr, r) {
   const slot = tr.querySelector(".cl-corr-slot");
-  if (slot) slot.innerHTML = clCorrBtnHtml(r);
+  if (!slot) return;
+  slot.innerHTML = clCorrBtnHtml(r);
+  const td = slot.closest("td");
+  if (td) {
+    td.classList.remove("cl-corr-resolved", "cl-corr-notresolved");
+    const s = callInfo(r.data).corr;
+    if (s === "resolved" || s === "notresolved") td.classList.add("cl-corr-" + s);
+  }
 }
-function clToggleCorrection(uid) {
-  const rec = clRecord(uid);
-  if (!rec) return;
-  const resolved = callInfo(rec.data).corr === "resolved";
-  clApply(uid, { [CL_CORR_STATUS]: resolved ? "In Progress" : "Resolved" }, { toast: resolved ? "Correction marked In Progress" : "Correction marked Resolved" });
+function clSetCorrection(uid, key) {
+  const label = { progress: "In Progress", resolved: "Resolved", notresolved: "Not Resolved" }[key];
+  if (!label) return;
+  clApply(uid, { [CL_CORR_STATUS]: label }, { toast: "Correction marked " + label });
 }
 function clInfusionKpiHtml() {
   const recs = clRecords();
-  const c = { total: recs.length, assigned: 0, pending: 0, corr: 0, resolved: 0, sent: 0, resubmit: 0, approved: 0, others: 0 };
+  const c = { total: recs.length, assigned: 0, pending: 0, corr: 0, cp: 0, cg: 0, cn: 0, resolved: 0, sent: 0, resubmit: 0, approved: 0, others: 0 };
   recs.forEach((r) => {
     const i = callInfo(r.data);
     if (i.assigned) c.assigned++; else c.pending++;
-    if (i.corr === "progress") c.corr++; else if (i.corr === "resolved") c.resolved++;
+    if (i.corr === "resolved") c.resolved++;
+    else if (i.corr) { c.corr++; if (i.corr === "pending") c.cp++; else if (i.corr === "progress") c.cg++; else c.cn++; }
     if (["sent", "resubmit", "approved", "others"].includes(i.key)) c[i.key]++;
   });
   const pctOf = (n) => (c.total ? Math.round((n / c.total) * 100) : 0);
   const bar = (label, p) => `<span class="cl-stat-bar" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p}"><span class="cl-stat-bar-fill" style="width:${p}%"></span></span>`;
   const tile = (t) => {
     const p = t.nopct ? (c.total ? 100 : 0) : pctOf(t.n);
-    return `<button type="button" class="cl-stat cl-tone-${t.tone}" data-cl-status="${t.key}" aria-pressed="${t.key !== "" && clState.statusFilter === t.key}" title="${esc(t.sub)}">
+    return `<button type="button" class="cl-stat cl-tone-${t.tone}" data-cl-status="${t.key}" aria-pressed="${t.key !== "" && clState.statusFilter === t.key}" title="${esc(t.title || t.sub)}">
       <span class="cl-stat-count">${fmtNum(t.n)}${t.nopct ? "" : `<span class="cl-stat-pct" title="Share of all patients">${p}%</span>`}</span>
       <span class="cl-stat-label"><span class="cl-dot"></span>${esc(t.label)}</span>
       <span class="cl-stat-sub">${esc(t.sub)}</span>
       ${bar(t.label + " share of total", p)}
     </button>`;
   };
+  const corrSub = c.corr ? `${c.cp} pending · ${c.cg} in progress${c.cn ? " · " + c.cn + " not resolved" : ""}` : "Needing correction · click to filter";
   const row1 = [
     { key: "", tone: "gray", label: "Total Patients", n: c.total, sub: "Total patients", nopct: true },
-    { key: "pending", tone: "red", label: "Unassigned", n: c.pending, sub: "No data in Assigned To" },
-    { key: "assigned", tone: "green", label: "Assigned", n: c.assigned, sub: "Has data in Assigned To" },
-    { key: "correction", tone: "yellow", label: "Corrections", n: c.corr, sub: c.resolved ? `Needing correction · ${c.resolved} resolved` : "Needing correction · click to filter" },
+    { key: "pending", tone: "red", label: "Unassigned", n: c.pending, sub: "No data in Team Member" },
+    { key: "assigned", tone: "green", label: "Assigned", n: c.assigned, sub: "Has data in Team Member" },
+    { key: "correction", tone: "yellow", label: "Corrections", n: c.corr, sub: corrSub, title: corrSub + " · " + c.resolved + " resolved" },
   ];
   const row2 = [
     { key: "pa-sent", tone: "blue", label: "Sent", n: c.sent, sub: "Prior auth sent" },
@@ -4422,7 +4453,8 @@ function callInfo(data) {
   if (clIsInfusion()) {
     const assigned = !!String(data[CL.TEAM] || "").trim();
     const corrText = String(data[CL_CORR_FIELD] || "").trim();
-    const corr = corrText ? (String(data[CL_CORR_STATUS] || "").trim().toLowerCase() === "resolved" ? "resolved" : "progress") : "";
+    const cst = String(data[CL_CORR_STATUS] || "").trim().toLowerCase();
+    const corr = corrText ? (/not.?resolved|unresolved/.test(cst) ? "notresolved" : cst.includes("resolved") ? "resolved" : cst.includes("progress") ? "progress" : "pending") : "";
     return { key: clPaKey(data[CL_PA_FIELD]) || "none", done: false, days: null, flagged: false, assigned, scheduled: false, corr, status: assigned ? "t-assigned" : "t-unassigned" };
   }
   if (clIsTransition()) {
@@ -4659,7 +4691,7 @@ function renderCallListPage(cfg) {
     <div class="page-header">
       <div>
         <div class="page-title">${esc(cfg.label)}</div>
-        <div class="page-subtitle">${clIsInfusion() ? "Assign each authorization in Assigned To. Status follows Assigned To (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
+        <div class="page-subtitle">${clIsInfusion() ? "Assign each authorization to a Team Member. Status follows Team Member (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
       </div>
       <div class="page-header-actions">
         <button class="btn" id="cl-add-row">+ Add Row</button> <button class="btn" id="cl-export">${downloadIconSvg()} Export</button>
@@ -4942,7 +4974,7 @@ function wireCallListPage(cfg) {
     }
     if (t.closest(".cl-resize")) return;
     const corrBtn = t.closest("[data-cl-corr]");
- if (corrBtn) { clToggleCorrection(corrBtn.dataset.uid); return; }
+ if (corrBtn) { clSetCorrection(corrBtn.dataset.uid, corrBtn.dataset.clCorr); return; }
  const open = t.closest("[data-cl-open]");
     if (open) { clOpenActionPopover(open.dataset.uid, open); return; }
     const cal = t.closest(".cal-btn");
