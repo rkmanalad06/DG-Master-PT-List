@@ -1097,6 +1097,12 @@ td.cl-action-td { white-space: normal; }
 .dg-cal-foot button:hover{background:var(--accent-soft,#f3dde0)}
 .cl-stat-sub{display:block;font-size:11px;line-height:1.3;color:var(--text-tertiary,#8b8b9a);margin:2px 0 6px;font-weight:400}
 .cl-stat-static{cursor:default}
+.cl-kpi-heading{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-tertiary);margin:14px 0 8px}
+table.cl-table.cl-wrapmode tbody td{vertical-align:top}
+.cl-wrap-cell{display:flex;flex-direction:column;align-items:flex-start;gap:6px;width:100%}
+textarea.cl-wrap-input{display:block;width:100%;min-width:0;box-sizing:border-box;resize:none;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.4;font-size:13px;min-height:32px}
+.cl-corr-btn{font-size:11.5px;padding:2px 9px;margin-left:7px}
+.cl-kpi-wrap.cl-kpi-static{position:static}
 .cl-selall{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--text-secondary);cursor:pointer;user-select:none;white-space:nowrap}
 .cl-selall input,.cl-sel-td input,.cl-sel-th input{width:16px;height:16px;margin:0;cursor:pointer;accent-color:var(--accent)}
 table.cl-table th.cl-sel-th,table.cl-table td.cl-sel-td{text-align:center;padding-left:8px;padding-right:8px}
@@ -1305,18 +1311,6 @@ const SHEET_CONFIG = [
     completion: { field: "PA Status", mode: "value-not-equal", value: "NO PA", label: "PA status is not \"NO PA\"" },
     searchFields: ["Patient Name", "Acc #", "DRUG", "INSURANCE"],
     inlineFields: ["PA Status", "50/50 TO JP AND SU"],
-  },
-  {
-    id: "dg_biologics",
-    label: "DG Biologics",
-    shortLabel: "Biologics",
-    group: "work-queues",
-    nameField: "Guarantor Acct No + Name",
-    nameFormat: "acct-colon-name",
-    dateFields: ["next infusion appt", "FUTURE IV APPT AFTER 10/02/2026", "next fu appt"],
-    completion: { field: "PRIOR AUTH INITIATED/DONE:", mode: "nonblank", label: "Prior auth initiated/done is filled in" },
-    searchFields: ["Guarantor Acct No + Name", "CPT Code / Description", "Pay To / Billing Provider", "ASSIGNED TO:", "FU Provider"],
-    inlineFields: ["PRIOR AUTH INITIATED/DONE:", "ASSIGNED TO:"],
   },
   {
     id: "ra",
@@ -1927,7 +1921,7 @@ function getCompletionConfig(sheetId) {
 
 // Returns one of: 'complete' | 'pending' | 'needs-attention' | 'not-started'
 function computeStatus(cfg, data, uid) {
-  if (isCallSheet(cfg.id)) return clWith(cfg.id, () => CALL_GENERIC_STATUS[callInfo(data).status]);
+  if (isCallSheet(cfg.id) && cfg.id !== "dg_infusion_pas") return clWith(cfg.id, () => CALL_GENERIC_STATUS[callInfo(data).status]);
 
   const manual = Store.statusOverrides[uid];
   if (manual) return manual;
@@ -4179,11 +4173,12 @@ function uploadIconIllus() { return `<div class="icon">${'<svg width="40" height
 // ============================================================================
 let CALL_SHEET_ID = "call_list_upcoming";
 let clLastSheet = "call_list_upcoming";
-function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming"; }
+function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming" || id === "dg_infusion_pas"; }
 function clIsTransition() { return CALL_SHEET_ID === "call_list_no_upcoming"; }
-function clWith(id, fn) { const prev = CALL_SHEET_ID; CALL_SHEET_ID = id; try { return fn(); } finally { CALL_SHEET_ID = prev; } }
+function clWith(id, fn) { const prev = CALL_SHEET_ID, prevTeam = CL.TEAM; CALL_SHEET_ID = id; CL.TEAM = clTeamField(id); try { return fn(); } finally { CALL_SHEET_ID = prev; CL.TEAM = prevTeam; } }
 function clUse(id) {
   CALL_SHEET_ID = id;
+  CL.TEAM = clTeamField(id);
   if (clLastSheet !== id) { clLastSheet = id; clSel.clear(); Object.assign(clState, { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1 }); }
   CL.LAYOUT_UID = CL.LAYOUT_UID.replace(/call_list_\w+$/, id);
   CL.LS_LAYOUT = id === "call_list_upcoming" ? "dg_call_layout_v1" : "dg_call_layout_v1_" + id;
@@ -4191,9 +4186,16 @@ function clUse(id) {
 function clAssignSt(data) {
   const k = callInfo(data).assigned ? "assigned" : "pending";
   const st = CALL_STATUS_BY_KEY[k];
+  if (clIsInfusion()) return { ...st, tone: k === "assigned" ? "green" : "red", label: k === "assigned" ? "Assigned" : "Unassigned" };
   return clIsTransition() ? { ...st, tone: k === "assigned" ? "green" : "red" } : st;
 }
 function clStatusOptions() {
+  if (clIsInfusion()) return [
+    { key: "pending", label: "Unassigned" }, { key: "assigned", label: "Assigned" },
+    { key: "correction", label: "Corrections: In progress" }, { key: "resolved", label: "Corrections: Resolved" },
+    { key: "pa-sent", label: "Prior Auth: Sent" }, { key: "pa-resubmit", label: "Prior Auth: Resubmit" },
+    { key: "pa-approved", label: "Prior Auth: Approved" }, { key: "pa-others", label: "Prior Auth: Others" },
+  ];
   return clIsTransition()
     ? [{ key: "pending", label: "Not yet assigned" }, { key: "assigned", label: "Assigned" }, { key: "scheduled", label: "Scheduled" }]
     : CALL_STATUSES;
@@ -4228,6 +4230,15 @@ const CALL_STATUSES = [
 ];
 // Tiles/filters: pending + assigned come from the Team Member column; the rest mirror the Action column pill.
 function clStatusMatch(data, key) {
+  if (clIsInfusion()) {
+    const i = callInfo(data);
+    if (key === "pending") return !i.assigned;
+    if (key === "assigned") return i.assigned;
+    if (key === "correction") return i.corr === "progress";
+    if (key === "resolved") return i.corr === "resolved";
+    if (key.startsWith("pa-")) return i.key === key.slice(3);
+    return true;
+  }
   if (clIsTransition()) {
     const i = callInfo(data);
     if (key === "pending") return !i.assigned;
@@ -4300,6 +4311,83 @@ function clDeleteSelected(cfg) {
       renderSidebar();
     });
 }
+const CL_CORR_FIELD = "CORRECTIONS";
+const CL_CORR_STATUS = "CORRECTION STATUS";
+const CL_PA_FIELD = "PRIOR AUTH INITIATED/DONE:";
+function clIsInfusion() { return CALL_SHEET_ID === "dg_infusion_pas"; }
+function clTeamField(id) { return id === "dg_infusion_pas" ? "ASSIGNED TO:" : "Team Member"; }
+function clPaKey(v) {
+  const s = String(v || "").trim().toLowerCase();
+  if (!s) return "";
+  if (/re-?submit/.test(s)) return "resubmit";
+  if (/approv/.test(s)) return "approved";
+  if (/\bsent\b|submitted/.test(s)) return "sent";
+  return "others";
+}
+function clIsWrapCol(c) { return c !== CL_CORR_STATUS && /correction|note|description|prior auth/i.test(c); }
+function clCorrBtnHtml(r) {
+  const i = callInfo(r.data);
+  if (!i.corr) return "";
+  const res = i.corr === "resolved";
+  return `<button type="button" class="cl-pill cl-corr-btn cl-tone-${res ? "green" : "yellow"}" data-cl-corr data-uid="${r.uid}" aria-pressed="${res}" title="${res ? "Resolved. Click to mark In Progress." : "In progress. Click to mark Resolved."}"><span aria-hidden="true">${res ? "✓" : "✕"}</span> ${res ? "Resolved" : "In progress"}</button>`;
+}
+function clCorrLabel(data) {
+  const i = callInfo(data);
+  return i.corr === "resolved" ? "Resolved" : i.corr ? "In Progress" : "";
+}
+function clWrapCellHtml(cfg, r, c) {
+  const val = r.data[c] || "";
+  const isCorr = c === CL_CORR_FIELD;
+  return `<td class="inline-cell cl-wrap-td${isCorr ? " cl-corr-td" : ""}" data-col="${esc(c)}"><div class="cl-wrap-cell"><textarea class="inline-edit-input cl-wrap-input" rows="1" data-uid="${r.uid}" data-field="${esc(c)}" placeholder="—" aria-label="${esc(c)}">${esc(val)}</textarea>${isCorr ? `<span class="cl-corr-slot">${clCorrBtnHtml(r)}</span>` : ""}</div></td>`;
+}
+function clGrow(ta) { ta.style.height = "auto"; ta.style.height = (ta.scrollHeight + 2) + "px"; }
+function clGrowAll() { document.querySelectorAll("#cl-table-region textarea.cl-wrap-input").forEach(clGrow); }
+function clRefreshCorr(tr, r) {
+  const slot = tr.querySelector(".cl-corr-slot");
+  if (slot) slot.innerHTML = clCorrBtnHtml(r);
+}
+function clToggleCorrection(uid) {
+  const rec = clRecord(uid);
+  if (!rec) return;
+  const resolved = callInfo(rec.data).corr === "resolved";
+  clApply(uid, { [CL_CORR_STATUS]: resolved ? "In Progress" : "Resolved" }, { toast: resolved ? "Correction marked In Progress" : "Correction marked Resolved" });
+}
+function clInfusionKpiHtml() {
+  const recs = clRecords();
+  const c = { total: recs.length, assigned: 0, pending: 0, corr: 0, resolved: 0, sent: 0, resubmit: 0, approved: 0, others: 0 };
+  recs.forEach((r) => {
+    const i = callInfo(r.data);
+    if (i.assigned) c.assigned++; else c.pending++;
+    if (i.corr === "progress") c.corr++; else if (i.corr === "resolved") c.resolved++;
+    if (["sent", "resubmit", "approved", "others"].includes(i.key)) c[i.key]++;
+  });
+  const pctOf = (n) => (c.total ? Math.round((n / c.total) * 100) : 0);
+  const bar = (label, p) => `<span class="cl-stat-bar" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p}"><span class="cl-stat-bar-fill" style="width:${p}%"></span></span>`;
+  const tile = (t) => {
+    const p = t.nopct ? (c.total ? 100 : 0) : pctOf(t.n);
+    return `<button type="button" class="cl-stat cl-tone-${t.tone}" data-cl-status="${t.key}" aria-pressed="${t.key !== "" && clState.statusFilter === t.key}" title="${esc(t.sub)}">
+      <span class="cl-stat-count">${fmtNum(t.n)}${t.nopct ? "" : `<span class="cl-stat-pct" title="Share of all patients">${p}%</span>`}</span>
+      <span class="cl-stat-label"><span class="cl-dot"></span>${esc(t.label)}</span>
+      <span class="cl-stat-sub">${esc(t.sub)}</span>
+      ${bar(t.label + " share of total", p)}
+    </button>`;
+  };
+  const row1 = [
+    { key: "", tone: "gray", label: "Total Patients", n: c.total, sub: "Total patients", nopct: true },
+    { key: "pending", tone: "red", label: "Unassigned", n: c.pending, sub: "No data in Assigned To" },
+    { key: "assigned", tone: "green", label: "Assigned", n: c.assigned, sub: "Has data in Assigned To" },
+    { key: "correction", tone: "yellow", label: "Corrections", n: c.corr, sub: c.resolved ? `Needing correction · ${c.resolved} resolved` : "Needing correction · click to filter" },
+  ];
+  const row2 = [
+    { key: "pa-sent", tone: "blue", label: "Sent", n: c.sent, sub: "Prior auth sent" },
+    { key: "pa-resubmit", tone: "orange", label: "Resubmit", n: c.resubmit, sub: "Needs to be resubmitted" },
+    { key: "pa-approved", tone: "green", label: "Approved", n: c.approved, sub: "Prior auth approved" },
+    { key: "pa-others", tone: "gray", label: "Others", n: c.others, sub: "Anything else, with notes" },
+  ];
+  return `<div class="cl-stats cl-stats-4" role="group" aria-label="Patient summary">${row1.map(tile).join("")}</div>
+    <div class="cl-kpi-heading">Prior Auth Status</div>
+    <div class="cl-stats cl-stats-4" role="group" aria-label="Prior auth status summary">${row2.map(tile).join("")}</div>`;
+}
 const clState = { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1, pageSize: 50 };
 
 // ---------------------------------------------------------------------------
@@ -4331,6 +4419,12 @@ function clDaysPhrase(days) {
 // One place that turns a record's fields into its call status. Needs Attention
 // is deliberately never applied once Confirmed / Refused / Resched is recorded.
 function callInfo(data) {
+  if (clIsInfusion()) {
+    const assigned = !!String(data[CL.TEAM] || "").trim();
+    const corrText = String(data[CL_CORR_FIELD] || "").trim();
+    const corr = corrText ? (String(data[CL_CORR_STATUS] || "").trim().toLowerCase() === "resolved" ? "resolved" : "progress") : "";
+    return { key: clPaKey(data[CL_PA_FIELD]) || "none", done: false, days: null, flagged: false, assigned, scheduled: false, corr, status: assigned ? "t-assigned" : "t-unassigned" };
+  }
   if (clIsTransition()) {
     const assigned = !!String(data[CL.TEAM] || "").trim();
     const scheduled = !!String(data[CL.NEXT] || "").trim();
@@ -4357,6 +4451,10 @@ function callReminder(data) {
   return { state: days === 0 ? "today" : days < 0 ? "overdue" : "upcoming", days, date: d };
 }
 function callPill(data) {
+  if (clIsInfusion()) {
+    const pi = callInfo(data);
+    return { key: pi.key, tone: "gray", label: { sent: "Sent", resubmit: "Resubmit", approved: "Approved", others: "Others" }[pi.key] || "" };
+  }
   if (clIsTransition()) {
     const ti = callInfo(data);
     if (ti.scheduled) return { key: "scheduled", tone: "blue", label: "Scheduled" };
@@ -4439,9 +4537,9 @@ function clSaveCustomColumns(cols) {
 }
 function clColumns(cfg) {
   const all = (RAW_SHEETS[cfg.id]?.headers || []).slice();
-  if (!all.includes(CL.ACTION)) all.push(CL.ACTION);
+  if (!clIsInfusion() && !all.includes(CL.ACTION)) all.push(CL.ACTION);
   clCustomColumns().forEach((c) => { if (!all.includes(c.name)) all.push(c.name); });
-  all.push("__status");
+  if (clIsInfusion()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else all.push("__status");
   const out = [];
   clLayoutLoad().order.forEach((k) => { if (all.includes(k) && !out.includes(k)) out.push(k); });
   all.forEach((k) => { if (!out.includes(k)) out.push(k); });
@@ -4449,6 +4547,14 @@ function clColumns(cfg) {
 }
 function clColLabel(col) { return col === "__status" ? "Status" : col; }
 function clDefaultWidth(cfg, col) {
+  if (clIsInfusion()) {
+    if (col === "__status") return 130;
+    if (/correction/i.test(col)) return 340;
+    if (/cpt|description/i.test(col)) return 240;
+    if (/prior auth/i.test(col)) return 220;
+    if (/appt/i.test(col)) return 170;
+    if (col === CL.TEAM) return 150;
+  }
   if (col === "__status") return 175;
   if (col === CL.ACTION) return 285;
   if (col === cfg.nameField) return 190;
@@ -4502,6 +4608,7 @@ function clTransitionKpiHtml() {
   return `<div class="cl-stats cl-stats-4" role="group" aria-label="Patient summary">${tiles.map(tile).join("")}</div>`;
 }
 function clKpiHtml() {
+  if (clIsInfusion()) return clInfusionKpiHtml();
   if (clIsTransition()) return clTransitionKpiHtml();
   const s = clStats(clRecords());
   const remChip = (key, tone, label, n) =>
@@ -4547,12 +4654,12 @@ function clRefreshKpi() {
 function renderCallListPage(cfg) {
   const dupGroups = getDuplicateGroupsForSheet(cfg.id);
   return `
-    <div class="cl-kpi-wrap" id="cl-kpi">${clKpiHtml()}</div>
+    <div class="cl-kpi-wrap${clIsInfusion() ? " cl-kpi-static" : ""}" id="cl-kpi">${clKpiHtml()}</div>
 
     <div class="page-header">
       <div>
         <div class="page-title">${esc(cfg.label)}</div>
-        <div class="page-subtitle">${clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
+        <div class="page-subtitle">${clIsInfusion() ? "Assign each authorization in Assigned To. Status follows Assigned To (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
       </div>
       <div class="page-header-actions">
         <button class="btn" id="cl-add-row">+ Add Row</button> <button class="btn" id="cl-export">${downloadIconSvg()} Export</button>
@@ -4574,7 +4681,7 @@ function renderCallListPage(cfg) {
         <option value="">All statuses</option>
         ${clStatusOptions().map((s) => `<option value="${s.key}" ${clState.statusFilter === s.key ? "selected" : ""}>${esc(s.label)}</option>`).join("")}
       </select>
-      <select class="filter-select" id="cl-filter-remind" aria-label="Filter by callback reminder" ${clIsTransition() ? 'style="display:none"' : ""}>
+      <select class="filter-select" id="cl-filter-remind" aria-label="Filter by callback reminder" ${(clIsTransition() || clIsInfusion()) ? 'style="display:none"' : ""}>
         <option value="">All reminders</option>
         <option value="today" ${clState.remindFilter === "today" ? "selected" : ""}>Callback due today</option>
         <option value="overdue" ${clState.remindFilter === "overdue" ? "selected" : ""}>Callback overdue</option>
@@ -4656,7 +4763,8 @@ function clRowHtml(cfg, r, cols) {
   const isExpanded = expandedRows.has(r.uid);
   const cells = cols.map((c) => {
     if (c === "__status") return `<td data-col="__status">${clStatusBadge(r.data)}</td>`;
-    if (c === CL.ACTION) return `<td class="cl-action-td" data-col="${esc(c)}">${clActionCellHtml(r)}</td>`;
+    if (c === CL.ACTION && !clIsInfusion()) return `<td class="cl-action-td" data-col="${esc(c)}">${clActionCellHtml(r)}</td>`;
+ if (clIsInfusion() && clIsWrapCol(c) && !clIsDateCol(cfg, c)) return clWrapCellHtml(cfg, r, c);
     const val = r.data[c] || "";
     const isDate = clIsDateCol(cfg, c);
     return `<td class="inline-cell${c === cfg.nameField ? " name-col" : ""}" data-col="${esc(c)}">
@@ -4694,6 +4802,7 @@ function clRefreshRow(uid) {
   if (st) st.innerHTML = clStatusBadge(r.data);
   const ac = [...tr.children].find((td) => td.dataset.col === CL.ACTION);
   if (ac) ac.innerHTML = clActionCellHtml(r);
+ if (clIsInfusion()) { clRefreshCorr(tr, r); tr.querySelectorAll("textarea.cl-wrap-input").forEach(clGrow); }
 }
 
 function clRenderTable(cfg) {
@@ -4724,12 +4833,12 @@ function clRenderTable(cfg) {
 
   const emptyMsg = everything.length
     ? `<div class="empty-state">${emptyIcon()}<div class="title">No records match your filters</div><div class="desc">Try clearing the search or status filters.</div></div>`
-    : `<div class="empty-state">${emptyIcon()}<div class="title">No patients on this call list yet</div><div class="desc">${clIsTransition() ? "Use Import Records or Add Row to bring in the patients who need a transition." : "Use Import Records to bring in the upcoming-appointment call list."}</div></div>`;
+    : `<div class="empty-state">${emptyIcon()}<div class="title">No patients on this call list yet</div><div class="desc">${clIsInfusion() ? "Use Import Records or Add Row to add infusion prior authorizations." : clIsTransition() ? "Use Import Records or Add Row to bring in the patients who need a transition." : "Use Import Records to bring in the upcoming-appointment call list."}</div></div>`;
 
   region.innerHTML = `
     <datalist id="cl-team-list">${teams.map((t) => `<option value="${esc(t)}"></option>`).join("")}</datalist>
     <div class="data-table-wrap cl-table-wrap">
-      <table class="data-table cl-table" style="width:${tableW}px">
+      <table class="data-table cl-table${clIsInfusion() ? " cl-wrapmode" : ""}" style="width:${tableW}px">
         <colgroup><col style="width:${CL_SEL_COL_W}px">${cols.map((c, i) => `<col data-col="${esc(c)}" style="width:${widths[i]}px">`).join("")}<col style="width:${CL_ACTIONS_COL_W}px"></colgroup>
         <thead><tr><th class="cl-sel-th" style="cursor:default"><input type="checkbox" class="cl-sel-all" aria-label="Select all" title="Select all" /></th>${cols.map(th).join("")}<th style="cursor:default">Actions</th></tr></thead>
         <tbody>
@@ -4750,6 +4859,7 @@ function clRenderTable(cfg) {
   `;
 
   clSyncSel();
+  clGrowAll(); requestAnimationFrame(clGrowAll);
   const count = document.getElementById("cl-count");
   if (count) count.textContent = `${fmtNum(total)} record${total === 1 ? "" : "s"}${total !== everything.length ? ` of ${fmtNum(everything.length)}` : ""}`;
   document.querySelectorAll("#cl-rv button").forEach((b) => b.setAttribute("aria-pressed", String(String(clState.pageSize) === b.dataset.size)));
@@ -4791,6 +4901,7 @@ function wireCallListPage(cfg) {
   document.getElementById("cl-add-col").addEventListener("click", () => clOpenAddColumnModal(cfg));
  document.getElementById("cl-selall").addEventListener("change", (e) => clSelectAll(cfg, e.target.checked));
  document.getElementById("cl-del-sel").addEventListener("click", () => clDeleteSelected(cfg));
+ region.addEventListener("input", (e) => { if (e.target.classList && e.target.classList.contains("cl-wrap-input")) clGrow(e.target); });
  region.addEventListener("change", (e) => {
  const cb = e.target;
  if (!cb.classList || !cb.classList.contains) return;
@@ -4830,7 +4941,9 @@ function wireCallListPage(cfg) {
       return;
     }
     if (t.closest(".cl-resize")) return;
-    const open = t.closest("[data-cl-open]");
+    const corrBtn = t.closest("[data-cl-corr]");
+ if (corrBtn) { clToggleCorrection(corrBtn.dataset.uid); return; }
+ const open = t.closest("[data-cl-open]");
     if (open) { clOpenActionPopover(open.dataset.uid, open); return; }
     const cal = t.closest(".cal-btn");
     if (cal) { openDatePickerFor(cal.parentElement.querySelector(".inline-edit-input")); return; }
@@ -4870,7 +4983,7 @@ function wireCallListPage(cfg) {
   region.addEventListener("keydown", (e) => {
     const input = e.target;
     if (!input.classList?.contains("inline-edit-input")) return;
-    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+    if (e.key === "Enter" && !(e.shiftKey && input.tagName === "TEXTAREA")) { e.preventDefault(); input.blur(); }
     if (e.key === "Escape") { input.value = clRecord(input.dataset.uid)?.data[input.dataset.field] || ""; input.blur(); }
   });
 
@@ -4901,7 +5014,7 @@ function wireCallListPage(cfg) {
       h.classList.remove("active");
       document.body.classList.remove("cl-resizing");
       th.draggable = true;
-      const l = clLayoutLoad(); l.widths[col] = w; clLayoutSave(l);
+      const l = clLayoutLoad(); l.widths[col] = w; clLayoutSave(l); clGrowAll();
       clJustResized = true; setTimeout(() => { clJustResized = false; }, 0);
     };
     h.addEventListener("pointermove", move);
@@ -4969,7 +5082,8 @@ function clExport(cfg) {
     cols.forEach((c) => { o[c] = c === CL.ACTION ? callPill(r.data).label : r.data[c] || ""; });
     o["Status"] = clAssignSt(r.data).label;
     const rm = callReminder(r.data);
-    if (!clIsTransition()) o["Reminder Date"] = rm?.date ? clFmtMDY(rm.date) : "";
+    if (clIsInfusion()) o["Correction Status"] = clCorrLabel(r.data);
+    if (!clIsTransition() && !clIsInfusion()) o["Reminder Date"] = rm?.date ? clFmtMDY(rm.date) : "";
     return o;
   });
   const ws = XLSX.utils.json_to_sheet(rows);
