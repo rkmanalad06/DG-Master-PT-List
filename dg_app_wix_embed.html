@@ -1074,7 +1074,9 @@ td.cl-action-td { white-space: normal; }
 .cl-cal-selected b { color: var(--text-primary); }
 .cl-err { color: var(--status-attention) !important; }
 .cl-stat-pct{font-size:11px;font-weight:600;color:var(--text-secondary);margin-left:6px;font-variant-numeric:tabular-nums}
-.cl-stats{grid-template-columns:repeat(2,minmax(0,1fr)) !important}
+.cl-stats{grid-template-columns:repeat(6,minmax(0,1fr))}
+@media (max-width:900px){.cl-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:560px){.cl-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .cl-stat{gap:3px}
 .cl-stat-bar{display:block;align-self:stretch;height:6px;margin-top:4px;border-radius:999px;background:var(--border-subtle,#e5e7eb);overflow:hidden}
 .cl-stat-bar-fill{display:block;height:100%;border-radius:999px;background:var(--t-fg);transition:width 300ms var(--ease-out,ease)}
@@ -4101,7 +4103,16 @@ const CALL_NOTES = ["No Answer", "Sent VM", "For Callback"];
 const CALL_STATUSES = [
   { key: "pending", label: "Not yet assigned", tone: "gray" },
   { key: "assigned", label: "Assigned", tone: "violet" },
+  { key: "progress", label: "In Progress", tone: "yellow" },
+  { key: "confirmed", label: "Confirmed", tone: "green" },
+  { key: "refused", label: "Refused", tone: "red" },
+  { key: "attention", label: "Needs Attention", tone: "attn" },
 ];
+// Tiles/filters: pending + assigned come from the Team Member column; the rest mirror the Action column pill.
+function clStatusMatch(data, key) {
+  if (key === "pending" || key === "assigned") return (callInfo(data).assigned ? "assigned" : "pending") === key;
+  return callPill(data).key === key;
+}
 const CALL_STATUS_BY_KEY = Object.fromEntries(CALL_STATUSES.map((s) => [s.key, s]));
 const CALL_GENERIC_STATUS = { pending: "pending", assigned: "pending", progress: "in-progress", confirmed: "complete", refused: "complete", resched: "complete", attention: "needs-attention" };
 const CALL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -4194,7 +4205,7 @@ function clStats(records) {
   CALL_STATUSES.forEach((x) => { s[x.key] = 0; });
   for (const r of records) {
     const i = callInfo(r.data);
-    s[i.assigned ? "assigned" : "pending"]++; if (i.done) s._done = (s._done || 0) + 1;
+    s[i.assigned ? "assigned" : "pending"]++; if (i.done) s._done = (s._done || 0) + 1; { const pk = callPill(r.data).key; if (pk === "progress" || pk === "confirmed" || pk === "refused" || pk === "attention") s[pk]++; }
     if (i.key === "call") s.toCall++;
     const rm = callReminder(r.data);
     if (rm?.state === "today") s.remToday++;
@@ -4382,7 +4393,7 @@ function clFilteredRows(cfg) {
       callPill(r.data).label.toLowerCase().includes(q) ||
       CALL_STATUS_BY_KEY[callInfo(r.data).assigned ? "assigned" : "pending"].label.toLowerCase().includes(q));
   }
-  if (clState.statusFilter) rows = rows.filter((r) => (callInfo(r.data).assigned ? "assigned" : "pending") === clState.statusFilter);
+  if (clState.statusFilter) rows = rows.filter((r) => clStatusMatch(r.data, clState.statusFilter));
   if (clState.remindFilter) rows = rows.filter((r) => callReminder(r.data)?.state === clState.remindFilter);
   if (clState.sort) {
     const { field, dir } = clState.sort;
