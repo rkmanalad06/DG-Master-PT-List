@@ -1097,6 +1097,9 @@ td.cl-action-td { white-space: normal; }
 .dg-cal-foot button:hover{background:var(--accent-soft,#f3dde0)}
 .cl-stat-sub{display:block;font-size:11px;line-height:1.3;color:var(--text-tertiary,#8b8b9a);margin:2px 0 6px;font-weight:400}
 .cl-stat-static{cursor:default}
+.cl-pill.cl-static{cursor:default}
+.cl-stats.cl-stats-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:900px){.cl-stats.cl-stats-4{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -1260,7 +1263,7 @@ const SHEET_CONFIG = [
     dobField: "DOB",
     phoneField: "Home Phone",
     dateFields: ["DOB", "Last Visit w/ DG", "Next Scheduled Visit"],
-    completion: { field: "Action", mode: "transition", label: "Transition marked complete" },
+    completion: { field: "Action", mode: "transition", label: "Assigned to a team member" },
     searchFields: ["Patient Name", "Account #", "Home Phone", "Action", "Notes"],
     inlineFields: ["Team Member", "Notes"],
   },
@@ -2389,7 +2392,7 @@ function getActionItems() {
 
   const specialPendingText = {
     call_list_upcoming: (n) => `${n} patient(s) with an upcoming appointment still need a call outcome`,
-    call_list_no_upcoming: (n) => `${n} patient(s) with no upcoming appointment still need their transition completed`,
+    call_list_no_upcoming: (n) => `${n} patient(s) with no upcoming appointment still need a team member assigned`,
   };
 
   for (const cfg of SHEET_CONFIG) {
@@ -4171,7 +4174,6 @@ function uploadIconIllus() { return `<div class="icon">${'<svg width="40" height
 // ============================================================================
 let CALL_SHEET_ID = "call_list_upcoming";
 let clLastSheet = "call_list_upcoming";
-const TRANSITION_PILLS = { needs: { tone: "attn", label: "Needs Assignment" }, assigned: { tone: "violet", label: "Assigned" }, scheduled: { tone: "blue", label: "Scheduled" }, complete: { tone: "green", label: "Transition Complete" } };
 function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming"; }
 function clIsTransition() { return CALL_SHEET_ID === "call_list_no_upcoming"; }
 function clWith(id, fn) { const prev = CALL_SHEET_ID; CALL_SHEET_ID = id; try { return fn(); } finally { CALL_SHEET_ID = prev; } }
@@ -4184,23 +4186,12 @@ function clUse(id) {
 function clAssignSt(data) {
   const k = callInfo(data).assigned ? "assigned" : "pending";
   const st = CALL_STATUS_BY_KEY[k];
-  return clIsTransition() && k === "pending" ? { ...st, label: "Pending" } : st;
+  return clIsTransition() ? { ...st, tone: k === "assigned" ? "green" : "red" } : st;
 }
 function clStatusOptions() {
   return clIsTransition()
-    ? [{ key: "pending", label: "Pending" }, { key: "assigned", label: "Assigned" }, { key: "scheduled", label: "Scheduled" }, { key: "complete", label: "Transition Complete" }]
+    ? [{ key: "pending", label: "Not yet assigned" }, { key: "assigned", label: "Assigned" }, { key: "scheduled", label: "Scheduled" }]
     : CALL_STATUSES;
-}
-function clPaintTransitionPopover(rec, initial) {
-  const d = rec.data; const info = callInfo(d);
-  const check = '<svg class="cl-check" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  let h = '<div class="cl-pop-title">' + esc(rec.displayName || "Set action") + '</div>';
-  h += '<div class="cl-pop-note" style="background:var(--bg-subtle,#f3f3f6);color:var(--text-secondary,#55556a);border-color:transparent">Automatic: Needs Assignment until a Team Member is entered, Assigned once one is, and Scheduled once a Next Scheduled Visit is entered. Use the button below only when the transition work is finished.</div>';
-  h += '<div class="cl-opts" role="group" aria-label="Transition"><button type="button" class="cl-opt cl-tone-green' + (info.done ? " on" : "") + '" data-cl-act="complete" data-f="act-complete" aria-pressed="' + info.done + '"><span class="cl-dot"></span>Transition Complete' + (info.done ? check : "") + '</button></div>';
-  if (info.done) h += '<div class="cl-pop-foot"><button type="button" class="cl-link-btn muted" data-cl-clear data-f="clear">Reopen (back to automatic)</button></div>';
-  clPopover.el.innerHTML = h;
-  clPlacePopover();
-  if (initial) { const b = clPopover.el.querySelector(".cl-opt"); if (b) b.focus(); }
 }
 const CL = {
   ACTION: "Action",
@@ -4237,14 +4228,13 @@ function clStatusMatch(data, key) {
     if (key === "pending") return !i.assigned;
     if (key === "assigned") return i.assigned;
     if (key === "scheduled") return i.scheduled;
-    if (key === "complete") return i.done;
     return true;
   }
   if (key === "pending" || key === "assigned") return (callInfo(data).assigned ? "assigned" : "pending") === key;
   return callPill(data).key === key;
 }
 const CALL_STATUS_BY_KEY = Object.fromEntries(CALL_STATUSES.map((s) => [s.key, s]));
-const CALL_GENERIC_STATUS = { needs: "pending", scheduled: "pending", complete: "complete", pending: "pending", assigned: "pending", progress: "in-progress", confirmed: "complete", refused: "complete", resched: "complete", attention: "needs-attention" };
+const CALL_GENERIC_STATUS = { "t-assigned": "complete", "t-unassigned": "pending", pending: "pending", assigned: "pending", progress: "in-progress", confirmed: "complete", refused: "complete", resched: "complete", attention: "needs-attention" };
 const CALL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 const clState = { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1, pageSize: 50 };
@@ -4281,9 +4271,7 @@ function callInfo(data) {
   if (clIsTransition()) {
     const assigned = !!String(data[CL.TEAM] || "").trim();
     const scheduled = !!String(data[CL.NEXT] || "").trim();
-    const done = /complete/i.test(String(data[CL.ACTION] || ""));
-    const tkey = done ? "complete" : scheduled ? "scheduled" : assigned ? "assigned" : "needs";
-    return { key: tkey, done, days: null, flagged: false, assigned, scheduled, status: tkey };
+    return { key: scheduled ? "scheduled" : "letter", done: false, days: null, flagged: false, assigned, scheduled, status: assigned ? "t-assigned" : "t-unassigned" };
   }
   const key = callActionKey(data[CL.ACTION]);
   const done = key === "confirmed" || key === "refused" || key === "resched";
@@ -4308,8 +4296,9 @@ function callReminder(data) {
 function callPill(data) {
   if (clIsTransition()) {
     const ti = callInfo(data);
-    const tp = TRANSITION_PILLS[ti.key];
-    return { key: ti.key, tone: tp.tone, label: tp.label };
+    if (ti.scheduled) return { key: "scheduled", tone: "blue", label: "Scheduled" };
+    const rawAction = String(data[CL.ACTION] || "").trim();
+    return { key: "letter", tone: "orange", label: rawAction ? rawAction : "LETTER (no upcoming appt found)" };
   }
   const info = callInfo(data);
   if (info.key === "progress") {
@@ -4432,11 +4421,10 @@ function clTransitionKpiHtml() {
   const s = clStats(clRecords());
   const pctOf = (n) => (s.total ? Math.round((n / s.total) * 100) : 0);
   const tiles = [
-    { key: "", tone: "gray", label: "Total Patients", n: s.total, sub: "Requiring transition", nopct: true },
-    { key: "assigned", tone: "violet", label: "Assigned", n: s.assigned, sub: "Team Member assigned" },
-    { key: "pending", tone: "attn", label: "Unassigned", n: s.pending, sub: "Still need a Team Member" },
+    { key: "", tone: "gray", label: "Total Patients", n: s.total, sub: "Total patients requiring transition", nopct: true },
+    { key: "assigned", tone: "green", label: "Assigned", n: s.assigned, sub: "Patients with a Team Member" },
+    { key: "pending", tone: "red", label: "Unassigned", n: s.pending, sub: "Still need a Team Member" },
     { key: "scheduled", tone: "blue", label: "Scheduled", n: s.scheduled, sub: "Have a Next Scheduled Visit" },
-    { key: "complete", tone: "green", label: "Transition Complete", n: s.done, sub: "Transition work completed" },
   ];
   const bar = (label, p) => `<span class="cl-stat-bar" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p}"><span class="cl-stat-bar-fill" style="width:${p}%"></span></span>`;
   const tile = (t) => {
@@ -4448,13 +4436,7 @@ function clTransitionKpiHtml() {
       ${bar(t.label + " share of total", p)}
     </button>`;
   };
-  const comp = `<div class="cl-stat cl-tone-green cl-stat-static" title="Percent of patients whose transition is complete">
-      <span class="cl-stat-count">${s.pct}%</span>
-      <span class="cl-stat-label"><span class="cl-dot"></span>Completion %</span>
-      <span class="cl-stat-sub">${fmtNum(s.done)} of ${fmtNum(s.total)} transitioned</span>
-      ${bar("Completion percentage", s.pct)}
-    </div>`;
-  return `<div class="cl-stats" role="group" aria-label="Transition summary">${tiles.map(tile).join("")}${comp}</div>`;
+  return `<div class="cl-stats cl-stats-4" role="group" aria-label="Patient summary">${tiles.map(tile).join("")}</div>`;
 }
 function clKpiHtml() {
   if (clIsTransition()) return clTransitionKpiHtml();
@@ -4507,7 +4489,7 @@ function renderCallListPage(cfg) {
     <div class="page-header">
       <div>
         <div class="page-title">${esc(cfg.label)}</div>
-        <div class="page-subtitle">${clIsTransition() ? "Enter a Team Member for each patient. Status updates automatically: Pending until a Team Member is entered, then Assigned, and the patient moves to Scheduled once a Next Scheduled Visit is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
+        <div class="page-subtitle">${clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
       </div>
       <div class="page-header-actions">
         <button class="btn" id="cl-add-row">+ Add Row</button> <button class="btn" id="cl-export">${downloadIconSvg()} Export</button>
@@ -4590,6 +4572,10 @@ function clStatusBadge(data) {
   return `<span class="cl-badge cl-tone-${st.tone}" title="${esc(title)}"><span class="cl-dot"></span>${esc(st.label)}</span>`;
 }
 function clActionCellHtml(r) {
+  if (clIsTransition()) {
+    const tp = callPill(r.data);
+    return `<div class="cl-action-cell"><span class="cl-pill cl-static cl-tone-${tp.tone}" title="Set automatically from Next Scheduled Visit"><span class="cl-pill-text">${esc(tp.label)}</span></span></div>`;
+  }
   const p = callPill(r.data);
   return `<div class="cl-action-cell">
     <button type="button" class="cl-pill cl-tone-${p.tone}" data-cl-open data-uid="${r.uid}" aria-haspopup="dialog" aria-label="Action: ${esc(p.label)}. Change.">
@@ -5031,7 +5017,6 @@ function clChooseAction(uid, key) {
   const rec = clRecord(uid);
   if (!rec) return;
   const d = rec.data;
-  if (clIsTransition()) { clApply(uid, { [CL.ACTION]: callInfo(d).done ? "" : "Transition Complete" }, { toast: callInfo(d).done ? "Reopened" : "Marked Transition Complete" }); clPaintPopover(); return; }
   if (key === "resched") { clClosePopover(); clOpenReschedModal(uid); return; }
   const a = CALL_ACTIONS.find((x) => x.key === key);
   if (key === "progress") {
@@ -5046,7 +5031,6 @@ function clPaintPopover(initial) {
   const rec = clRecord(clPopover.uid);
   if (!rec) { clClosePopover(); return; }
   const d = rec.data;
-  if (clIsTransition()) { clPaintTransitionPopover(rec, initial); return; }
   const info = callInfo(d);
   const stored = info.key;
   const hadFocus = document.activeElement?.closest?.(".cl-popover") ? document.activeElement.dataset.f : null;
