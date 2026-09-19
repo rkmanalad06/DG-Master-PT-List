@@ -1080,6 +1080,21 @@ td.cl-action-td { white-space: normal; }
 .cl-stat{gap:3px}
 .cl-stat-bar{display:block;align-self:stretch;height:6px;margin-top:4px;border-radius:999px;background:var(--border-subtle,#e5e7eb);overflow:hidden}
 .cl-stat-bar-fill{display:block;height:100%;border-radius:999px;background:var(--t-fg);transition:width 300ms var(--ease-out,ease)}
+.dg-cal{position:fixed;z-index:400;width:296px;padding:12px;background:var(--bg-surface,#fff);color:var(--text-primary,#1a1d23);border:1px solid var(--border-subtle,#e5e7eb);border-radius:var(--radius-md,10px);box-shadow:var(--shadow-md,0 12px 32px rgba(0,0,0,.18));font:inherit;font-size:13px}
+.dg-cal-head{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.dg-cal-head select{flex:1;min-width:0;padding:5px 6px;border:1px solid var(--border-subtle,#e5e7eb);border-radius:6px;background:var(--bg-surface,#fff);color:inherit;font:inherit;font-size:13px;font-weight:600}
+.dg-cal-nav{flex:0 0 28px;width:28px;height:28px;border:none;border-radius:6px;background:transparent;color:var(--text-secondary,#565c6a);font-size:20px;line-height:1;cursor:pointer}
+.dg-cal-nav:hover{background:var(--accent-soft,#f3dde0);color:var(--accent,#7a2233)}
+.dg-cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px}
+.dg-cal-dow{padding:4px 0;text-align:center;font-size:10.5px;font-weight:600;color:var(--text-secondary,#565c6a)}
+.dg-cal-day{height:32px;border:none;border-radius:6px;background:transparent;color:inherit;font:inherit;font-size:13px;font-variant-numeric:tabular-nums;cursor:pointer}
+.dg-cal-day:hover{background:var(--accent-soft,#f3dde0);color:var(--accent,#7a2233)}
+.dg-cal-day.other{color:var(--text-tertiary,#9ca3af)}
+.dg-cal-day.today{box-shadow:inset 0 0 0 1px var(--accent,#7a2233)}
+.dg-cal-day.sel,.dg-cal-day.sel:hover{background:var(--accent,#7a2233);color:#fff}
+.dg-cal-foot{display:flex;justify-content:space-between;margin-top:8px}
+.dg-cal-foot button{border:none;border-radius:6px;background:transparent;color:var(--accent,#7a2233);font:inherit;font-size:12.5px;font-weight:600;padding:4px 8px;cursor:pointer}
+.dg-cal-foot button:hover{background:var(--accent-soft,#f3dde0)}
 </style>
 </head>
 <body>
@@ -3149,28 +3164,101 @@ function getSharedDateInput() {
 function toISODateInput(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+function dgCloseCalendar() {
+  const el = document.getElementById("dg-cal-pop");
+  if (el) el.remove();
+  if (window.__dgCalOff) { window.__dgCalOff(); window.__dgCalOff = null; }
+}
+
 function openDatePickerFor(textInput) {
   if (!textInput) return;
-  const picker = getSharedDateInput();
-  const rect = textInput.getBoundingClientRect();
-  picker.style.left = rect.left + "px";
-  picker.style.top = rect.bottom + 4 + "px";
-  picker.style.width = Math.max(rect.width, 120) + "px";
+  dgCloseCalendar();
+  const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const DOW = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+  const today = new Date(); today.setHours(0, 0, 0, 0);
   const parsed = parseDateLoose(textInput.value);
-  picker.value = parsed ? toISODateInput(parsed) : "";
-  picker.onchange = () => {
-    if (picker.value) {
-      const [y, m, d] = picker.value.split("-");
-      textInput.value = `${+m}/${+d}/${y}`;
-      textInput.dispatchEvent(new Event("blur"));
-    }
-    picker.classList.remove("active");
+  const sel = parsed ? new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()) : null;
+  let viewY = (sel || today).getFullYear();
+  let viewM = (sel || today).getMonth();
+  const pop = document.createElement("div");
+  pop.id = "dg-cal-pop";
+  pop.className = "dg-cal";
+  pop.setAttribute("role", "dialog");
+  pop.setAttribute("aria-label", "Choose a date");
+  const same = (a, b) => !!a && !!b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const commit = (d) => {
+    textInput.value = d ? `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}` : "";
+    dgCloseCalendar();
+    textInput.dispatchEvent(new Event("blur"));
   };
-  picker.classList.add("active");
-  picker.focus();
-  if (typeof picker.showPicker === "function") {
-    try { picker.showPicker(); } catch (e) {}
-  }
+  const place = () => {
+    const rect = textInput.getBoundingClientRect();
+    const w = pop.offsetWidth, h = pop.offsetHeight;
+    const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - w - 8));
+    let top = rect.bottom + 4;
+    if (top + h > window.innerHeight - 8) top = rect.top - h - 4;
+    if (top < 8) top = Math.max(8, window.innerHeight - h - 8);
+    pop.style.left = left + "px";
+    pop.style.top = top + "px";
+  };
+  const draw = () => {
+    const first = new Date(viewY, viewM, 1);
+    const start = new Date(viewY, viewM, 1 - first.getDay());
+    const yMin = Math.min(1900, viewY), yMax = Math.max(today.getFullYear() + 10, viewY);
+    let years = "";
+    for (let y = yMax; y >= yMin; y--) years += `<option value="${y}"${y === viewY ? " selected" : ""}>${y}</option>`;
+    let days = "";
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      const cls = ["dg-cal-day"];
+      if (d.getMonth() !== viewM) cls.push("other");
+      if (same(d, today)) cls.push("today");
+      if (same(d, sel)) cls.push("sel");
+      days += `<button type="button" class="${cls.join(" ")}" data-ts="${d.getTime()}" aria-label="${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}"${same(d, today) ? ' aria-current="date"' : ""}>${d.getDate()}</button>`;
+    }
+    pop.innerHTML = `<div class="dg-cal-head"><button type="button" class="dg-cal-nav" data-nav="-1" aria-label="Previous month">&#8249;</button><select data-month aria-label="Month">${MONTHS.map((m, i) => `<option value="${i}"${i === viewM ? " selected" : ""}>${m}</option>`).join("")}</select><select data-year aria-label="Year">${years}</select><button type="button" class="dg-cal-nav" data-nav="1" aria-label="Next month">&#8250;</button></div><div class="dg-cal-grid">${DOW.map((x) => `<div class="dg-cal-dow">${x}</div>`).join("")}${days}</div><div class="dg-cal-foot"><button type="button" data-today="1">Today</button><button type="button" data-clear="1">Clear</button></div>`;
+    place();
+  };
+  pop.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    if (b.dataset.ts) { commit(new Date(+b.dataset.ts)); return; }
+    if (b.dataset.nav) {
+      viewM += +b.dataset.nav;
+      if (viewM < 0) { viewM = 11; viewY--; } else if (viewM > 11) { viewM = 0; viewY++; }
+      draw();
+      return;
+    }
+    if (b.dataset.today) { commit(new Date(today)); return; }
+    if (b.dataset.clear) commit(null);
+  });
+  pop.addEventListener("change", (e) => {
+    if (e.target.matches("[data-month]")) viewM = +e.target.value;
+    else if (e.target.matches("[data-year]")) viewY = +e.target.value;
+    else return;
+    draw();
+  });
+  pop.addEventListener("mousedown", (e) => { if (!e.target.closest("select")) e.preventDefault(); });
+  document.body.appendChild(pop);
+  draw();
+  const onDown = (e) => { if (!pop.contains(e.target) && !(e.target.closest && e.target.closest(".cal-btn"))) dgCloseCalendar(); };
+  const onKey = (e) => { if (e.key === "Escape") dgCloseCalendar(); };
+  const onScroll = (e) => { if (!pop.contains(e.target)) dgCloseCalendar(); };
+  setTimeout(() => {
+    if (!document.body.contains(pop)) return;
+    document.addEventListener("mousedown", onDown, true);
+    document.addEventListener("keydown", onKey, true);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", dgCloseCalendar);
+    window.addEventListener("hashchange", dgCloseCalendar);
+  }, 0);
+  window.__dgCalOff = () => {
+    document.removeEventListener("mousedown", onDown, true);
+    document.removeEventListener("keydown", onKey, true);
+    window.removeEventListener("scroll", onScroll, true);
+    window.removeEventListener("resize", dgCloseCalendar);
+    window.removeEventListener("hashchange", dgCloseCalendar);
+  };
 }
 function resetIconSvg() { return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 12a9 9 0 1 0 3-6.7M3 3v5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
 function editIconSvg() { return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
