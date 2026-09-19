@@ -977,6 +977,12 @@ tr.expand-row td {
 table.cl-table { table-layout: fixed; min-width: 100%; }
 table.cl-table th { position: sticky; padding-right: 14px; overflow: hidden; text-overflow: ellipsis; }
 table.cl-table th.cl-dragging { opacity: 0.4; }
+.cl-th-note { display: block; font-size: 10px; font-weight: 600; line-height: 1.25; text-transform: none; letter-spacing: 0; color: #b45309; white-space: normal; }
+td.cl-inf-td { text-align: center; }
+.cl-inf { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 999px; font-size: 15px; font-weight: 800; line-height: 1; }
+.cl-inf-yes { color: #146c43; background: #d9f2e3; }
+.cl-inf-no { color: #b42318; background: #fde4e1; }
+.inline-edit-input.cl-refer::placeholder { color: #b45309; font-weight: 600; opacity: 1; }
 table.cl-table th.cl-drop-before { box-shadow: inset 3px 0 0 var(--accent); }
 table.cl-table th.cl-drop-after { box-shadow: inset -3px 0 0 var(--accent); }
 table.cl-table th .cl-grip { cursor: grab; }
@@ -1199,7 +1205,7 @@ function openAddRowModal(cfg) {
   const base = (RAW_SHEETS[cfg.id] && RAW_SHEETS[cfg.id].headers) || [];
   const isCall = !!(cfg.completion && (cfg.completion.mode === "call-outcome" || cfg.completion.mode === "transition"));
   const skipCol = isCall ? cfg.completion.field : null;
-  const fields = base.filter((h) => h && h !== skipCol && !(ASSIGN_TABS[cfg.id] && String(h).trim().toLowerCase() === "status"));
+  const fields = base.filter((h) => h && h !== skipCol && !(ASSIGN_TABS[cfg.id] && String(h).trim().toLowerCase() === "status") && !(cfg.hideFields || []).some((x) => x.toLowerCase() === String(h).trim().toLowerCase()));
   const dateSet = new Set(cfg.dateFields || []);
   const wideRe = /note|comment|remark/i;
   const inputHtml = (h, i) => {
@@ -1442,9 +1448,11 @@ const SHEET_CONFIG = [
     dobField: "DOB",
     phoneField: "Home Phone",
     dateFields: ["DOB"],
-    completion: { field: "IF NOT ON BIOLOGICS REFER TO PUTZ", mode: "flag-blank-is-complete", label: "No open referral flag" },
-    searchFields: ["Patient Name", "Acc #", "Home Phone"],
-    inlineFields: ["IF NOT ON BIOLOGICS REFER TO PUTZ"],
+    completion: { field: "Assigned to", mode: "nonblank", label: "Assigned to is filled in" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone", "Assigned to"],
+    inlineFields: ["Assigned to"],
+    defaultHeaders: ["Patient Name", "DOB", "Sex", "Age", "Home Phone", "Acc #", "Assigned to"],
+    hideFields: ["IF NOT ON BIOLOGICS REFER TO PUTZ"],
   },
   {
     id: "gout",
@@ -4222,7 +4230,7 @@ let CALL_SHEET_ID = "call_list_upcoming";
 let clLastSheet = "call_list_upcoming";
 function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming" || id === "dg_infusion_pas" || !!ASSIGN_TABS[id] || id === "dg_osteoporosis_pas"; }
 // Tabs whose Status is simply Assigned (data in the column) / Unassigned (blank). Value = the assignment column.
-const ASSIGN_TABS = { dg_pharmacy: "Assigned To", ra: "Assigned to", seronegative_ra: "Assigned to", psoriatic_arthritis: "Assigned to", psoriasis: "Assigned to", pmr: "Assigned to" };
+const ASSIGN_TABS = { dg_pharmacy: "Assigned To", ra: "Assigned to", seronegative_ra: "Assigned to", psoriatic_arthritis: "Assigned to", psoriasis: "Assigned to", pmr: "Assigned to", gca: "Assigned to" };
 function clIsAssignTab() { return !!ASSIGN_TABS[CALL_SHEET_ID]; }
 function clIsOsteo() { return CALL_SHEET_ID === "dg_osteoporosis_pas"; }
 // ---- DG Osteoporosis PAs: status comes from the "50/50 TO JP AND SU" column ----
@@ -4417,6 +4425,40 @@ const CL_CORR_FIELD = "CORRECTIONS";
 const CL_CORR_STATUS = "CORRECTION STATUS";
 const CL_PA_FIELD = "PRIOR AUTH INITIATED/DONE:";
 function clIsInfusion() { return CALL_SHEET_ID === "dg_infusion_pas"; }
+function clIsGca() { return CALL_SHEET_ID === "gca"; }
+// GCA "On Infusion?" — a patient is on infusion when they appear in DG Infusion PAs.
+// Matches by account # (authoritative) or by patient name; DOB must also agree when both sides have one.
+let INF_IDX = { cache: null, byAcct: new Set(), byName: new Map() };
+function infusionIndex() {
+  const recs = getAllRecords();
+  if (INF_IDX.cache === recs) return INF_IDX;
+  const byAcct = new Set(), byName = new Map();
+  recs.forEach((r) => {
+    if (r.sheetId !== "dg_infusion_pas") return;
+    if (r.acct) byAcct.add(r.acct);
+    const nm = r.weakKey ? r.weakKey.slice(2) : "";
+    if (!nm) return;
+    const dk = Object.keys(r.data || {}).find((k) => /dob|birth/i.test(k) && String(r.data[k] || "").trim());
+    const entry = { acct: r.acct || "", dob: dk ? normalizeDob(r.data[dk]) : "" };
+    if (!byName.has(nm)) byName.set(nm, []);
+    byName.get(nm).push(entry);
+  });
+  INF_IDX = { cache: recs, byAcct, byName };
+  return INF_IDX;
+}
+function gcaOnInfusion(r) {
+  const ix = infusionIndex();
+  if (r.acct && ix.byAcct.has(r.acct)) return true;
+  const nm = r.weakKey ? r.weakKey.slice(2) : "";
+  const list = nm ? ix.byName.get(nm) : null;
+  if (!list) return false;
+  return list.some((e) => (!e.acct || !r.acct || e.acct === r.acct) && (!e.dob || !r.dob || e.dob === r.dob));
+}
+function clInfusionCellHtml(r) {
+  return gcaOnInfusion(r)
+    ? `<span class="cl-inf cl-inf-yes" title="Found in DG Infusion PAs" aria-label="On infusion: yes">\u2713</span>`
+    : `<span class="cl-inf cl-inf-no" title="Not found in DG Infusion PAs" aria-label="On infusion: no">\u2717</span>`;
+}
 function clTeamField(id) {
   const want = ASSIGN_TABS[id] || (id === "dg_osteoporosis_pas" ? "50/50 TO JP AND SU" : null);
   if (!want) return "Team Member";
@@ -4685,6 +4727,8 @@ function clColumns(cfg) {
     all = all.filter((h) => !/^(pa )?status$/i.test(String(h).trim()));
     if (!all.includes(CL.TEAM)) all.push(CL.TEAM);
   }
+  if (cfg.hideFields) { const hide = cfg.hideFields.map((x) => x.toLowerCase()); all = all.filter((h) => !hide.includes(String(h).trim().toLowerCase())); }
+  if (clIsGca()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti, 0, "__infusion"); else all.push("__infusion"); }
   if (clIsCallList() && !all.includes(CL.ACTION)) all.push(CL.ACTION);
   clCustomColumns().forEach((c) => { if (!all.includes(c.name)) all.push(c.name); });
   if (clIsInfusion() || clIsAssignTab() || clIsOsteo()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else if (!(clIsGeneric() && cfg.isReference)) all.push("__status");
@@ -4693,8 +4737,10 @@ function clColumns(cfg) {
   all.forEach((k) => { if (!out.includes(k)) out.push(k); });
   return out;
 }
-function clColLabel(col) { return col === "__status" ? "Status" : col; }
+function clColLabel(col) { return col === "__status" ? "Status" : col === "__infusion" ? "On Infusion?" : col; }
 function clDefaultWidth(cfg, col) {
+  if (col === "__infusion") return 125;
+  if (clIsGca() && col === CL.TEAM) return 230;
   if (clIsOsteo()) {
     if (col === "__status") return 180;
     if (col === cfg.nameField) return 180;
@@ -4958,6 +5004,7 @@ function clSortValue(r, col) {
   if (clIsGeneric() && col === "__status") return r.status || "";
   if (clIsOsteo() && col === "__status") return clAssignSt(r.data).label;
   if (col === "__status") return CALL_STATUSES.findIndex((s) => s.key === (callInfo(r.data).assigned ? "assigned" : "pending"));
+  if (col === "__infusion") return gcaOnInfusion(r) ? "Yes" : "No";
   if (col === CL.ACTION) return callPill(r.data).label;
   return r.data[col] || "";
 }
@@ -5018,13 +5065,14 @@ function clRowHtml(cfg, r, cols) {
   const isExpanded = expandedRows.has(r.uid);
   const cells = cols.map((c) => {
     if (c === "__status") return `<td data-col="__status">${clStatusBadge(r.data, r)}</td>`;
+    if (c === "__infusion") return `<td class="cl-inf-td" data-col="__infusion">${clInfusionCellHtml(r)}</td>`;
     if (c === CL.ACTION && clIsCallList()) return `<td class="cl-action-td" data-col="${esc(c)}">${clActionCellHtml(r)}</td>`;
  if (clIsInfusion() && clIsWrapCol(c) && !clIsDateCol(cfg, c)) return clWrapCellHtml(cfg, r, c);
     const val = r.data[c] || "";
     const isDate = clIsDateCol(cfg, c);
     return `<td class="inline-cell${c === cfg.nameField ? " name-col" : ""}" data-col="${esc(c)}">
       <div class="inline-cell-wrap">
-        <input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" ${c === CL.TEAM ? 'list="cl-team-list"' : ""} />
+        <input type="text" class="inline-edit-input${clIsGca() && c === CL.TEAM && !gcaOnInfusion(r) ? " cl-refer" : ""}" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="${clIsGca() && c === CL.TEAM && !gcaOnInfusion(r) ? "Refer to PUTZ" : "—"}" title="${esc(val)}" ${c === CL.TEAM ? 'list="cl-team-list"' : ""} />
         ${isDate ? `<button type="button" class="cal-btn" data-uid="${r.uid}" data-field="${esc(c)}" title="Pick a date" aria-label="Pick a date for ${esc(c)}">${calendarIconSvg()}</button>` : ""}
       </div>
     </td>`;
@@ -5058,6 +5106,12 @@ function clRefreshRow(uid) {
   if (st) st.innerHTML = clStatusBadge(r.data, r);
   const ac = [...tr.children].find((td) => td.dataset.col === CL.ACTION);
   if (ac) ac.innerHTML = clActionCellHtml(r);
+  if (clIsGca()) {
+    const ic = [...tr.children].find((td) => td.dataset.col === "__infusion");
+    if (ic) ic.innerHTML = clInfusionCellHtml(r);
+    const ti = [...tr.querySelectorAll("input.inline-edit-input")].find((i) => i.dataset.field === CL.TEAM);
+    if (ti) { const on = gcaOnInfusion(r); ti.classList.toggle("cl-refer", !on); ti.placeholder = on ? "\u2014" : "Refer to PUTZ"; }
+  }
  if (clIsInfusion()) { clRefreshCorr(tr, r); tr.querySelectorAll("textarea.cl-wrap-input").forEach(clGrow); }
 }
 
@@ -5083,7 +5137,7 @@ function clRenderTable(cfg) {
   const teams = [...new Set([...(clIsOsteo() ? ["JP", "SU", "Cancelled"] : []), ...everything.map((r) => String(r.data[CL.TEAM] || "").trim()).filter(Boolean)])].sort();
 
   const th = (c) => `<th data-col="${esc(c)}" draggable="true" title="Drag to reorder · drag the edge to resize · click to sort">
-      <span class="cl-th-label">${esc(clColLabel(c))}</span>${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}${customNames.has(c) ? `<button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Remove this column" aria-label="Remove column ${esc(c)}">×</button>` : ""}
+      <span class="cl-th-label">${esc(clColLabel(c))}</span>${clIsGca() && c === CL.TEAM ? '<span class="cl-th-note">If not on Infusion, refer to PUTZ</span>' : ""}${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}${customNames.has(c) ? `<button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Remove this column" aria-label="Remove column ${esc(c)}">×</button>` : ""}
       <span class="cl-resize" data-col="${esc(c)}" role="separator" aria-orientation="vertical" aria-label="Resize ${esc(clColLabel(c))} column"></span>
     </th>`;
 
@@ -5344,7 +5398,7 @@ function clExport(cfg) {
   const cols = clColumns(cfg).filter((c) => c !== "__status");
   const rows = clFilteredRows(cfg).map((r) => {
     const o = {};
-    cols.forEach((c) => { o[c] = c === CL.ACTION ? callPill(r.data).label : r.data[c] || ""; });
+    cols.forEach((c) => { if (c === "__infusion") o["On Infusion?"] = gcaOnInfusion(r) ? "Yes" : "No"; else o[c] = c === CL.ACTION ? callPill(r.data).label : r.data[c] || ""; });
     o["Status"] = clIsGeneric() ? ((STATUS_META[r.status] || {}).label || "") : clAssignSt(r.data).label;
     const rm = callReminder(r.data);
     if (clIsInfusion()) o["Correction Status"] = clCorrLabel(r.data);
