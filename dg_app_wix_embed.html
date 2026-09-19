@@ -1074,6 +1074,10 @@ td.cl-action-td { white-space: normal; }
 .cl-cal-selected b { color: var(--text-primary); }
 .cl-err { color: var(--status-attention) !important; }
 .cl-stat-pct{font-size:11px;font-weight:600;color:var(--text-secondary);margin-left:6px;font-variant-numeric:tabular-nums}
+.cl-stats{grid-template-columns:repeat(2,minmax(0,1fr)) !important}
+.cl-stat{gap:3px}
+.cl-stat-bar{display:block;align-self:stretch;height:6px;margin-top:4px;border-radius:999px;background:var(--border-subtle,#e5e7eb);overflow:hidden}
+.cl-stat-bar-fill{display:block;height:100%;border-radius:999px;background:var(--t-fg);transition:width 300ms var(--ease-out,ease)}
 </style>
 </head>
 <body>
@@ -4095,13 +4099,8 @@ const CALL_ACTIONS = [
 ];
 const CALL_NOTES = ["No Answer", "Sent VM", "For Callback"];
 const CALL_STATUSES = [
-  { key: "pending", label: "Pending Assignment", tone: "gray" },
+  { key: "pending", label: "Not yet assigned", tone: "gray" },
   { key: "assigned", label: "Assigned", tone: "violet" },
-  { key: "progress", label: "In Progress", tone: "yellow" },
-  { key: "confirmed", label: "Confirmed", tone: "green" },
-  { key: "refused", label: "Refused", tone: "red" },
-  { key: "resched", label: "Rescheduled", tone: "orange" },
-  { key: "attention", label: "Needs Attention", tone: "attn" },
 ];
 const CALL_STATUS_BY_KEY = Object.fromEntries(CALL_STATUSES.map((s) => [s.key, s]));
 const CALL_GENERIC_STATUS = { pending: "pending", assigned: "pending", progress: "in-progress", confirmed: "complete", refused: "complete", resched: "complete", attention: "needs-attention" };
@@ -4195,14 +4194,14 @@ function clStats(records) {
   CALL_STATUSES.forEach((x) => { s[x.key] = 0; });
   for (const r of records) {
     const i = callInfo(r.data);
-    s[i.status]++;
+    s[i.assigned ? "assigned" : "pending"]++; if (i.done) s._done = (s._done || 0) + 1;
     if (i.key === "call") s.toCall++;
     const rm = callReminder(r.data);
     if (rm?.state === "today") s.remToday++;
     else if (rm?.state === "overdue") s.remOverdue++;
     else if (rm?.state === "upcoming") s.remUpcoming++;
   }
-  s.done = s.confirmed + s.refused + s.resched;
+  s.done = s._done || 0;
   s.pct = s.total ? Math.round((s.done / s.total) * 100) : 0;
   return s;
 }
@@ -4309,7 +4308,7 @@ function clKpiHtml() {
       ${CALL_STATUSES.map((st) => `
         <button type="button" class="cl-stat cl-tone-${st.tone}" data-cl-status="${st.key}" aria-pressed="${clState.statusFilter === st.key}">
           <span class="cl-stat-count">${fmtNum(s[st.key])}<span class="cl-stat-pct" title="Share of all patients on this call list">${s.total ? Math.round((s[st.key] / s.total) * 100) : 0}%</span></span>
-          <span class="cl-stat-label"><span class="cl-dot"></span>${esc(st.label)}</span>
+          <span class="cl-stat-label"><span class="cl-dot"></span>${esc(st.label)}</span> <span class="cl-stat-bar" role="progressbar" aria-label="${esc(st.label)} share of total" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${s.total ? Math.round((s[st.key] / s.total) * 100) : 0}"><span class="cl-stat-bar-fill" style="width:${s.total ? Math.round((s[st.key] / s.total) * 100) : 0}%"></span></span>
         </button>`).join("")}
     </div>`;
 }
@@ -4369,7 +4368,7 @@ function renderCallListPage(cfg) {
 }
 
 function clSortValue(r, col) {
-  if (col === "__status") return CALL_STATUSES.findIndex((s) => s.key === callInfo(r.data).status);
+  if (col === "__status") return CALL_STATUSES.findIndex((s) => s.key === (callInfo(r.data).assigned ? "assigned" : "pending"));
   if (col === CL.ACTION) return callPill(r.data).label;
   return r.data[col] || "";
 }
@@ -4381,9 +4380,9 @@ function clFilteredRows(cfg) {
     rows = rows.filter((r) =>
       fields.some((f) => String(r.data[f] || "").toLowerCase().includes(q)) ||
       callPill(r.data).label.toLowerCase().includes(q) ||
-      CALL_STATUS_BY_KEY[callInfo(r.data).status].label.toLowerCase().includes(q));
+      CALL_STATUS_BY_KEY[callInfo(r.data).assigned ? "assigned" : "pending"].label.toLowerCase().includes(q));
   }
-  if (clState.statusFilter) rows = rows.filter((r) => callInfo(r.data).status === clState.statusFilter);
+  if (clState.statusFilter) rows = rows.filter((r) => (callInfo(r.data).assigned ? "assigned" : "pending") === clState.statusFilter);
   if (clState.remindFilter) rows = rows.filter((r) => callReminder(r.data)?.state === clState.remindFilter);
   if (clState.sort) {
     const { field, dir } = clState.sort;
@@ -4403,7 +4402,7 @@ function clFilteredRows(cfg) {
 
 function clStatusBadge(data) {
   const info = callInfo(data);
-  const st = CALL_STATUS_BY_KEY[info.status];
+  const st = CALL_STATUS_BY_KEY[info.assigned ? "assigned" : "pending"];
   let title = st.label;
   if (info.status === "attention") title = `Needs Attention: next visit ${clDaysPhrase(info.days)}, no outcome recorded`;
   return `<span class="cl-badge cl-tone-${st.tone}" title="${esc(title)}"><span class="cl-dot"></span>${esc(st.label)}</span>`;
@@ -4721,7 +4720,7 @@ function clExport(cfg) {
   const rows = clFilteredRows(cfg).map((r) => {
     const o = {};
     cols.forEach((c) => { o[c] = c === CL.ACTION ? callPill(r.data).label : r.data[c] || ""; });
-    o["Status"] = CALL_STATUS_BY_KEY[callInfo(r.data).status].label;
+    o["Status"] = CALL_STATUS_BY_KEY[callInfo(r.data).assigned ? "assigned" : "pending"].label;
     const rm = callReminder(r.data);
     o["Reminder Date"] = rm?.date ? clFmtMDY(rm.date) : "";
     return o;
