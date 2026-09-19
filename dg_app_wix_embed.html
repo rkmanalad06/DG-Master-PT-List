@@ -1189,7 +1189,7 @@ function ensureDefaultSheets() {
       if (!Array.isArray(cur.headers) || !cur.headers.length) cur.headers = defaultHeadersForSheet(cfg);
       if (!Array.isArray(cur.rows)) cur.rows = [];
       // Tabs whose Status is derived from a column always carry that column.
-      const need = { dg_pharmacy: ["Assigned To"], dg_osteoporosis_pas: ["Patient Name", "Acc #", "DRUG", "NEXT APPT", "INSURANCE", "PA", "50/50 TO JP AND SU"] }[cfg.id];
+      const need = { dg_pharmacy: ["Assigned To"], ra: ["Patient Name", "DOB", "Sex", "Age", "Home Phone", "Acc #", "Assigned to"], dg_osteoporosis_pas: ["Patient Name", "Acc #", "DRUG", "NEXT APPT", "INSURANCE", "PA", "50/50 TO JP AND SU"] }[cfg.id];
       if (need) need.forEach((n) => { if (!cur.headers.some((h) => String(h).trim().toLowerCase() === n.toLowerCase())) cur.headers.push(n); });
     }
   }
@@ -1199,7 +1199,7 @@ function openAddRowModal(cfg) {
   const base = (RAW_SHEETS[cfg.id] && RAW_SHEETS[cfg.id].headers) || [];
   const isCall = !!(cfg.completion && (cfg.completion.mode === "call-outcome" || cfg.completion.mode === "transition"));
   const skipCol = isCall ? cfg.completion.field : null;
-  const fields = base.filter((h) => h && h !== skipCol && !(cfg.id === "dg_pharmacy" && String(h).trim().toLowerCase() === "status"));
+  const fields = base.filter((h) => h && h !== skipCol && !(ASSIGN_TABS[cfg.id] && String(h).trim().toLowerCase() === "status"));
   const dateSet = new Set(cfg.dateFields || []);
   const wideRe = /note|comment|remark/i;
   const inputHtml = (h, i) => {
@@ -1349,8 +1349,10 @@ const SHEET_CONFIG = [
     dobField: "DOB",
     phoneField: "Home Phone",
     dateFields: ["DOB"],
-    completion: { field: null, mode: "manual", label: "Roster with no status field — tracked manually" },
-    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+    completion: { field: "Assigned to", mode: "nonblank", label: "Assigned to is filled in" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone", "Assigned to"],
+    inlineFields: ["Assigned to"],
+    defaultHeaders: ["Patient Name", "DOB", "Sex", "Age", "Home Phone", "Acc #", "Assigned to"],
   },
   {
     id: "seronegative_ra",
@@ -4210,8 +4212,10 @@ function uploadIconIllus() { return `<div class="icon">${'<svg width="40" height
 // ============================================================================
 let CALL_SHEET_ID = "call_list_upcoming";
 let clLastSheet = "call_list_upcoming";
-function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming" || id === "dg_infusion_pas" || id === "dg_pharmacy" || id === "dg_osteoporosis_pas"; }
-function clIsPharmacy() { return CALL_SHEET_ID === "dg_pharmacy"; }
+function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming" || id === "dg_infusion_pas" || !!ASSIGN_TABS[id] || id === "dg_osteoporosis_pas"; }
+// Tabs whose Status is simply Assigned (data in the column) / Unassigned (blank). Value = the assignment column.
+const ASSIGN_TABS = { dg_pharmacy: "Assigned To", ra: "Assigned to" };
+function clIsAssignTab() { return !!ASSIGN_TABS[CALL_SHEET_ID]; }
 function clIsOsteo() { return CALL_SHEET_ID === "dg_osteoporosis_pas"; }
 // ---- DG Osteoporosis PAs: status comes from the "50/50 TO JP AND SU" column ----
 const OP = { ASSIGN: "50/50 TO JP AND SU", PA: "PA", NEXT: "NEXT APPT" };
@@ -4252,13 +4256,13 @@ function clAssignSt(data) {
   }
   const k = callInfo(data).assigned ? "assigned" : "pending";
   const st = CALL_STATUS_BY_KEY[k];
-  if (clIsInfusion() || clIsPharmacy()) return { ...st, tone: k === "assigned" ? "green" : "red", label: k === "assigned" ? "Assigned" : "Unassigned" };
+  if (clIsInfusion() || clIsAssignTab()) return { ...st, tone: k === "assigned" ? "green" : "red", label: k === "assigned" ? "Assigned" : "Unassigned" };
   return clIsTransition() ? { ...st, tone: k === "assigned" ? "green" : "red" } : st;
 }
 function clStatusOptions() {
   if (clIsOsteo()) return [{ key: "pending", label: "Unassigned" }, { key: "jp", label: "Assigned to JP" }, { key: "su", label: "Assigned to SU" }, { key: "pa", label: "Pending PA" }, { key: "attention", label: "Needs Attention" }, { key: "cancelled", label: "Cancelled" }];
   if (clIsGeneric()) return Object.keys(STATUS_META).map((k) => ({ key: k, label: STATUS_META[k].label }));
-  if (clIsPharmacy()) return [{ key: "pending", label: "Unassigned" }, { key: "assigned", label: "Assigned" }];
+  if (clIsAssignTab()) return [{ key: "pending", label: "Unassigned" }, { key: "assigned", label: "Assigned" }];
   if (clIsInfusion()) return [
     { key: "pending", label: "Unassigned" }, { key: "assigned", label: "Assigned" },
     { key: "correction", label: "Corrections: All open" }, { key: "corr-pending", label: "Corrections: Pending" },
@@ -4311,7 +4315,7 @@ function clStatusMatch(data, key) {
     if (key === "cancelled") return i.cancelled;
     return true;
   }
-  if (clIsPharmacy()) {
+  if (clIsAssignTab()) {
     const i = callInfo(data);
     if (key === "pending") return !i.assigned;
     if (key === "assigned") return i.assigned;
@@ -4406,7 +4410,7 @@ const CL_CORR_STATUS = "CORRECTION STATUS";
 const CL_PA_FIELD = "PRIOR AUTH INITIATED/DONE:";
 function clIsInfusion() { return CALL_SHEET_ID === "dg_infusion_pas"; }
 function clTeamField(id) {
-  const want = id === "dg_pharmacy" ? "Assigned To" : id === "dg_osteoporosis_pas" ? "50/50 TO JP AND SU" : null;
+  const want = ASSIGN_TABS[id] || (id === "dg_osteoporosis_pas" ? "50/50 TO JP AND SU" : null);
   if (!want) return "Team Member";
   const h = ((RAW_SHEETS[id] && RAW_SHEETS[id].headers) || []).find((x) => String(x).trim().toLowerCase() === want.toLowerCase());
   return h || want;
@@ -4543,7 +4547,7 @@ function callInfo(data) {
     const status = cancelled ? "o-cancelled" : assigned ? "o-assigned" : flagged ? "attention" : "o-unassigned";
     return { key: a.key, label: a.label, done: cancelled || assigned, days, flagged, assigned, cancelled, paPending, scheduled: false, status };
   }
-  if (clIsPharmacy()) {
+  if (clIsAssignTab()) {
     const assigned = !!String(data[CL.TEAM] || "").trim();
     return { key: "none", done: assigned, days: null, flagged: false, assigned, scheduled: false, status: assigned ? "t-assigned" : "t-unassigned" };
   }
@@ -4581,7 +4585,7 @@ function callReminder(data) {
 }
 function callPill(data) {
   if (clIsGeneric()) return { key: "none", tone: "gray", label: "" };
-  if (clIsPharmacy() || clIsOsteo()) return { key: "none", tone: "gray", label: "" };
+  if (clIsAssignTab() || clIsOsteo()) return { key: "none", tone: "gray", label: "" };
   if (clIsInfusion()) {
     const pi = callInfo(data);
     return { key: pi.key, tone: "gray", label: { sent: "Sent", resubmit: "Resubmit", approved: "Approved", others: "Others" }[pi.key] || "" };
@@ -4668,14 +4672,14 @@ function clSaveCustomColumns(cols) {
 }
 function clColumns(cfg) {
   let all = (RAW_SHEETS[cfg.id]?.headers || []).slice();
-  if (clIsPharmacy() || clIsOsteo()) {
+  if (clIsAssignTab() || clIsOsteo()) {
     // Status is always derived from the assignment column, so any stored "Status" header is replaced by the computed column.
     all = all.filter((h) => !/^(pa )?status$/i.test(String(h).trim()));
     if (!all.includes(CL.TEAM)) all.push(CL.TEAM);
   }
   if (clIsCallList() && !all.includes(CL.ACTION)) all.push(CL.ACTION);
   clCustomColumns().forEach((c) => { if (!all.includes(c.name)) all.push(c.name); });
-  if (clIsInfusion() || clIsPharmacy() || clIsOsteo()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else if (!(clIsGeneric() && cfg.isReference)) all.push("__status");
+  if (clIsInfusion() || clIsAssignTab() || clIsOsteo()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else if (!(clIsGeneric() && cfg.isReference)) all.push("__status");
   const out = [];
   clLayoutLoad().order.forEach((k) => { if (all.includes(k) && !out.includes(k)) out.push(k); });
   all.forEach((k) => { if (!out.includes(k)) out.push(k); });
@@ -4696,12 +4700,16 @@ function clDefaultWidth(cfg, col) {
     if (col === cfg.nameField) return 200;
     return Math.max(130, Math.min(280, String(col).length * 9 + 56));
   }
-  if (clIsPharmacy()) {
+  if (clIsAssignTab()) {
     if (col === "__status") return 140;
     if (col === cfg.nameField) return 210;
     if (/medication/i.test(col)) return 260;
     if (/date\/time/i.test(col)) return 200;
     if (col === CL.TEAM) return 180;
+    if (/^(sex|age)$/i.test(col)) return 90;
+    if (col === cfg.acctField) return 120;
+    if (cfg.dobField && col === cfg.dobField) return 130;
+    if (col === cfg.phoneField) return 150;
   }
   if (clIsInfusion()) {
     if (col === "__status") return 130;
@@ -4763,7 +4771,7 @@ function clTransitionKpiHtml() {
   };
   return `<div class="cl-stats cl-stats-4" role="group" aria-label="Patient summary">${tiles.map(tile).join("")}</div>`;
 }
-function clPharmacyKpiHtml() {
+function clAssignKpiHtml() {
   const recs = clRecords();
   const total = recs.length;
   const assigned = recs.filter((r) => callInfo(r.data).assigned).length;
@@ -4782,9 +4790,9 @@ function clPharmacyKpiHtml() {
   const comp = pctOf(assigned);
   const completion = { tone: "violet", label: "Completion", big: comp + "%", sub: `${fmtNum(assigned)} of ${fmtNum(total)} assigned` };
   return `<div class="cl-stats cl-stats-4" role="group" aria-label="Patient summary">
-    ${filterTile({ key: "", tone: "gray", label: "Total Patients", n: total, sub: "All patients in DG Pharmacy", nopct: true })}
-    ${filterTile({ key: "assigned", tone: "green", label: "Assigned", n: assigned, sub: "Has data in Assigned To" })}
-    ${filterTile({ key: "pending", tone: "red", label: "Unassigned", n: pending, sub: "Assigned To is blank" })}
+    ${filterTile({ key: "", tone: "gray", label: "Total Patients", n: total, sub: "All patients in " + SHEET_BY_ID[CALL_SHEET_ID].label, nopct: true })}
+    ${filterTile({ key: "assigned", tone: "green", label: "Assigned", n: assigned, sub: "Has data in " + CL.TEAM })}
+    ${filterTile({ key: "pending", tone: "red", label: "Unassigned", n: pending, sub: CL.TEAM + " is blank" })}
     <div class="cl-stat cl-stat-static cl-tone-${completion.tone}" role="group" aria-label="Completion" title="Completion = Assigned ÷ (Assigned + Unassigned)">${inner(completion, comp)}</div>
   </div>`;
 }
@@ -4841,7 +4849,7 @@ function clOsteoKpiHtml() {
 function clKpiHtml() {
   if (clIsOsteo()) return clOsteoKpiHtml();
   if (clIsGeneric()) return clGenericKpiHtml();
-  if (clIsPharmacy()) return clPharmacyKpiHtml();
+  if (clIsAssignTab()) return clAssignKpiHtml();
   if (clIsInfusion()) return clInfusionKpiHtml();
   if (clIsTransition()) return clTransitionKpiHtml();
   const s = clStats(clRecords());
@@ -4893,7 +4901,7 @@ function renderCallListPage(cfg) {
     <div class="page-header">
       <div>
         <div class="page-title">${esc(cfg.label)}</div>
-        <div class="page-subtitle">${clIsGeneric() ? esc(sheetDescription(cfg)) : clIsOsteo() ? "Type JP or SU (or Justin / Putz, Sabahat / Usmani) in 50/50 TO JP AND SU to assign, or Cancelled to cancel. Unassigned patients with an appointment within 7 days are flagged Needs Attention." : clIsPharmacy() ? "Enter a name in Assigned To for each patient. Status follows Assigned To: Assigned once someone is entered, Unassigned while it is blank." : clIsInfusion() ? "Assign each authorization to a Team Member. Status follows Team Member (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
+        <div class="page-subtitle">${clIsGeneric() ? esc(sheetDescription(cfg)) : clIsOsteo() ? "Type JP or SU (or Justin / Putz, Sabahat / Usmani) in 50/50 TO JP AND SU to assign, or Cancelled to cancel. Unassigned patients with an appointment within 7 days are flagged Needs Attention." : clIsAssignTab() ? `Enter a name in ${CL.TEAM} for each patient. Status follows ${CL.TEAM}: Assigned once someone is entered, Unassigned while it is blank.` : clIsInfusion() ? "Assign each authorization to a Team Member. Status follows Team Member (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
       </div>
       <div class="page-header-actions">
         ${clIsGeneric() && !cfg.isReference ? `<button class="btn" id="btn-completion-criteria">${gearIconSvg()} Completion Criteria</button>` : ""}
@@ -4916,7 +4924,7 @@ function renderCallListPage(cfg) {
         <option value="">All statuses</option>
         ${clStatusOptions().map((s) => `<option value="${s.key}" ${clState.statusFilter === s.key ? "selected" : ""}>${esc(s.label)}</option>`).join("")}
       </select>
-      <select class="filter-select" id="cl-filter-remind" aria-label="Filter by callback reminder" ${(clIsTransition() || clIsInfusion() || clIsPharmacy() || clIsOsteo() || clIsGeneric()) ? 'style="display:none"' : ""}>
+      <select class="filter-select" id="cl-filter-remind" aria-label="Filter by callback reminder" ${(clIsTransition() || clIsInfusion() || clIsAssignTab() || clIsOsteo() || clIsGeneric()) ? 'style="display:none"' : ""}>
         <option value="">All reminders</option>
         <option value="today" ${clState.remindFilter === "today" ? "selected" : ""}>Callback due today</option>
         <option value="overdue" ${clState.remindFilter === "overdue" ? "selected" : ""}>Callback overdue</option>
@@ -5073,7 +5081,7 @@ function clRenderTable(cfg) {
 
   const emptyMsg = everything.length
     ? `<div class="empty-state">${emptyIcon()}<div class="title">No records match your filters</div><div class="desc">Try clearing the search or status filters.</div></div>`
-    : `<div class="empty-state">${emptyIcon()}<div class="title">${clIsGeneric() || clIsOsteo() ? "No records in this tab yet" : "No patients on this call list yet"}</div><div class="desc">${clIsGeneric() ? (cfg.isReference ? "This reference table has no rows yet." : "Use Import Records or Add Row to add records to this tab.") : clIsOsteo() ? "Use Import Records or Add Row to add osteoporosis prior authorizations." : clIsPharmacy() ? "Use Import Records or Add Row to add pharmacy patients." : clIsInfusion() ? "Use Import Records or Add Row to add infusion prior authorizations." : clIsTransition() ? "Use Import Records or Add Row to bring in the patients who need a transition." : "Use Import Records to bring in the upcoming-appointment call list."}</div></div>`;
+    : `<div class="empty-state">${emptyIcon()}<div class="title">${clIsGeneric() || clIsOsteo() ? "No records in this tab yet" : "No patients on this call list yet"}</div><div class="desc">${clIsGeneric() ? (cfg.isReference ? "This reference table has no rows yet." : "Use Import Records or Add Row to add records to this tab.") : clIsOsteo() ? "Use Import Records or Add Row to add osteoporosis prior authorizations." : clIsAssignTab() ? `Use Import Records or Add Row to add patients to ${cfg.label}.` : clIsInfusion() ? "Use Import Records or Add Row to add infusion prior authorizations." : clIsTransition() ? "Use Import Records or Add Row to bring in the patients who need a transition." : "Use Import Records to bring in the upcoming-appointment call list."}</div></div>`;
 
   region.innerHTML = `
     <datalist id="cl-team-list">${teams.map((t) => `<option value="${esc(t)}"></option>`).join("")}</datalist>
