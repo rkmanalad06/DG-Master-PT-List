@@ -894,6 +894,185 @@ tr.expand-row td {
   .two-col{grid-template-columns:minmax(0,1fr)}
   .two-col>*{min-width:0}
 }
+
+/* ==========================================================================
+   CALL LIST – UPCOMING APPOINTMENT (workflow view)
+   ========================================================================== */
+.cl-tone-blue   { --t-fg:#1d5aa6; --t-bg:#e6effa; --t-bd:#b9d0ee; }
+.cl-tone-green  { --t-fg:#1e7d4b; --t-bg:#e5f5ec; --t-bd:#b4dfc7; }
+.cl-tone-red    { --t-fg:#b3312c; --t-bg:#fbe6e5; --t-bd:#efbcb9; }
+.cl-tone-orange { --t-fg:#9a4a08; --t-bg:#feebd6; --t-bd:#f3c99a; }
+.cl-tone-yellow { --t-fg:#6b4d00; --t-bg:#fff2b8; --t-bd:#efd766; }
+.cl-tone-attn   { --t-fg:#ffffff; --t-bg:#d9480f; --t-bd:#d9480f; }
+.cl-tone-gray   { --t-fg:#565c6a; --t-bg:#eceef2; --t-bd:#d8dae1; }
+.cl-tone-violet { --t-fg:#5b3fa8; --t-bg:#efe9fb; --t-bd:#d3c6f1; }
+
+/* --- KPI dashboard (sticky so it stays visible while the table scrolls) --- */
+.cl-kpi-wrap {
+  position: sticky; top: calc(-1 * var(--space-6)); z-index: 20;
+  margin: calc(-1 * var(--space-6)) calc(-1 * var(--space-8)) var(--space-4);
+  padding: 10px var(--space-8) 10px;
+  background: var(--bg-app);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.cl-kpi-grid { display: grid; grid-template-columns: 1.5fr 0.8fr 1.7fr; gap: var(--space-3); }
+.cl-kpi { padding: 8px var(--space-4); display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cl-kpi .kpi-label { font-size: 10.5px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.cl-kpi .kpi-sub { font-size: 11px; color: var(--text-tertiary); }
+.cl-kpi-row { display: flex; align-items: baseline; gap: 6px; }
+.cl-kpi-big { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.cl-kpi-unit { font-size: 12px; color: var(--text-secondary); }
+.cl-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.cl-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px; border-radius: 999px; font: inherit; font-size: 11.5px; font-weight: 600;
+  color: var(--t-fg); background: var(--t-bg); border: 1px solid var(--t-bd); cursor: pointer;
+  transition: box-shadow 140ms var(--ease-out), transform 140ms var(--ease-out);
+}
+.cl-chip b { font-variant-numeric: tabular-nums; }
+.cl-chip:hover { box-shadow: 0 0 0 3px var(--t-bg); }
+.cl-chip:active { transform: scale(0.97); }
+.cl-chip[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--t-fg); }
+.cl-stats { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-2); margin-top: 8px; }
+.cl-stat {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left;
+  padding: 5px 10px; border-radius: var(--radius-md); font: inherit; cursor: pointer; min-width: 0;
+  background: var(--bg-surface); border: 1px solid var(--border-subtle);
+  transition: border-color 140ms var(--ease-out), box-shadow 140ms var(--ease-out), transform 140ms var(--ease-out);
+}
+.cl-stat:hover { border-color: var(--t-bd); box-shadow: 0 0 0 3px var(--t-bg); }
+.cl-stat:active { transform: scale(0.98); }
+.cl-stat[aria-pressed="true"] { border-color: var(--t-fg); background: var(--t-bg); box-shadow: 0 0 0 1px var(--t-fg); }
+.cl-stat-count { font-size: 17px; font-weight: 700; line-height: 1.15; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.cl-stat-label { font-size: 10.5px; font-weight: 600; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 5px; max-width: 100%; }
+.cl-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--t-bg); border: 2px solid var(--t-bd); flex-shrink: 0; box-sizing: border-box; }
+.cl-tone-attn .cl-dot, .cl-stat.cl-tone-attn .cl-dot { background: var(--t-bg); border-color: var(--t-bd); }
+.cl-stat .cl-dot { background: var(--t-fg); border-color: var(--t-fg); }
+
+@media (max-width: 1100px) {
+  .cl-kpi-grid { grid-template-columns: 1fr 1fr; }
+  .cl-kpi-grid .cl-kpi:first-child { grid-column: 1 / -1; }
+  .cl-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 1000px), (max-height: 720px) {
+  .cl-kpi-wrap { position: static; margin: 0 0 var(--space-4); padding: 0 0 var(--space-3); border-bottom: none; }
+}
+@media (max-width: 560px) { .cl-kpi-grid { grid-template-columns: 1fr; } .cl-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* --- Toolbar extras --- */
+.cl-toolbar .cl-toolbar-right { margin-left: auto; display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.cl-rv-label { font-size: 12px; color: var(--text-tertiary); font-weight: 600; }
+.cl-seg { display: inline-flex; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); overflow: hidden; background: var(--bg-surface); }
+.cl-seg button {
+  border: none; background: transparent; font: inherit; font-size: 12px; font-weight: 600; padding: 6px 12px; cursor: pointer;
+  color: var(--text-secondary); border-right: 1px solid var(--border-subtle);
+  transition: background 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.cl-seg button:last-child { border-right: none; }
+.cl-seg button:hover { background: var(--ink-100); }
+.cl-seg button[aria-pressed="true"] { background: var(--accent); color: var(--text-on-accent); }
+
+/* --- Table --- */
+.cl-table-wrap { max-height: 60vh; }
+table.cl-table { table-layout: fixed; min-width: 100%; }
+table.cl-table th { position: sticky; padding-right: 14px; overflow: hidden; text-overflow: ellipsis; }
+table.cl-table th.cl-dragging { opacity: 0.4; }
+table.cl-table th.cl-drop-before { box-shadow: inset 3px 0 0 var(--accent); }
+table.cl-table th.cl-drop-after { box-shadow: inset -3px 0 0 var(--accent); }
+table.cl-table th .cl-grip { cursor: grab; }
+table.cl-table td { max-width: none; }
+table.cl-table td.inline-cell .inline-edit-input, .cl-table .inline-cell-wrap .inline-edit-input { min-width: 0; }
+.cl-resize { position: absolute; top: 0; right: 0; bottom: 0; width: 8px; cursor: col-resize; touch-action: none; }
+.cl-resize::after { content: ""; position: absolute; top: 25%; bottom: 25%; right: 3px; width: 2px; border-radius: 2px; background: var(--ink-200); transition: background 120ms var(--ease-out); }
+.cl-resize:hover::after, .cl-resize.active::after { background: var(--accent); }
+.cl-col-remove { border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; padding: 0 2px; margin-left: 4px; font-size: 13px; line-height: 1; border-radius: 4px; }
+.cl-col-remove:hover { color: var(--status-attention); background: var(--status-attention-bg); }
+body.cl-resizing, body.cl-resizing * { cursor: col-resize !important; user-select: none !important; }
+table.cl-table tbody tr.cl-row-progress { background: #fffbe8; }
+table.cl-table tbody tr.cl-row-progress:hover { background: #fff5c9; }
+table.cl-table tbody tr.cl-row-attn td:first-child { box-shadow: inset 3px 0 0 #d9480f; }
+
+.cl-pill {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 4px 10px; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 600; line-height: 1.3;
+  color: var(--t-fg); background: var(--t-bg); border: 1px solid var(--t-bd);
+  cursor: pointer; white-space: nowrap;
+  transition: box-shadow 140ms var(--ease-out), transform 140ms var(--ease-out);
+}
+.cl-pill:hover { box-shadow: 0 0 0 3px var(--t-bg); }
+.cl-pill:active { transform: scale(0.97); }
+.cl-pill .cl-pill-text { overflow: hidden; text-overflow: ellipsis; }
+.cl-pill svg { flex-shrink: 0; opacity: 0.75; }
+.cl-pill.dashed { background: transparent; border-style: dashed; }
+td.cl-action-td { white-space: normal; }
+.cl-action-cell { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.cl-badge {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; color: var(--t-fg); background: var(--t-bg); border: 1px solid var(--t-bd); white-space: nowrap;
+}
+.cl-badge .cl-dot { width: 6px; height: 6px; border-width: 0; background: var(--t-fg); }
+.cl-tone-attn.cl-badge .cl-dot { background: #fff; }
+
+/* --- Action popover --- */
+.cl-popover {
+  position: fixed; z-index: 120; width: 300px; max-width: calc(100vw - 16px);
+  background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg); padding: 12px; font-size: 12.5px;
+  animation: cl-pop-in 140ms var(--ease-out);
+}
+@keyframes cl-pop-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
+.cl-pop-title { font-weight: 700; font-size: 13px; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cl-pop-note { padding: 7px 9px; border-radius: var(--radius-sm); background: #fff0e8; color: #9a3412; font-size: 11.5px; margin-bottom: 8px; line-height: 1.4; }
+.cl-opts { display: flex; flex-direction: column; gap: 4px; }
+.cl-opt {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; font: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 7px 10px; border-radius: var(--radius-sm); cursor: pointer;
+  border: 1px solid transparent; background: var(--bg-sunken); color: var(--text-primary);
+  transition: background 120ms var(--ease-out), border-color 120ms var(--ease-out);
+}
+.cl-opt .cl-dot { background: var(--t-fg); border-color: var(--t-fg); }
+.cl-opt:hover { background: var(--t-bg); }
+.cl-opt.on { background: var(--t-bg); border-color: var(--t-bd); color: var(--t-fg); }
+.cl-opt .cl-check { margin-left: auto; }
+.cl-pop-sec { margin-top: 10px; }
+.cl-pop-label { display: block; font-size: 11px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 4px; }
+.cl-pop-sec select, .cl-pop-sec input[type="date"] {
+  width: 100%; padding: 6px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);
+  font: inherit; font-size: 12.5px; background: var(--bg-surface); color: var(--text-primary);
+}
+.cl-pop-sec select:focus, .cl-pop-sec input[type="date"]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.cl-pop-sec .cl-seg { display: flex; }
+.cl-pop-sec .cl-seg button { flex: 1; }
+.cl-pop-hint { font-size: 11px; color: var(--text-tertiary); margin-top: 4px; }
+.cl-pop-foot { display: flex; justify-content: flex-end; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
+.cl-link-btn { border: none; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: var(--accent); cursor: pointer; padding: 2px 4px; border-radius: 4px; }
+.cl-link-btn:hover { text-decoration: underline; }
+.cl-link-btn.muted { color: var(--text-tertiary); }
+
+/* --- Resched calendar --- */
+.cl-cal { max-width: 340px; margin: 0 auto; }
+.cl-cal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.cl-cal-title { font-size: 14px; font-weight: 700; }
+.cl-cal-nav { display: flex; gap: 4px; align-items: center; }
+.cl-cal-nav button {
+  min-width: 32px; height: 32px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-surface);
+  font: inherit; font-size: 13px; cursor: pointer; padding: 0 8px; transition: background 120ms var(--ease-out);
+}
+.cl-cal-nav button:hover { background: var(--ink-100); }
+.cl-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cl-cal-dow { text-align: center; font-size: 11px; font-weight: 700; color: var(--text-tertiary); padding: 4px 0; }
+.cl-cal-day {
+  aspect-ratio: 1 / 1; border-radius: var(--radius-sm); border: 1px solid transparent; background: transparent;
+  font: inherit; font-size: 13px; cursor: pointer; color: var(--text-primary); font-variant-numeric: tabular-nums;
+  transition: background 100ms var(--ease-out);
+}
+.cl-cal-day:hover { background: var(--ink-100); }
+.cl-cal-day.dim { color: var(--ink-300); }
+.cl-cal-day.today { border-color: var(--accent); font-weight: 700; }
+.cl-cal-day.sel, .cl-cal-day.sel:hover { background: var(--accent); color: var(--text-on-accent); border-color: var(--accent); }
+.cl-cal-selected { text-align: center; margin-top: 12px; font-size: 13px; color: var(--text-secondary); min-height: 20px; }
+.cl-cal-selected b { color: var(--text-primary); }
+.cl-err { color: var(--status-attention) !important; }
 </style>
 </head>
 <body>
@@ -967,7 +1146,7 @@ const SHEET_CONFIG = [
     dobField: "DOB",
     phoneField: "Home Phone",
     dateFields: ["DOB", "Last Visit w/ DG", "Next Scheduled Visit"],
-    completion: { field: "Team Member", mode: "nonblank", label: "Assigned to a team member" },
+    completion: { field: "Action", mode: "call-outcome", label: "Call outcome recorded (Confirmed, Refused or Resched)" },
     searchFields: ["Patient Name", "Account #", "Home Phone", "Action", "Notes"],
     inlineFields: ["Team Member", "Notes"],
   },
@@ -1433,7 +1612,11 @@ function startWixSync() {
     invalidateDupCache();
     const modalOpen = !!document.getElementById("active-modal");
     const typingInline = document.activeElement?.classList?.contains("inline-edit-input");
-    if (!modalOpen && !typingInline && typeof render === "function") render();
+    if (modalOpen || typingInline) return;
+    // The call list refreshes in place (keeps scroll position, filters and any open
+    // action menu) instead of a full re-render that would jump the user to the top.
+    if (typeof clSoftRefresh === "function" && clSoftRefresh()) return;
+    if (typeof render === "function") render();
   });
 }
 
@@ -1636,6 +1819,8 @@ function getCompletionConfig(sheetId) {
 
 // Returns one of: 'complete' | 'pending' | 'needs-attention' | 'not-started'
 function computeStatus(cfg, data, uid) {
+  if (cfg.id === CALL_SHEET_ID) return CALL_GENERIC_STATUS[callInfo(data).status];
+
   const manual = Store.statusOverrides[uid];
   if (manual) return manual;
 
@@ -2103,7 +2288,7 @@ function getActionItems() {
   }
 
   const specialPendingText = {
-    call_list_upcoming: (n) => `${n} patient(s) with an upcoming appointment have not been called yet`,
+    call_list_upcoming: (n) => `${n} patient(s) with an upcoming appointment still need a call outcome`,
     call_list_no_upcoming: (n) => `${n} patient(s) with no upcoming appointment still need a letter or follow-up`,
   };
 
@@ -2120,7 +2305,7 @@ function getActionItems() {
     }
     // Field-driven tabs (nonblank / value-not-equal) surface their own pending work as an
     // action item too — e.g. upcoming appointments nobody has called yet.
-    if ((cfg.completion.mode === "nonblank" || cfg.completion.mode === "value-not-equal") && stats.remaining > 0) {
+    if ((cfg.completion.mode === "nonblank" || cfg.completion.mode === "value-not-equal" || cfg.completion.mode === "call-outcome") && stats.remaining > 0) {
       const text = specialPendingText[cfg.id]
         ? specialPendingText[cfg.id](stats.remaining)
         : `${stats.remaining} record(s) in ${cfg.label} still need: ${cfg.completion.label}`;
@@ -2321,8 +2506,14 @@ function render() {
     const cfg = SHEET_BY_ID[param];
     if (!cfg) return notFound();
     renderBreadcrumbs([{ label: GROUPS.find((g) => g.id === cfg.group)?.label, href: "#/dashboard" }, { label: cfg.label }]);
-    $root.innerHTML = renderSheetPage(cfg);
-    wireSheetPage(cfg);
+    clClosePopover();
+    if (cfg.id === CALL_SHEET_ID) {
+      $root.innerHTML = renderCallListPage(cfg);
+      wireCallListPage(cfg);
+    } else {
+      $root.innerHTML = renderSheetPage(cfg);
+      wireSheetPage(cfg);
+    }
   } else if (view === "raw-data") {
     renderBreadcrumbs([{ label: "Data Management" }, { label: "Raw Data Center" }]);
     $root.innerHTML = renderRawData(query);
@@ -3397,6 +3588,7 @@ const HISTORY_ACTION_LABELS = {
   archive: "Archive",
   restore: "Restore",
   "completion-criteria": "Completion criteria",
+  column: "Column change",
   "duplicate-review": "Duplicate review",
   import: "Import",
 };
@@ -3789,6 +3981,917 @@ function updateWizardChrome() {
   });
 }
 function uploadIconIllus() { return `<div class="icon">${'<svg width="40" height="40" viewBox="0 0 24 24" fill="none"><path d="M12 16V4M6 10l6-6 6 6M4 20h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'}</div>`; }
+
+// ============================================================================
+// CALL LIST – UPCOMING APPOINTMENT (workflow view)
+//
+// Everything on this page is derived from the record data itself, so totals,
+// percentages, statuses, flags and reminders can never drift out of sync:
+//   Action (existing column)  -> Call / Called & Confirmed / Called & Refused / Resched / In Progress
+//   Call Attempt, Call Note   -> only used while Action = In Progress
+//   Reminder Date             -> only used when Call Note = For Callback
+//   Resched Date              -> only used when Action = Resched
+//   Team Member (existing)    -> blank = Pending Assignment, filled = Assigned
+//   Next Scheduled Visit      -> within 7 days and no completed outcome = Needs Attention
+// These extra fields are saved through the same shared "edited row" channel as
+// every other inline edit, so they sync to all users with no backend change.
+// ============================================================================
+const CALL_SHEET_ID = "call_list_upcoming";
+const CL = {
+  ACTION: "Action",
+  TEAM: "Team Member",
+  NEXT: "Next Scheduled Visit",
+  ATTEMPT: "Call Attempt",
+  NOTE: "Call Note",
+  RESCHED: "Resched Date",
+  REMIND: "Reminder Date",
+  ATTN_DAYS: 7,
+  LAYOUT_UID: "__layout#call_list_upcoming", // shared column definitions live here (not a patient record)
+  LS_LAYOUT: "dg_call_layout_v1",           // per-browser column order + widths
+};
+const CALL_ACTIONS = [
+  { key: "call", label: "Call (upcoming appt)", tone: "blue" },
+  { key: "confirmed", label: "Called & Confirmed", tone: "green" },
+  { key: "refused", label: "Called & Refused", tone: "red" },
+  { key: "resched", label: "Resched", tone: "orange" },
+  { key: "progress", label: "In Progress", tone: "yellow" },
+];
+const CALL_NOTES = ["No Answer", "Sent VM", "For Callback"];
+const CALL_STATUSES = [
+  { key: "pending", label: "Pending Assignment", tone: "gray" },
+  { key: "assigned", label: "Assigned", tone: "violet" },
+  { key: "progress", label: "In Progress", tone: "yellow" },
+  { key: "confirmed", label: "Confirmed", tone: "green" },
+  { key: "refused", label: "Refused", tone: "red" },
+  { key: "resched", label: "Rescheduled", tone: "orange" },
+  { key: "attention", label: "Needs Attention", tone: "attn" },
+];
+const CALL_STATUS_BY_KEY = Object.fromEntries(CALL_STATUSES.map((s) => [s.key, s]));
+const CALL_GENERIC_STATUS = { pending: "pending", assigned: "pending", progress: "in-progress", confirmed: "complete", refused: "complete", resched: "complete", attention: "needs-attention" };
+const CALL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+const clState = { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1, pageSize: 50 };
+
+// ---------------------------------------------------------------------------
+// Rules
+// ---------------------------------------------------------------------------
+function callActionKey(raw) {
+  const v = String(raw || "").trim().toLowerCase();
+  if (!v) return "call";
+  if (v.includes("confirm")) return "confirmed";
+  if (v.includes("refus")) return "refused";
+  if (v.includes("resched")) return "resched";
+  if (v.includes("progress")) return "progress";
+  return "call";
+}
+function clToday() { const t = new Date(); t.setHours(0, 0, 0, 0); return t; }
+function clDaysFromToday(d) { return Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - clToday()) / 86400000); }
+function clIsoToDate(iso) {
+  const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+}
+function clToIso(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function clFmtMDY(d) { return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}/${d.getFullYear()}`; }
+function clDaysPhrase(days) {
+  if (days === 0) return "is today";
+  if (days > 0) return `is in ${days} day${days === 1 ? "" : "s"}`;
+  return `was ${-days} day${days === -1 ? "" : "s"} ago`;
+}
+
+// One place that turns a record's fields into its call status. Needs Attention
+// is deliberately never applied once Confirmed / Refused / Resched is recorded.
+function callInfo(data) {
+  const key = callActionKey(data[CL.ACTION]);
+  const done = key === "confirmed" || key === "refused" || key === "resched";
+  const nextDate = parseDateLoose(data[CL.NEXT]);
+  const days = nextDate ? clDaysFromToday(nextDate) : null;
+  const flagged = !done && days !== null && days <= CL.ATTN_DAYS;
+  const assigned = !!String(data[CL.TEAM] || "").trim();
+  let status;
+  if (key === "confirmed" || key === "refused" || key === "resched") status = key;
+  else if (flagged) status = "attention";
+  else if (key === "progress") status = "progress";
+  else status = assigned ? "assigned" : "pending";
+  return { key, done, days, flagged, assigned, status };
+}
+function callReminder(data) {
+  if (callActionKey(data[CL.ACTION]) !== "progress" || data[CL.NOTE] !== "For Callback") return null;
+  const d = clIsoToDate(data[CL.REMIND]);
+  if (!d) return { state: "unset" };
+  const days = clDaysFromToday(d);
+  return { state: days === 0 ? "today" : days < 0 ? "overdue" : "upcoming", days, date: d };
+}
+function callPill(data) {
+  const info = callInfo(data);
+  if (info.key === "progress") {
+    const n = data[CL.ATTEMPT] || "1";
+    const note = data[CL.NOTE];
+    return { key: "progress", tone: "yellow", label: `In Progress (${n})${note ? " – " + note : ""}` };
+  }
+  if (info.flagged) return { key: "attention", tone: "attn", label: "Needs Attention" };
+  if (info.key === "resched") {
+    const d = clIsoToDate(data[CL.RESCHED]);
+    return { key: "resched", tone: "orange", label: d ? `Resched – ${clFmtMDY(d)}` : "Resched – pick a date" };
+  }
+  const a = CALL_ACTIONS.find((x) => x.key === info.key);
+  return { key: a.key, tone: a.tone, label: a.label };
+}
+function clReminderChip(data, uid) {
+  const rm = callReminder(data);
+  if (!rm) return "";
+  const bell = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  let tone, text;
+  if (rm.state === "unset") { tone = "gray"; text = "Set reminder date"; }
+  else if (rm.state === "today") { tone = "yellow"; text = "Callback · Due today"; }
+  else if (rm.state === "overdue") { tone = "red"; text = `Callback · Overdue ${-rm.days}d`; }
+  else { tone = "blue"; text = `Callback · ${clFmtMDY(rm.date)}`; }
+  return `<button type="button" class="cl-pill cl-tone-${tone}${rm.state === "unset" ? " dashed" : ""}" data-cl-open data-uid="${uid}" aria-label="Reminder: ${esc(text)}. Edit.">${bell}<span class="cl-pill-text">${esc(text)}</span></button>`;
+}
+
+// ---------------------------------------------------------------------------
+// Data helpers
+// ---------------------------------------------------------------------------
+function clRecords() { return getAllRecords().filter((r) => r.sheetId === CALL_SHEET_ID); }
+function clRecord(uid) { return getAllRecords().find((r) => r.uid === uid); }
+function clStats(records) {
+  const s = { total: records.length, toCall: 0, remToday: 0, remOverdue: 0, remUpcoming: 0 };
+  CALL_STATUSES.forEach((x) => { s[x.key] = 0; });
+  for (const r of records) {
+    const i = callInfo(r.data);
+    s[i.status]++;
+    if (i.key === "call") s.toCall++;
+    const rm = callReminder(r.data);
+    if (rm?.state === "today") s.remToday++;
+    else if (rm?.state === "overdue") s.remOverdue++;
+    else if (rm?.state === "upcoming") s.remUpcoming++;
+  }
+  s.done = s.confirmed + s.refused + s.resched;
+  s.pct = s.total ? Math.round((s.done / s.total) * 100) : 0;
+  return s;
+}
+function clApply(uid, patch, opts = {}) {
+  const rec = clRecord(uid);
+  if (!rec) return false;
+  const changed = {};
+  for (const [k, v] of Object.entries(patch)) if (String(rec.data[k] ?? "") !== String(v ?? "")) changed[k] = v;
+  if (!Object.keys(changed).length) return false;
+  updateRecord(uid, changed);
+  if (opts.toast) toast(opts.toast);
+  clRefreshRow(uid);
+  clRefreshKpi();
+  renderSidebar();
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Column layout: shared custom columns + per-browser order/width
+// ---------------------------------------------------------------------------
+function clLayoutLoad() { const l = lsGet(CL.LS_LAYOUT, {}); return { order: l.order || [], widths: l.widths || {} }; }
+function clLayoutSave(l) { lsSet(CL.LS_LAYOUT, l); }
+function clCustomColumns() {
+  try { const c = JSON.parse(Store.editedRows[CL.LAYOUT_UID]?.columns || "[]"); return Array.isArray(c) ? c : []; } catch (e) { return []; }
+}
+function clSaveCustomColumns(cols) {
+  Store.editedRows[CL.LAYOUT_UID] = { ...(Store.editedRows[CL.LAYOUT_UID] || {}), columns: JSON.stringify(cols) };
+  saveEditedRows();
+  WixBridge.save("editedRow", { uid: CL.LAYOUT_UID, patch: Store.editedRows[CL.LAYOUT_UID] });
+}
+function clColumns(cfg) {
+  const all = (RAW_SHEETS[cfg.id]?.headers || []).slice();
+  if (!all.includes(CL.ACTION)) all.push(CL.ACTION);
+  clCustomColumns().forEach((c) => { if (!all.includes(c.name)) all.push(c.name); });
+  all.push("__status");
+  const out = [];
+  clLayoutLoad().order.forEach((k) => { if (all.includes(k) && !out.includes(k)) out.push(k); });
+  all.forEach((k) => { if (!out.includes(k)) out.push(k); });
+  return out;
+}
+function clColLabel(col) { return col === "__status" ? "Status" : col; }
+function clDefaultWidth(cfg, col) {
+  if (col === "__status") return 175;
+  if (col === CL.ACTION) return 285;
+  if (col === cfg.nameField) return 190;
+  if (col === CL.TEAM) return 150;
+  if (/note/i.test(col)) return 210;
+  if (clIsDateCol(cfg, col)) return 140;
+  return 140;
+}
+function clWidth(cfg, col) { return clLayoutLoad().widths[col] || clDefaultWidth(cfg, col); }
+const CL_ACTIONS_COL_W = 132;
+function clIsDateCol(cfg, col) {
+  return (cfg.dateFields || []).includes(col) || clCustomColumns().some((c) => c.name === col && c.type === "date");
+}
+function clMoveColumn(cfg, from, to, after) {
+  const cols = clColumns(cfg);
+  const i = cols.indexOf(from);
+  if (i < 0 || from === to) return;
+  cols.splice(i, 1);
+  let j = cols.indexOf(to);
+  if (j < 0) return;
+  if (after) j++;
+  cols.splice(j, 0, from);
+  const l = clLayoutLoad(); l.order = cols; clLayoutSave(l);
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+function chevronSmallSvg() { return `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
+function plusIconSvg() { return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`; }
+
+function clKpiHtml() {
+  const s = clStats(clRecords());
+  const remChip = (key, tone, label, n) =>
+    `<button type="button" class="cl-chip cl-tone-${tone}" data-cl-remind="${key}" aria-pressed="${clState.remindFilter === key}">${label} <b>${n}</b></button>`;
+  return `
+    <div class="cl-kpi-grid">
+      <div class="card cl-kpi">
+        <div class="kpi-label">Overall Progress</div>
+        <div class="cl-kpi-row"><span class="cl-kpi-big">${s.pct}%</span><span class="cl-kpi-unit">complete</span></div>
+        <div class="progress-track" title="Completed = Confirmed, Refused or Resched" role="progressbar" aria-label="Overall progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${s.pct}">
+          <div class="progress-fill ${s.total && s.pct === 100 ? "complete" : ""}" style="width:${s.pct}%"></div>
+        </div>
+        <div class="kpi-sub">${fmtNum(s.done)} of ${fmtNum(s.total)} have a recorded outcome</div>
+      </div>
+      <div class="card cl-kpi">
+        <div class="kpi-label">Total to Call</div>
+        <div class="cl-kpi-row"><span class="cl-kpi-big">${fmtNum(s.toCall)}</span><span class="cl-kpi-unit">patients</span></div>
+        <div class="kpi-sub">Not yet contacted</div>
+      </div>
+      <div class="card cl-kpi">
+        <div class="kpi-label">Callback Reminders</div>
+        <div class="cl-chips">
+          ${remChip("today", "yellow", "Due today", s.remToday)}
+          ${remChip("overdue", "red", "Overdue", s.remOverdue)}
+          ${remChip("upcoming", "blue", "Upcoming", s.remUpcoming)}
+        </div>
+        <div class="kpi-sub">Click a chip to filter</div>
+      </div>
+    </div>
+    <div class="cl-stats" role="group" aria-label="Status summary">
+      ${CALL_STATUSES.map((st) => `
+        <button type="button" class="cl-stat cl-tone-${st.tone}" data-cl-status="${st.key}" aria-pressed="${clState.statusFilter === st.key}">
+          <span class="cl-stat-count">${fmtNum(s[st.key])}</span>
+          <span class="cl-stat-label"><span class="cl-dot"></span>${esc(st.label)}</span>
+        </button>`).join("")}
+    </div>`;
+}
+function clRefreshKpi() {
+  const el = document.getElementById("cl-kpi");
+  if (el) el.innerHTML = clKpiHtml();
+}
+
+function renderCallListPage(cfg) {
+  const dupGroups = getDuplicateGroupsForSheet(cfg.id);
+  return `
+    <div class="cl-kpi-wrap" id="cl-kpi">${clKpiHtml()}</div>
+
+    <div class="page-header">
+      <div>
+        <div class="page-title">${esc(cfg.label)}</div>
+        <div class="page-subtitle">Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.</div>
+      </div>
+      <div class="page-header-actions">
+        <button class="btn" id="cl-export">${downloadIconSvg()} Export</button>
+        <a class="btn primary" href="#/import-export?target=${cfg.id}">${uploadIconSvg()} Import Records</a>
+      </div>
+    </div>
+
+    ${dupGroups.length ? `<div class="card" style="padding:12px 16px;margin-bottom:20px;border-color:var(--status-attention-bg);background:var(--status-attention-bg)">
+      <span style="color:var(--status-attention);font-weight:600;font-size:13px">⚠ ${dupGroups.reduce((s, g) => s + g.records.length, 0)} record(s) in this tab are part of a duplicate group.</span>
+      <a class="link-inline" href="#/duplicates" style="margin-left:8px;font-size:12.5px">Review duplicates →</a>
+    </div>` : ""}
+
+    <div class="table-toolbar cl-toolbar" id="cl-toolbar">
+      <div class="table-search">
+        <span class="icon">${searchIconSvg()}</span>
+        <input type="text" id="cl-search" placeholder="Search ${esc(cfg.label)}…" value="${esc(clState.search)}" aria-label="Search call list" />
+      </div>
+      <select class="filter-select" id="cl-filter-status" aria-label="Filter by status">
+        <option value="">All statuses</option>
+        ${CALL_STATUSES.map((s) => `<option value="${s.key}" ${clState.statusFilter === s.key ? "selected" : ""}>${esc(s.label)}</option>`).join("")}
+      </select>
+      <select class="filter-select" id="cl-filter-remind" aria-label="Filter by callback reminder">
+        <option value="">All reminders</option>
+        <option value="today" ${clState.remindFilter === "today" ? "selected" : ""}>Callback due today</option>
+        <option value="overdue" ${clState.remindFilter === "overdue" ? "selected" : ""}>Callback overdue</option>
+        <option value="upcoming" ${clState.remindFilter === "upcoming" ? "selected" : ""}>Callback upcoming</option>
+      </select>
+      <button class="btn sm ghost" id="cl-reset" title="Clear search, filters and sorting">${resetIconSvg()} Reset</button>
+      <button class="btn sm" id="cl-add-col" title="Add an editable column">${plusIconSvg()} Add Column</button>
+      <div class="cl-toolbar-right">
+        <span class="cl-rv-label" id="cl-rv-label">Record view</span>
+        <div class="cl-seg" role="group" aria-labelledby="cl-rv-label" id="cl-rv">
+          ${[["50", "50"], ["100", "100"], ["all", "View All"]].map(([v, l]) => `<button type="button" data-size="${v}" aria-pressed="${String(clState.pageSize) === v}">${l}</button>`).join("")}
+        </div>
+        <span class="text-muted" style="font-size:12.5px" id="cl-count" aria-live="polite"></span>
+      </div>
+    </div>
+    <div id="cl-table-region"></div>
+  `;
+}
+
+function clSortValue(r, col) {
+  if (col === "__status") return CALL_STATUSES.findIndex((s) => s.key === callInfo(r.data).status);
+  if (col === CL.ACTION) return callPill(r.data).label;
+  return r.data[col] || "";
+}
+function clFilteredRows(cfg) {
+  let rows = clRecords();
+  if (clState.search) {
+    const q = clState.search.toLowerCase();
+    const fields = [...(cfg.searchFields || []), ...clCustomColumns().map((c) => c.name)];
+    rows = rows.filter((r) =>
+      fields.some((f) => String(r.data[f] || "").toLowerCase().includes(q)) ||
+      callPill(r.data).label.toLowerCase().includes(q) ||
+      CALL_STATUS_BY_KEY[callInfo(r.data).status].label.toLowerCase().includes(q));
+  }
+  if (clState.statusFilter) rows = rows.filter((r) => callInfo(r.data).status === clState.statusFilter);
+  if (clState.remindFilter) rows = rows.filter((r) => callReminder(r.data)?.state === clState.remindFilter);
+  if (clState.sort) {
+    const { field, dir } = clState.sort;
+    rows = [...rows].sort((a, b) => {
+      const va = clSortValue(a, field), vb = clSortValue(b, field);
+      let cmp;
+      if (typeof va === "number" && typeof vb === "number") cmp = va - vb;
+      else {
+        const da = parseDateLoose(va), db = parseDateLoose(vb);
+        cmp = da && db ? da - db : String(va).localeCompare(String(vb), undefined, { numeric: true });
+      }
+      return dir === "asc" ? cmp : -cmp;
+    });
+  }
+  return rows;
+}
+
+function clStatusBadge(data) {
+  const info = callInfo(data);
+  const st = CALL_STATUS_BY_KEY[info.status];
+  let title = st.label;
+  if (info.status === "attention") title = `Needs Attention: next visit ${clDaysPhrase(info.days)}, no outcome recorded`;
+  return `<span class="cl-badge cl-tone-${st.tone}" title="${esc(title)}"><span class="cl-dot"></span>${esc(st.label)}</span>`;
+}
+function clActionCellHtml(r) {
+  const p = callPill(r.data);
+  return `<div class="cl-action-cell">
+    <button type="button" class="cl-pill cl-tone-${p.tone}" data-cl-open data-uid="${r.uid}" aria-haspopup="dialog" aria-label="Action: ${esc(p.label)}. Change.">
+      <span class="cl-pill-text">${esc(p.label)}</span>${chevronSmallSvg()}
+    </button>${clReminderChip(r.data, r.uid)}
+  </div>`;
+}
+function clRowClass(r) {
+  const info = callInfo(r.data);
+  return (info.key === "progress" ? "cl-row-progress " : "") + (info.status === "attention" ? "cl-row-attn" : "");
+}
+function clRowHtml(cfg, r, cols) {
+  const isExpanded = expandedRows.has(r.uid);
+  const cells = cols.map((c) => {
+    if (c === "__status") return `<td data-col="__status">${clStatusBadge(r.data)}</td>`;
+    if (c === CL.ACTION) return `<td class="cl-action-td" data-col="${esc(c)}">${clActionCellHtml(r)}</td>`;
+    const val = r.data[c] || "";
+    const isDate = clIsDateCol(cfg, c);
+    return `<td class="inline-cell${c === cfg.nameField ? " name-col" : ""}" data-col="${esc(c)}">
+      <div class="inline-cell-wrap">
+        <input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" ${c === CL.TEAM ? 'list="cl-team-list"' : ""} />
+        ${isDate ? `<button type="button" class="cal-btn" data-uid="${r.uid}" data-field="${esc(c)}" title="Pick a date" aria-label="Pick a date for ${esc(c)}">${calendarIconSvg()}</button>` : ""}
+      </div>
+    </td>`;
+  }).join("");
+  const main = `<tr data-row-for="${r.uid}" class="${clRowClass(r)}">${cells}
+    <td class="actions-cell">
+      <button class="btn sm ghost" data-action="toggle-expand" data-uid="${r.uid}" title="${isExpanded ? "Hide details" : "View details"}" aria-label="${isExpanded ? "Hide details" : "View details"}">${isExpanded ? chevronUpSvg() : chevronDownSvg()}</button>
+      <button class="btn sm ghost" data-action="edit-record" data-uid="${r.uid}" title="Edit in a form" aria-label="Edit in a form">${editIconSvg()}</button>
+      <button class="btn sm ghost" data-action="delete-record" data-uid="${r.uid}" title="Archive" aria-label="Archive record">${trashIconSvg()}</button>
+    </td>
+  </tr>`;
+  if (!isExpanded) return main;
+  return main + `<tr class="expand-row" data-expand-for="${r.uid}"><td colspan="${cols.length + 1}">
+    <div class="expand-panel">
+      <strong>${esc(r.displayName || "This record")}</strong>
+      <span class="text-muted" style="margin-left:8px">${esc(cfg.label)}${r.isImported ? " · Imported" : ""}</span>
+      <div class="flex gap-3 mt-2" style="flex-wrap:wrap">
+        ${r.identityKey ? `<a class="link-inline" href="#/patient/${encodeURIComponent(r.identityKey)}">View full patient profile across all tabs →</a>` : ""}
+        <a class="link-inline" href="#/history?uid=${encodeURIComponent(r.uid)}">View change history for this record →</a>
+      </div>
+    </div>
+  </td></tr>`;
+}
+function clRefreshRow(uid) {
+  const region = document.getElementById("cl-table-region");
+  const tr = region && [...region.querySelectorAll("tr[data-row-for]")].find((t) => t.dataset.rowFor === uid);
+  const r = clRecord(uid);
+  if (!tr || !r) return;
+  tr.className = clRowClass(r);
+  const st = [...tr.children].find((td) => td.dataset.col === "__status");
+  if (st) st.innerHTML = clStatusBadge(r.data);
+  const ac = [...tr.children].find((td) => td.dataset.col === CL.ACTION);
+  if (ac) ac.innerHTML = clActionCellHtml(r);
+}
+
+function clRenderTable(cfg) {
+  const region = document.getElementById("cl-table-region");
+  if (!region) return;
+  const cols = clColumns(cfg);
+  const customNames = new Set(clCustomColumns().map((c) => c.name));
+  const everything = clRecords();
+  const rows = clFilteredRows(cfg);
+  const total = rows.length;
+
+  const all = clState.pageSize === "all";
+  const size = all ? Math.max(total, 1) : clState.pageSize;
+  const totalPages = Math.max(1, Math.ceil(total / size));
+  clState.page = Math.min(Math.max(1, clState.page), totalPages);
+  const start = (clState.page - 1) * size;
+  const pageRows = rows.slice(start, start + size);
+
+  const widths = cols.map((c) => clWidth(cfg, c));
+  const tableW = widths.reduce((a, b) => a + b, 0) + CL_ACTIONS_COL_W;
+  const teams = [...new Set(everything.map((r) => String(r.data[CL.TEAM] || "").trim()).filter(Boolean))].sort();
+
+  const th = (c) => `<th data-col="${esc(c)}" draggable="true" title="Drag to reorder · drag the edge to resize · click to sort">
+      <span class="cl-th-label">${esc(clColLabel(c))}</span>${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}${customNames.has(c) ? `<button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Remove this column" aria-label="Remove column ${esc(c)}">×</button>` : ""}
+      <span class="cl-resize" data-col="${esc(c)}" role="separator" aria-orientation="vertical" aria-label="Resize ${esc(clColLabel(c))} column"></span>
+    </th>`;
+
+  const emptyMsg = everything.length
+    ? `<div class="empty-state">${emptyIcon()}<div class="title">No records match your filters</div><div class="desc">Try clearing the search or status filters.</div></div>`
+    : `<div class="empty-state">${emptyIcon()}<div class="title">No patients on this call list yet</div><div class="desc">Use Import Records to bring in the upcoming-appointment call list.</div></div>`;
+
+  region.innerHTML = `
+    <datalist id="cl-team-list">${teams.map((t) => `<option value="${esc(t)}"></option>`).join("")}</datalist>
+    <div class="data-table-wrap cl-table-wrap">
+      <table class="data-table cl-table" style="width:${tableW}px">
+        <colgroup>${cols.map((c, i) => `<col data-col="${esc(c)}" style="width:${widths[i]}px">`).join("")}<col style="width:${CL_ACTIONS_COL_W}px"></colgroup>
+        <thead><tr>${cols.map(th).join("")}<th style="cursor:default">Actions</th></tr></thead>
+        <tbody>
+          ${pageRows.length ? pageRows.map((r) => clRowHtml(cfg, r, cols)).join("") : `<tr><td colspan="${cols.length + 1}">${emptyMsg}</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+    ${all || totalPages === 1 ? "" : `
+    <div class="pagination">
+      <span>Page ${clState.page} of ${totalPages}</span>
+      <div class="pager-btns">
+        <button data-page="1" ${clState.page === 1 ? "disabled" : ""} aria-label="First page">«</button>
+        <button data-page="${clState.page - 1}" ${clState.page === 1 ? "disabled" : ""} aria-label="Previous page">‹</button>
+        <button data-page="${clState.page + 1}" ${clState.page === totalPages ? "disabled" : ""} aria-label="Next page">›</button>
+        <button data-page="${totalPages}" ${clState.page === totalPages ? "disabled" : ""} aria-label="Last page">»</button>
+      </div>
+    </div>`}
+  `;
+
+  const count = document.getElementById("cl-count");
+  if (count) count.textContent = `${fmtNum(total)} record${total === 1 ? "" : "s"}${total !== everything.length ? ` of ${fmtNum(everything.length)}` : ""}`;
+  document.querySelectorAll("#cl-rv button").forEach((b) => b.setAttribute("aria-pressed", String(String(clState.pageSize) === b.dataset.size)));
+  const fs = document.getElementById("cl-filter-status"); if (fs) fs.value = clState.statusFilter;
+  const fr = document.getElementById("cl-filter-remind"); if (fr) fr.value = clState.remindFilter;
+}
+
+function clSyncFilters(cfg) {
+  clState.page = 1;
+  clRenderTable(cfg);
+  clRefreshKpi();
+}
+
+function wireCallListPage(cfg) {
+  clClosePopover();
+  clRenderTable(cfg);
+  const region = document.getElementById("cl-table-region");
+
+  // --- KPI: click a status tile / reminder chip to filter ---
+  document.getElementById("cl-kpi").addEventListener("click", (e) => {
+    const st = e.target.closest("[data-cl-status]");
+    const rm = e.target.closest("[data-cl-remind]");
+    if (st) clState.statusFilter = clState.statusFilter === st.dataset.clStatus ? "" : st.dataset.clStatus;
+    else if (rm) clState.remindFilter = clState.remindFilter === rm.dataset.clRemind ? "" : rm.dataset.clRemind;
+    else return;
+    clSyncFilters(cfg);
+  });
+
+  // --- Toolbar ---
+  document.getElementById("cl-search").addEventListener("input", debounce((e) => { clState.search = e.target.value; clState.page = 1; clRenderTable(cfg); }, 220));
+  document.getElementById("cl-filter-status").addEventListener("change", (e) => { clState.statusFilter = e.target.value; clSyncFilters(cfg); });
+  document.getElementById("cl-filter-remind").addEventListener("change", (e) => { clState.remindFilter = e.target.value; clSyncFilters(cfg); });
+  document.getElementById("cl-reset").addEventListener("click", () => {
+    Object.assign(clState, { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1 });
+    document.getElementById("cl-search").value = "";
+    clSyncFilters(cfg);
+    toast("Filters and sorting reset");
+  });
+  document.getElementById("cl-add-col").addEventListener("click", () => clOpenAddColumnModal(cfg));
+  document.getElementById("cl-export").addEventListener("click", () => clExport(cfg));
+  document.getElementById("cl-rv").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-size]");
+    if (!b) return;
+    // keep the same first-visible row in view when the page size changes
+    const oldSize = clState.pageSize === "all" ? Infinity : clState.pageSize;
+    const firstIdx = oldSize === Infinity ? 0 : (clState.page - 1) * oldSize;
+    clState.pageSize = b.dataset.size === "all" ? "all" : +b.dataset.size;
+    clState.page = clState.pageSize === "all" ? 1 : Math.floor(firstIdx / clState.pageSize) + 1;
+    clRenderTable(cfg);
+  });
+
+  // --- Table (delegated; the region itself persists across re-renders) ---
+  region.addEventListener("click", (e) => {
+    const t = e.target;
+    const pager = t.closest(".pager-btns button[data-page]");
+    if (pager) { clState.page = +pager.dataset.page; clRenderTable(cfg); return; }
+    const rm = t.closest("[data-remove-col]");
+    if (rm) {
+      const name = rm.dataset.removeCol;
+      confirmDialog("Remove this column?", `"${name}" will be hidden for everyone. Values already typed into it stay saved in the records.`, () => {
+        clSaveCustomColumns(clCustomColumns().filter((c) => c.name !== name));
+        logChange({ sheetId: cfg.id, action: "column", summary: `Removed column "${name}" from ${cfg.label}` });
+        toast("Column removed");
+        clRenderTable(cfg);
+      });
+      return;
+    }
+    if (t.closest(".cl-resize")) return;
+    const open = t.closest("[data-cl-open]");
+    if (open) { clOpenActionPopover(open.dataset.uid, open); return; }
+    const cal = t.closest(".cal-btn");
+    if (cal) { openDatePickerFor(cal.parentElement.querySelector(".inline-edit-input")); return; }
+    const act = t.closest("[data-action]");
+    if (act) {
+      const uid = act.dataset.uid;
+      if (act.dataset.action === "toggle-expand") { expandedRows.has(uid) ? expandedRows.delete(uid) : expandedRows.add(uid); clRenderTable(cfg); }
+      else if (act.dataset.action === "edit-record") openEditModal(uid, () => { clRenderTable(cfg); clRefreshKpi(); });
+      else if (act.dataset.action === "delete-record") confirmDialog(
+        "Archive this record?",
+        "It will be hidden from all views but can be restored later. This does not modify the original workbook.",
+        () => { softDeleteRecord(uid); toast("Record archived"); clRenderTable(cfg); clRefreshKpi(); renderSidebar(); });
+      return;
+    }
+    const thEl = t.closest("th[data-col]");
+    if (thEl && !clJustResized) {
+      const field = thEl.dataset.col;
+      clState.sort = clState.sort?.field === field ? { field, dir: clState.sort.dir === "asc" ? "desc" : "asc" } : { field, dir: "asc" };
+      clRenderTable(cfg);
+    }
+  });
+
+  // Inline edits: blur is caught in the capture phase so it also fires for the
+  // synthetic blur the shared date picker dispatches.
+  region.addEventListener("blur", (e) => {
+    const input = e.target;
+    if (!input.classList?.contains("inline-edit-input")) return;
+    const uid = input.dataset.uid, field = input.dataset.field;
+    const rec = clRecord(uid);
+    if (!rec || (rec.data[field] || "") === input.value) return;
+    updateRecord(uid, { [field]: input.value });
+    toast(`Saved "${field}"`);
+    clRefreshRow(uid);
+    clRefreshKpi();
+    renderSidebar();
+  }, true);
+  region.addEventListener("keydown", (e) => {
+    const input = e.target;
+    if (!input.classList?.contains("inline-edit-input")) return;
+    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+    if (e.key === "Escape") { input.value = clRecord(input.dataset.uid)?.data[input.dataset.field] || ""; input.blur(); }
+  });
+
+  // --- Column resize ---
+  region.addEventListener("pointerdown", (e) => {
+    const h = e.target.closest(".cl-resize");
+    if (!h) return;
+    e.preventDefault(); e.stopPropagation();
+    const col = h.dataset.col;
+    const th = h.closest("th");
+    const colEl = [...region.querySelectorAll("col[data-col]")].find((c) => c.dataset.col === col);
+    const table = region.querySelector("table.cl-table");
+    th.draggable = false;
+    const startX = e.clientX, startW = th.getBoundingClientRect().width;
+    let w = startW;
+    h.setPointerCapture(e.pointerId);
+    h.classList.add("active");
+    document.body.classList.add("cl-resizing");
+    const move = (ev) => {
+      w = Math.max(70, Math.round(startW + ev.clientX - startX));
+      colEl.style.width = w + "px";
+      table.style.width = [...table.querySelectorAll("col")].reduce((s, c) => s + parseFloat(c.style.width), 0) + "px";
+    };
+    const up = () => {
+      h.removeEventListener("pointermove", move);
+      h.removeEventListener("pointerup", up);
+      h.removeEventListener("pointercancel", up);
+      h.classList.remove("active");
+      document.body.classList.remove("cl-resizing");
+      th.draggable = true;
+      const l = clLayoutLoad(); l.widths[col] = w; clLayoutSave(l);
+      clJustResized = true; setTimeout(() => { clJustResized = false; }, 0);
+    };
+    h.addEventListener("pointermove", move);
+    h.addEventListener("pointerup", up);
+    h.addEventListener("pointercancel", up);
+  });
+
+  // --- Column drag to reorder ---
+  let dragCol = null;
+  const clearDrop = () => region.querySelectorAll("th.cl-drop-before, th.cl-drop-after, th.cl-dragging").forEach((t) => t.classList.remove("cl-drop-before", "cl-drop-after", "cl-dragging"));
+  region.addEventListener("dragstart", (e) => {
+    const th = e.target.closest?.("th[data-col]");
+    if (!th) return;
+    dragCol = th.dataset.col;
+    th.classList.add("cl-dragging");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", dragCol);
+  });
+  region.addEventListener("dragover", (e) => {
+    const th = e.target.closest?.("th[data-col]");
+    if (!th || !dragCol) return;
+    e.preventDefault();
+    const r = th.getBoundingClientRect();
+    const after = e.clientX > r.left + r.width / 2;
+    region.querySelectorAll("th.cl-drop-before, th.cl-drop-after").forEach((t) => t.classList.remove("cl-drop-before", "cl-drop-after"));
+    if (th.dataset.col !== dragCol) th.classList.add(after ? "cl-drop-after" : "cl-drop-before");
+  });
+  region.addEventListener("drop", (e) => {
+    const th = e.target.closest?.("th[data-col]");
+    if (!th || !dragCol) return;
+    e.preventDefault();
+    const r = th.getBoundingClientRect();
+    clMoveColumn(cfg, dragCol, th.dataset.col, e.clientX > r.left + r.width / 2);
+    dragCol = null; clearDrop();
+    clRenderTable(cfg);
+  });
+  region.addEventListener("dragend", () => { dragCol = null; clearDrop(); });
+}
+let clJustResized = false;
+
+// Background-sync refresh for the call list. Returns true if it handled the refresh.
+function clSoftRefresh() {
+  const { view, param } = parseHash();
+  const region = document.getElementById("cl-table-region");
+  if (view !== "sheet" || param !== CALL_SHEET_ID || !region) return false;
+  if (clPopover) return true; // don't pull the menu out from under someone; the next sync catches up
+  const wrap = region.querySelector(".cl-table-wrap");
+  const pos = wrap ? { top: wrap.scrollTop, left: wrap.scrollLeft } : null;
+  const mainTop = $root.scrollTop;
+  renderSidebar();
+  clRefreshKpi();
+  clRenderTable(SHEET_BY_ID[CALL_SHEET_ID]);
+  const wrap2 = region.querySelector(".cl-table-wrap");
+  if (wrap2 && pos) { wrap2.scrollTop = pos.top; wrap2.scrollLeft = pos.left; }
+  $root.scrollTop = mainTop;
+  return true;
+}
+
+function clExport(cfg) {
+  if (typeof XLSX === "undefined") return toast("Export library did not load (no internet access?)", "error");
+  const cols = clColumns(cfg).filter((c) => c !== "__status");
+  const rows = clFilteredRows(cfg).map((r) => {
+    const o = {};
+    cols.forEach((c) => { o[c] = c === CL.ACTION ? callPill(r.data).label : r.data[c] || ""; });
+    o["Status"] = CALL_STATUS_BY_KEY[callInfo(r.data).status].label;
+    const rm = callReminder(r.data);
+    o["Reminder Date"] = rm?.date ? clFmtMDY(rm.date) : "";
+    return o;
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, cfg.label.slice(0, 31));
+  XLSX.writeFile(wb, `${cfg.label.replace(/[^\w\- ]/g, "")}.xlsx`);
+  toast(`Exported ${fmtNum(rows.length)} record${rows.length === 1 ? "" : "s"} (current filters and column order)`);
+}
+
+// ---------------------------------------------------------------------------
+// Add Column
+// ---------------------------------------------------------------------------
+function clOpenAddColumnModal(cfg) {
+  const modal = openModal(`
+    <div class="modal-header"><div><h3>Add column</h3><p>Adds an editable column to this call list for everyone.</p></div></div>
+    <div class="modal-body">
+      <div class="form-group"><label for="cl-newcol-name">Column name</label><input type="text" id="cl-newcol-name" maxlength="40" autocomplete="off" /></div>
+      <div class="form-group"><label for="cl-newcol-type">Type</label>
+        <select id="cl-newcol-type"><option value="text">Text</option><option value="date">Date (with calendar picker)</option></select>
+      </div>
+      <p class="form-hint" id="cl-newcol-err" role="alert"></p>
+    </div>
+    <div class="modal-footer"><button class="btn" id="cl-newcol-cancel">Cancel</button><button class="btn primary" id="cl-newcol-save">Add Column</button></div>`);
+  const nameEl = modal.querySelector("#cl-newcol-name");
+  const err = modal.querySelector("#cl-newcol-err");
+  nameEl.focus();
+  modal.querySelector("#cl-newcol-cancel").addEventListener("click", closeModal);
+  const save = () => {
+    const name = nameEl.value.trim().replace(/\s+/g, " ");
+    const existing = [...clColumns(cfg).map(clColLabel), ...(RAW_SHEETS[cfg.id]?.headers || []), "Actions", "Status", CL.ATTEMPT, CL.NOTE, CL.RESCHED, CL.REMIND].map((s) => s.toLowerCase());
+    let msg = "";
+    if (!name) msg = "Give the column a name.";
+    else if (existing.includes(name.toLowerCase())) msg = `A column named "${name}" already exists.`;
+    else if (name.startsWith("__")) msg = "Column names can't start with two underscores.";
+    if (msg) { err.textContent = msg; err.classList.add("cl-err"); nameEl.focus(); return; }
+    clSaveCustomColumns([...clCustomColumns(), { name, type: modal.querySelector("#cl-newcol-type").value }]);
+    const l = clLayoutLoad(); l.order = [...clColumns(cfg).filter((c) => c !== name), name]; clLayoutSave(l);
+    logChange({ sheetId: cfg.id, action: "column", summary: `Added column "${name}" to ${cfg.label}` });
+    toast(`Added column "${name}"`);
+    closeModal();
+    clRenderTable(cfg);
+  };
+  modal.querySelector("#cl-newcol-save").addEventListener("click", save);
+  nameEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); save(); } });
+}
+
+// ---------------------------------------------------------------------------
+// Action popover
+// ---------------------------------------------------------------------------
+let clPopover = null;
+let clSuppressOpenUntil = 0;
+const CL_CLEAR = { [CL.ATTEMPT]: "", [CL.NOTE]: "", [CL.REMIND]: "", [CL.RESCHED]: "" };
+
+function clFindPill(uid) {
+  return [...document.querySelectorAll("#cl-table-region .cl-pill[data-cl-open]")].find((b) => b.dataset.uid === uid && !b.classList.contains("dashed") && b.closest(".cl-action-cell").firstElementChild === b) || null;
+}
+function clClosePopover(restoreFocus) {
+  if (!clPopover) return;
+  const { el, onDoc, onKey, onScroll, uid } = clPopover;
+  el.remove();
+  document.removeEventListener("mousedown", onDoc, true);
+  document.removeEventListener("keydown", onKey, true);
+  window.removeEventListener("resize", onScroll);
+  window.removeEventListener("scroll", onScroll, true);
+  clPopover = null;
+  if (restoreFocus) clFindPill(uid)?.focus();
+}
+function clPlacePopover() {
+  if (!clPopover) return;
+  const a = clFindPill(clPopover.uid);
+  if (!a) { clClosePopover(); return; }
+  const r = a.getBoundingClientRect(), p = clPopover.el.getBoundingClientRect();
+  const left = Math.min(Math.max(8, r.left), window.innerWidth - p.width - 8);
+  let top = r.bottom + 6;
+  if (top + p.height > window.innerHeight - 8) top = Math.max(8, r.top - p.height - 6);
+  clPopover.el.style.left = left + "px";
+  clPopover.el.style.top = top + "px";
+}
+function clOpenActionPopover(uid, anchor) {
+  if (Date.now() < clSuppressOpenUntil) return;
+  clClosePopover();
+  const el = document.createElement("div");
+  el.className = "cl-popover";
+  el.setAttribute("role", "dialog");
+  el.setAttribute("aria-label", "Set call action");
+  document.body.appendChild(el);
+  const onDoc = (e) => {
+    if (el.contains(e.target)) return;
+    const own = e.target.closest?.("[data-cl-open]");
+    if (own && own.dataset.uid === uid) clSuppressOpenUntil = Date.now() + 250; // clicking the same pill again just closes
+    clClosePopover();
+  };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); clClosePopover(true); } };
+  const onScroll = () => clPlacePopover();
+  document.addEventListener("mousedown", onDoc, true);
+  document.addEventListener("keydown", onKey, true);
+  window.addEventListener("resize", onScroll);
+  window.addEventListener("scroll", onScroll, true);
+  clPopover = { el, uid, onDoc, onKey, onScroll };
+
+  el.addEventListener("click", (e) => {
+    const t = e.target;
+    const opt = t.closest("[data-cl-act]");
+    const att = t.closest("[data-cl-attempt]");
+    if (opt) clChooseAction(uid, opt.dataset.clAct);
+    else if (att) clApply(uid, { [CL.ATTEMPT]: att.dataset.clAttempt }), clPaintPopover();
+    else if (t.closest("[data-cl-cal]")) { clClosePopover(); clOpenReschedModal(uid); }
+    else if (t.closest("[data-cl-clear]")) { clApply(uid, { [CL.ACTION]: "", ...CL_CLEAR }, { toast: "Action cleared" }); clPaintPopover(); }
+  });
+  el.addEventListener("change", (e) => {
+    if (e.target.id === "cl-note") {
+      const v = e.target.value;
+      clApply(uid, v === "For Callback" ? { [CL.NOTE]: v } : { [CL.NOTE]: v, [CL.REMIND]: "" });
+      clPaintPopover();
+    } else if (e.target.id === "cl-remind") {
+      clApply(uid, { [CL.REMIND]: e.target.value }, { toast: e.target.value ? "Reminder saved" : undefined });
+      clPaintPopover();
+    }
+  });
+  clPaintPopover(true);
+}
+function clChooseAction(uid, key) {
+  const rec = clRecord(uid);
+  if (!rec) return;
+  const d = rec.data;
+  if (key === "resched") { clClosePopover(); clOpenReschedModal(uid); return; }
+  const a = CALL_ACTIONS.find((x) => x.key === key);
+  if (key === "progress") {
+    clApply(uid, { [CL.ACTION]: a.label, [CL.ATTEMPT]: d[CL.ATTEMPT] || "1", [CL.NOTE]: d[CL.NOTE] || "No Answer", [CL.REMIND]: d[CL.REMIND] || "", [CL.RESCHED]: "" });
+  } else {
+    clApply(uid, { ...CL_CLEAR, [CL.ACTION]: a.label }, { toast: key === "call" ? undefined : `Marked "${a.label}"` });
+  }
+  clPaintPopover();
+}
+function clPaintPopover(initial) {
+  if (!clPopover) return;
+  const rec = clRecord(clPopover.uid);
+  if (!rec) { clClosePopover(); return; }
+  const d = rec.data;
+  const info = callInfo(d);
+  const stored = info.key;
+  const hadFocus = document.activeElement?.closest?.(".cl-popover") ? document.activeElement.dataset.f : null;
+  const check = `<svg class="cl-check" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  let h = `<div class="cl-pop-title">${esc(rec.displayName || "Set action")}</div>`;
+  if (info.flagged) h += `<div class="cl-pop-note">Next visit ${clDaysPhrase(info.days)}. Flagged Needs Attention until Confirmed, Refused or Resched is recorded.</div>`;
+  h += `<div class="cl-opts" role="group" aria-label="Action">${CALL_ACTIONS.map((a) => `
+      <button type="button" class="cl-opt cl-tone-${a.tone}${a.key === stored ? " on" : ""}" data-cl-act="${a.key}" data-f="act-${a.key}" aria-pressed="${a.key === stored}">
+        <span class="cl-dot"></span>${esc(a.label)}${a.key === stored ? check : ""}
+      </button>`).join("")}</div>`;
+  if (stored === "progress") {
+    const n = d[CL.ATTEMPT] || "1";
+    const note = d[CL.NOTE] || "";
+    h += `<div class="cl-pop-sec"><span class="cl-pop-label" id="cl-att-l">Attempt</span>
+        <div class="cl-seg" role="group" aria-labelledby="cl-att-l">${["1", "2", "3"].map((v) => `<button type="button" data-cl-attempt="${v}" data-f="att-${v}" aria-pressed="${n === v}">${v}</button>`).join("")}</div></div>
+      <div class="cl-pop-sec"><label class="cl-pop-label" for="cl-note">Notes</label>
+        <select id="cl-note" data-f="note">${note ? "" : `<option value="" selected>Select a note…</option>`}${CALL_NOTES.map((x) => `<option value="${x}" ${x === note ? "selected" : ""}>${x}</option>`).join("")}</select></div>`;
+    if (note === "For Callback") {
+      h += `<div class="cl-pop-sec"><label class="cl-pop-label" for="cl-remind">Reminder date</label>
+        <input type="date" id="cl-remind" data-f="remind" value="${esc(d[CL.REMIND] || "")}" />
+        <div class="cl-pop-hint">Due today shows yellow, overdue red, upcoming blue.</div></div>`;
+    }
+  }
+  if (stored === "resched") {
+    const rd = clIsoToDate(d[CL.RESCHED]);
+    h += `<div class="cl-pop-sec"><span class="cl-pop-label">New date</span>
+      <div>${rd ? `<b>${clFmtMDY(rd)}</b> ` : `<span class="text-muted">No date chosen yet </span>`}<button type="button" class="cl-link-btn" data-cl-cal data-f="cal">${rd ? "Change date" : "Pick a date"}</button></div></div>`;
+  }
+  if (String(d[CL.ACTION] || "").trim()) h += `<div class="cl-pop-foot"><button type="button" class="cl-link-btn muted" data-cl-clear data-f="clear">Clear action</button></div>`;
+  clPopover.el.innerHTML = h;
+  clPlacePopover();
+  const target = hadFocus ? clPopover.el.querySelector(`[data-f="${hadFocus}"]`) : initial ? clPopover.el.querySelector(".cl-opt.on") : null;
+  target?.focus();
+}
+
+// ---------------------------------------------------------------------------
+// Resched: monthly calendar
+// ---------------------------------------------------------------------------
+function clOpenReschedModal(uid) {
+  const rec = clRecord(uid);
+  if (!rec) return;
+  const existing = clIsoToDate(rec.data[CL.RESCHED]);
+  const today = clToday();
+  let selected = existing ? clToIso(existing) : "";
+  const seed = existing || today;
+  let view = new Date(seed.getFullYear(), seed.getMonth(), 1);
+
+  const modal = openModal(`
+    <div class="modal-header"><div><h3>${existing ? "Edit reschedule date" : "Reschedule appointment"}</h3><p>${esc(rec.displayName || "Patient")} · choose the new date</p></div></div>
+    <div class="modal-body"><div class="cl-cal" id="cl-cal"></div><div class="cl-cal-selected" id="cl-cal-sel" aria-live="polite"></div></div>
+    <div class="modal-footer"><button class="btn" id="cl-cal-cancel">Cancel</button><button class="btn primary" id="cl-cal-save" disabled>Save</button></div>`);
+  const cal = modal.querySelector("#cl-cal");
+  const sel = modal.querySelector("#cl-cal-sel");
+  const saveBtn = modal.querySelector("#cl-cal-save");
+
+  const paint = (focusIso) => {
+    const y = view.getFullYear(), m = view.getMonth();
+    const gridStart = new Date(y, m, 1 - new Date(y, m, 1).getDay());
+    let cells = "";
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i);
+      const iso = clToIso(d);
+      const cls = ["cl-cal-day", d.getMonth() !== m ? "dim" : "", iso === clToIso(today) ? "today" : "", iso === selected ? "sel" : ""].join(" ");
+      cells += `<button type="button" class="${cls}" data-iso="${iso}" aria-pressed="${iso === selected}" aria-label="${CALL_MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}">${d.getDate()}</button>`;
+    }
+    cal.innerHTML = `
+      <div class="cl-cal-head">
+        <div class="cl-cal-title" aria-live="polite">${CALL_MONTHS[m]} ${y}</div>
+        <div class="cl-cal-nav">
+          <button type="button" data-nav="-1" aria-label="Previous month">‹</button>
+          <button type="button" data-nav="today">Today</button>
+          <button type="button" data-nav="1" aria-label="Next month">›</button>
+        </div>
+      </div>
+      <div class="cl-cal-grid" role="group" aria-label="Choose a date">
+        ${["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((w) => `<div class="cl-cal-dow" aria-hidden="true">${w}</div>`).join("")}${cells}
+      </div>`;
+    const sd = clIsoToDate(selected);
+    sel.innerHTML = sd ? `Selected: <b>${clFmtMDY(sd)}</b>` : "Select a date";
+    saveBtn.disabled = !sd;
+    if (focusIso) cal.querySelector(`[data-nav="${focusIso}"]`)?.focus();
+  };
+  cal.addEventListener("click", (e) => {
+    const nav = e.target.closest("[data-nav]");
+    const day = e.target.closest("[data-iso]");
+    if (nav) {
+      const v = nav.dataset.nav;
+      view = v === "today" ? new Date(today.getFullYear(), today.getMonth(), 1) : new Date(view.getFullYear(), view.getMonth() + +v, 1);
+      paint(v);
+    } else if (day) {
+      selected = day.dataset.iso;
+      const dd = clIsoToDate(selected);
+      if (dd.getMonth() !== view.getMonth()) view = new Date(dd.getFullYear(), dd.getMonth(), 1);
+      paint();
+      cal.querySelector(`[data-iso="${selected}"]`)?.focus();
+    }
+  });
+  modal.querySelector("#cl-cal-cancel").addEventListener("click", closeModal);
+  saveBtn.addEventListener("click", () => {
+    const sd = clIsoToDate(selected);
+    if (!sd) return;
+    clApply(uid, { ...CL_CLEAR, [CL.ACTION]: "Resched", [CL.RESCHED]: selected }, { toast: `Rescheduled – ${clFmtMDY(sd)}` });
+    closeModal();
+  });
+  paint();
+}
 
 // ============================================================================
 // TOP BAR SEARCH
