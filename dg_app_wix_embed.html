@@ -1188,8 +1188,9 @@ function ensureDefaultSheets() {
     } else {
       if (!Array.isArray(cur.headers) || !cur.headers.length) cur.headers = defaultHeadersForSheet(cfg);
       if (!Array.isArray(cur.rows)) cur.rows = [];
-      // DG Pharmacy always has an Assigned To column (Status is derived from it).
-      if (cfg.id === "dg_pharmacy" && !cur.headers.some((h) => String(h).trim().toLowerCase() === "assigned to")) cur.headers.push("Assigned To");
+      // Tabs whose Status is derived from a column always carry that column.
+      const need = { dg_pharmacy: ["Assigned To"], dg_osteoporosis_pas: ["Patient Name", "Acc #", "DRUG", "NEXT APPT", "INSURANCE", "PA", "50/50 TO JP AND SU"] }[cfg.id];
+      if (need) need.forEach((n) => { if (!cur.headers.some((h) => String(h).trim().toLowerCase() === n.toLowerCase())) cur.headers.push(n); });
     }
   }
 }
@@ -1332,9 +1333,10 @@ const SHEET_CONFIG = [
     nameField: "Patient Name",
     acctField: "Acc #",
     dateFields: ["NEXT APPT"],
-    completion: { field: "PA Status", mode: "value-not-equal", value: "NO PA", label: "PA status is not \"NO PA\"" },
-    searchFields: ["Patient Name", "Acc #", "DRUG", "INSURANCE"],
-    inlineFields: ["PA Status", "50/50 TO JP AND SU"],
+    completion: { field: "50/50 TO JP AND SU", mode: "nonblank", label: "Assigned to JP or SU (or marked cancelled)" },
+    searchFields: ["Patient Name", "Acc #", "DRUG", "INSURANCE", "PA", "50/50 TO JP AND SU"],
+    inlineFields: ["PA", "50/50 TO JP AND SU"],
+    defaultHeaders: ["Patient Name", "Acc #", "DRUG", "NEXT APPT", "INSURANCE", "PA", "50/50 TO JP AND SU"],
   },
   {
     id: "ra",
@@ -4208,8 +4210,23 @@ function uploadIconIllus() { return `<div class="icon">${'<svg width="40" height
 // ============================================================================
 let CALL_SHEET_ID = "call_list_upcoming";
 let clLastSheet = "call_list_upcoming";
-function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming" || id === "dg_infusion_pas" || id === "dg_pharmacy"; }
+function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming" || id === "dg_infusion_pas" || id === "dg_pharmacy" || id === "dg_osteoporosis_pas"; }
 function clIsPharmacy() { return CALL_SHEET_ID === "dg_pharmacy"; }
+function clIsOsteo() { return CALL_SHEET_ID === "dg_osteoporosis_pas"; }
+// ---- DG Osteoporosis PAs: status comes from the "50/50 TO JP AND SU" column ----
+const OP = { ASSIGN: "50/50 TO JP AND SU", PA: "PA", NEXT: "NEXT APPT" };
+// Any spelling of a provider maps to one of JP / SU; "cancel*" means cancelled; anything else typed is shown as typed.
+function opAssign(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return { key: "none", label: "" };
+  const l = s.toLowerCase();
+  if (/cancel/.test(l)) return { key: "cancelled", label: "Cancelled" };
+  const jp = /\b(jp|justin|putz)\b/.test(l), su = /\b(su|sabahat|usmani)\b/.test(l);
+  if (jp && su) return { key: "both", label: "JP & SU" };
+  if (jp) return { key: "jp", label: "JP" };
+  if (su) return { key: "su", label: "SU" };
+  return { key: "other", label: s };
+}
 // Every worksheet tab now uses this shared table (checkbox select, bulk delete, drag/resize/add columns).
 // "Generic" = a tab without its own custom workflow; it keeps its normal completion-based Status.
 function isTableSheet(id) { return !!SHEET_BY_ID[id]; }
@@ -4226,12 +4243,20 @@ function clUse(id) {
 }
 function clAssignSt(data) {
   if (clIsGeneric()) return { key: "none", tone: "gray", label: "" };
+  if (clIsOsteo()) {
+    const i = callInfo(data);
+    if (i.cancelled) return { key: "cancelled", tone: "gray", label: "Cancelled" };
+    if (i.assigned) return { key: "assigned", tone: i.key === "jp" ? "blue" : i.key === "su" ? "violet" : "green", label: "Assigned to " + i.label };
+    if (i.flagged) return { key: "attention", tone: "attn", label: "Needs Attention" };
+    return { key: "pending", tone: "red", label: "Unassigned" };
+  }
   const k = callInfo(data).assigned ? "assigned" : "pending";
   const st = CALL_STATUS_BY_KEY[k];
   if (clIsInfusion() || clIsPharmacy()) return { ...st, tone: k === "assigned" ? "green" : "red", label: k === "assigned" ? "Assigned" : "Unassigned" };
   return clIsTransition() ? { ...st, tone: k === "assigned" ? "green" : "red" } : st;
 }
 function clStatusOptions() {
+  if (clIsOsteo()) return [{ key: "pending", label: "Unassigned" }, { key: "jp", label: "Assigned to JP" }, { key: "su", label: "Assigned to SU" }, { key: "pa", label: "Pending PA" }, { key: "attention", label: "Needs Attention" }, { key: "cancelled", label: "Cancelled" }];
   if (clIsGeneric()) return Object.keys(STATUS_META).map((k) => ({ key: k, label: STATUS_META[k].label }));
   if (clIsPharmacy()) return [{ key: "pending", label: "Unassigned" }, { key: "assigned", label: "Assigned" }];
   if (clIsInfusion()) return [
@@ -4276,6 +4301,16 @@ const CALL_STATUSES = [
 ];
 // Tiles/filters: pending + assigned come from the Team Member column; the rest mirror the Action column pill.
 function clStatusMatch(data, key) {
+  if (clIsOsteo()) {
+    const i = callInfo(data);
+    if (key === "pending") return !i.assigned && !i.cancelled;
+    if (key === "jp") return i.key === "jp" || i.key === "both";
+    if (key === "su") return i.key === "su" || i.key === "both";
+    if (key === "pa") return i.paPending;
+    if (key === "attention") return i.flagged;
+    if (key === "cancelled") return i.cancelled;
+    return true;
+  }
   if (clIsPharmacy()) {
     const i = callInfo(data);
     if (key === "pending") return !i.assigned;
@@ -4305,7 +4340,7 @@ function clStatusMatch(data, key) {
   return callPill(data).key === key;
 }
 const CALL_STATUS_BY_KEY = Object.fromEntries(CALL_STATUSES.map((s) => [s.key, s]));
-const CALL_GENERIC_STATUS = { "t-assigned": "complete", "t-unassigned": "pending", pending: "pending", assigned: "pending", progress: "in-progress", confirmed: "complete", refused: "complete", resched: "complete", attention: "needs-attention" };
+const CALL_GENERIC_STATUS = { "o-assigned": "complete", "o-cancelled": "complete", "o-unassigned": "pending", "t-assigned": "complete", "t-unassigned": "pending", pending: "pending", assigned: "pending", progress: "in-progress", confirmed: "complete", refused: "complete", resched: "complete", attention: "needs-attention" };
 const CALL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 const clSel = new Set();
@@ -4371,9 +4406,10 @@ const CL_CORR_STATUS = "CORRECTION STATUS";
 const CL_PA_FIELD = "PRIOR AUTH INITIATED/DONE:";
 function clIsInfusion() { return CALL_SHEET_ID === "dg_infusion_pas"; }
 function clTeamField(id) {
-  if (id !== "dg_pharmacy") return "Team Member";
-  const h = ((RAW_SHEETS.dg_pharmacy && RAW_SHEETS.dg_pharmacy.headers) || []).find((x) => String(x).trim().toLowerCase() === "assigned to");
-  return h || "Assigned To";
+  const want = id === "dg_pharmacy" ? "Assigned To" : id === "dg_osteoporosis_pas" ? "50/50 TO JP AND SU" : null;
+  if (!want) return "Team Member";
+  const h = ((RAW_SHEETS[id] && RAW_SHEETS[id].headers) || []).find((x) => String(x).trim().toLowerCase() === want.toLowerCase());
+  return h || want;
 }
 function clPaKey(v) {
   const s = String(v || "").trim().toLowerCase();
@@ -4496,6 +4532,17 @@ function clDaysPhrase(days) {
 // is deliberately never applied once Confirmed / Refused / Resched is recorded.
 function callInfo(data) {
   if (clIsGeneric()) return { key: "none", done: false, days: null, flagged: false, assigned: false, scheduled: false, status: "generic" };
+  if (clIsOsteo()) {
+    const a = opAssign(data[CL.TEAM]);
+    const cancelled = a.key === "cancelled";
+    const assigned = !cancelled && a.key !== "none";
+    const nd = parseDateLoose(data[OP.NEXT]);
+    const days = nd ? clDaysFromToday(nd) : null;
+    const flagged = a.key === "none" && days !== null && days <= CL.ATTN_DAYS;
+    const paPending = !cancelled && !String(data[OP.PA] || "").trim();
+    const status = cancelled ? "o-cancelled" : assigned ? "o-assigned" : flagged ? "attention" : "o-unassigned";
+    return { key: a.key, label: a.label, done: cancelled || assigned, days, flagged, assigned, cancelled, paPending, scheduled: false, status };
+  }
   if (clIsPharmacy()) {
     const assigned = !!String(data[CL.TEAM] || "").trim();
     return { key: "none", done: assigned, days: null, flagged: false, assigned, scheduled: false, status: assigned ? "t-assigned" : "t-unassigned" };
@@ -4534,7 +4581,7 @@ function callReminder(data) {
 }
 function callPill(data) {
   if (clIsGeneric()) return { key: "none", tone: "gray", label: "" };
-  if (clIsPharmacy()) return { key: "none", tone: "gray", label: "" };
+  if (clIsPharmacy() || clIsOsteo()) return { key: "none", tone: "gray", label: "" };
   if (clIsInfusion()) {
     const pi = callInfo(data);
     return { key: pi.key, tone: "gray", label: { sent: "Sent", resubmit: "Resubmit", approved: "Approved", others: "Others" }[pi.key] || "" };
@@ -4621,14 +4668,14 @@ function clSaveCustomColumns(cols) {
 }
 function clColumns(cfg) {
   let all = (RAW_SHEETS[cfg.id]?.headers || []).slice();
-  if (clIsPharmacy()) {
-    // Status is always derived from Assigned To, so any stored "Status" header is replaced by the computed column.
-    all = all.filter((h) => String(h).trim().toLowerCase() !== "status");
+  if (clIsPharmacy() || clIsOsteo()) {
+    // Status is always derived from the assignment column, so any stored "Status" header is replaced by the computed column.
+    all = all.filter((h) => !/^(pa )?status$/i.test(String(h).trim()));
     if (!all.includes(CL.TEAM)) all.push(CL.TEAM);
   }
   if (clIsCallList() && !all.includes(CL.ACTION)) all.push(CL.ACTION);
   clCustomColumns().forEach((c) => { if (!all.includes(c.name)) all.push(c.name); });
-  if (clIsInfusion() || clIsPharmacy()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else if (!(clIsGeneric() && cfg.isReference)) all.push("__status");
+  if (clIsInfusion() || clIsPharmacy() || clIsOsteo()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else if (!(clIsGeneric() && cfg.isReference)) all.push("__status");
   const out = [];
   clLayoutLoad().order.forEach((k) => { if (all.includes(k) && !out.includes(k)) out.push(k); });
   all.forEach((k) => { if (!out.includes(k)) out.push(k); });
@@ -4636,6 +4683,14 @@ function clColumns(cfg) {
 }
 function clColLabel(col) { return col === "__status" ? "Status" : col; }
 function clDefaultWidth(cfg, col) {
+  if (clIsOsteo()) {
+    if (col === "__status") return 180;
+    if (col === cfg.nameField) return 180;
+    if (col === cfg.acctField) return 90;
+    if (col === CL.TEAM) return 160;
+    if (col === "NEXT APPT") return 150;
+    if (col === "DRUG" || col === "PA" || col === "INSURANCE") return 140;
+  }
   if (clIsGeneric()) {
     if (col === "__status") return 140;
     if (col === cfg.nameField) return 200;
@@ -4749,7 +4804,42 @@ function clGenericKpiHtml() {
       ${kpiCard({ label: "Duplicates", value: fmtNum(stats.dupCount), icon: "copy", sub: stats.dupCount ? "Review in Duplicate Management" : "None found", cls: stats.dupCount ? "warn" : "positive" })}
     </div>`;
 }
+function clOsteoKpiHtml() {
+  const recs = clRecords();
+  const c = { total: recs.length, pending: 0, jp: 0, su: 0, pa: 0, attn: 0, cancelled: 0 };
+  recs.forEach((r) => {
+    const i = callInfo(r.data);
+    if (i.cancelled) c.cancelled++;
+    else if (!i.assigned) c.pending++;
+    if (i.key === "jp" || i.key === "both") c.jp++;
+    if (i.key === "su" || i.key === "both") c.su++;
+    if (i.paPending) c.pa++;
+    if (i.flagged) c.attn++;
+  });
+  const pctOf = (n) => (c.total ? Math.round((n / c.total) * 100) : 0);
+  const bar = (label, p) => `<span class="cl-stat-bar" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p}"><span class="cl-stat-bar-fill" style="width:${p}%"></span></span>`;
+  const tile = (t) => {
+    const p = t.nopct ? (c.total ? 100 : 0) : pctOf(t.n);
+    return `<button type="button" class="cl-stat cl-tone-${t.tone}" data-cl-status="${t.key}" aria-pressed="${t.key !== "" && clState.statusFilter === t.key}" title="${esc(t.sub)} · click to show these records">
+      <span class="cl-stat-count">${fmtNum(t.n)}${t.nopct ? "" : `<span class="cl-stat-pct" title="Share of all records">${p}%</span>`}</span>
+      <span class="cl-stat-label"><span class="cl-dot"></span>${esc(t.label)}</span>
+      <span class="cl-stat-sub">${esc(t.sub)}</span>
+      ${bar(t.label + " share of total", p)}
+    </button>`;
+  };
+  const tiles = [
+    { key: "", tone: "gray", label: "Total", n: c.total, sub: "All records in this tab", nopct: true },
+    { key: "pending", tone: "red", label: "Unassigned", n: c.pending, sub: "Nothing in 50/50 TO JP AND SU" },
+    { key: "jp", tone: "blue", label: "Assigned to JP", n: c.jp, sub: "Justin Putz" },
+    { key: "su", tone: "violet", label: "Assigned to SU", n: c.su, sub: "Sabahat Usmani" },
+    { key: "pa", tone: "yellow", label: "Pending PA", n: c.pa, sub: "No data in the PA column" },
+    { key: "attention", tone: "orange", label: "Needs Attention", n: c.attn, sub: "Unassigned, appt within " + CL.ATTN_DAYS + " days" },
+    { key: "cancelled", tone: "gray", label: "Cancelled", n: c.cancelled, sub: "No assignment needed" },
+  ];
+  return `<div class="cl-stats cl-stats-4" role="group" aria-label="Osteoporosis PA summary">${tiles.map(tile).join("")}</div>`;
+}
 function clKpiHtml() {
+  if (clIsOsteo()) return clOsteoKpiHtml();
   if (clIsGeneric()) return clGenericKpiHtml();
   if (clIsPharmacy()) return clPharmacyKpiHtml();
   if (clIsInfusion()) return clInfusionKpiHtml();
@@ -4798,12 +4888,12 @@ function clRefreshKpi() {
 function renderCallListPage(cfg) {
   const dupGroups = getDuplicateGroupsForSheet(cfg.id);
   return `
-    <div class="cl-kpi-wrap${clIsInfusion() || clIsGeneric() ? " cl-kpi-static" : ""}" id="cl-kpi">${clKpiHtml()}</div>
+    <div class="cl-kpi-wrap${clIsInfusion() || clIsGeneric() || clIsOsteo() ? " cl-kpi-static" : ""}" id="cl-kpi">${clKpiHtml()}</div>
 
     <div class="page-header">
       <div>
         <div class="page-title">${esc(cfg.label)}</div>
-        <div class="page-subtitle">${clIsGeneric() ? esc(sheetDescription(cfg)) : clIsPharmacy() ? "Enter a name in Assigned To for each patient. Status follows Assigned To: Assigned once someone is entered, Unassigned while it is blank." : clIsInfusion() ? "Assign each authorization to a Team Member. Status follows Team Member (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
+        <div class="page-subtitle">${clIsGeneric() ? esc(sheetDescription(cfg)) : clIsOsteo() ? "Type JP or SU (or Justin / Putz, Sabahat / Usmani) in 50/50 TO JP AND SU to assign, or Cancelled to cancel. Unassigned patients with an appointment within 7 days are flagged Needs Attention." : clIsPharmacy() ? "Enter a name in Assigned To for each patient. Status follows Assigned To: Assigned once someone is entered, Unassigned while it is blank." : clIsInfusion() ? "Assign each authorization to a Team Member. Status follows Team Member (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
       </div>
       <div class="page-header-actions">
         ${clIsGeneric() && !cfg.isReference ? `<button class="btn" id="btn-completion-criteria">${gearIconSvg()} Completion Criteria</button>` : ""}
@@ -4826,7 +4916,7 @@ function renderCallListPage(cfg) {
         <option value="">All statuses</option>
         ${clStatusOptions().map((s) => `<option value="${s.key}" ${clState.statusFilter === s.key ? "selected" : ""}>${esc(s.label)}</option>`).join("")}
       </select>
-      <select class="filter-select" id="cl-filter-remind" aria-label="Filter by callback reminder" ${(clIsTransition() || clIsInfusion() || clIsPharmacy() || clIsGeneric()) ? 'style="display:none"' : ""}>
+      <select class="filter-select" id="cl-filter-remind" aria-label="Filter by callback reminder" ${(clIsTransition() || clIsInfusion() || clIsPharmacy() || clIsOsteo() || clIsGeneric()) ? 'style="display:none"' : ""}>
         <option value="">All reminders</option>
         <option value="today" ${clState.remindFilter === "today" ? "selected" : ""}>Callback due today</option>
         <option value="overdue" ${clState.remindFilter === "overdue" ? "selected" : ""}>Callback overdue</option>
@@ -4850,6 +4940,7 @@ function renderCallListPage(cfg) {
 
 function clSortValue(r, col) {
   if (clIsGeneric() && col === "__status") return r.status || "";
+  if (clIsOsteo() && col === "__status") return clAssignSt(r.data).label;
   if (col === "__status") return CALL_STATUSES.findIndex((s) => s.key === (callInfo(r.data).assigned ? "assigned" : "pending"));
   if (col === CL.ACTION) return callPill(r.data).label;
   return r.data[col] || "";
@@ -4888,7 +4979,7 @@ function clStatusBadge(data, rec) {
   const info = callInfo(data);
   const st = clAssignSt(data);
   let title = st.label;
-  if (info.status === "attention") title = `Needs Attention: next visit ${clDaysPhrase(info.days)}, no outcome recorded`;
+  if (info.status === "attention") title = clIsOsteo() ? `Needs Attention: not yet assigned and the next appointment ${clDaysPhrase(info.days)}` : `Needs Attention: next visit ${clDaysPhrase(info.days)}, no outcome recorded`;
   return `<span class="cl-badge cl-tone-${st.tone}" title="${esc(title)}"><span class="cl-dot"></span>${esc(st.label)}</span>`;
 }
 function clActionCellHtml(r) {
@@ -4911,7 +5002,7 @@ function clRowHtml(cfg, r, cols) {
   const isExpanded = expandedRows.has(r.uid);
   const cells = cols.map((c) => {
     if (c === "__status") return `<td data-col="__status">${clStatusBadge(r.data, r)}</td>`;
-    if (c === CL.ACTION && !clIsInfusion() && !clIsPharmacy()) return `<td class="cl-action-td" data-col="${esc(c)}">${clActionCellHtml(r)}</td>`;
+    if (c === CL.ACTION && clIsCallList()) return `<td class="cl-action-td" data-col="${esc(c)}">${clActionCellHtml(r)}</td>`;
  if (clIsInfusion() && clIsWrapCol(c) && !clIsDateCol(cfg, c)) return clWrapCellHtml(cfg, r, c);
     const val = r.data[c] || "";
     const isDate = clIsDateCol(cfg, c);
@@ -4973,7 +5064,7 @@ function clRenderTable(cfg) {
 
   const widths = cols.map((c) => clWidth(cfg, c));
   const tableW = widths.reduce((a, b) => a + b, 0) + CL_ACTIONS_COL_W + CL_SEL_COL_W;
-  const teams = [...new Set(everything.map((r) => String(r.data[CL.TEAM] || "").trim()).filter(Boolean))].sort();
+  const teams = [...new Set([...(clIsOsteo() ? ["JP", "SU", "Cancelled"] : []), ...everything.map((r) => String(r.data[CL.TEAM] || "").trim()).filter(Boolean)])].sort();
 
   const th = (c) => `<th data-col="${esc(c)}" draggable="true" title="Drag to reorder · drag the edge to resize · click to sort">
       <span class="cl-th-label">${esc(clColLabel(c))}</span>${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}${customNames.has(c) ? `<button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Remove this column" aria-label="Remove column ${esc(c)}">×</button>` : ""}
@@ -4982,7 +5073,7 @@ function clRenderTable(cfg) {
 
   const emptyMsg = everything.length
     ? `<div class="empty-state">${emptyIcon()}<div class="title">No records match your filters</div><div class="desc">Try clearing the search or status filters.</div></div>`
-    : `<div class="empty-state">${emptyIcon()}<div class="title">${clIsGeneric() ? "No records in this tab yet" : "No patients on this call list yet"}</div><div class="desc">${clIsGeneric() ? (cfg.isReference ? "This reference table has no rows yet." : "Use Import Records or Add Row to add records to this tab.") : clIsPharmacy() ? "Use Import Records or Add Row to add pharmacy patients." : clIsInfusion() ? "Use Import Records or Add Row to add infusion prior authorizations." : clIsTransition() ? "Use Import Records or Add Row to bring in the patients who need a transition." : "Use Import Records to bring in the upcoming-appointment call list."}</div></div>`;
+    : `<div class="empty-state">${emptyIcon()}<div class="title">${clIsGeneric() || clIsOsteo() ? "No records in this tab yet" : "No patients on this call list yet"}</div><div class="desc">${clIsGeneric() ? (cfg.isReference ? "This reference table has no rows yet." : "Use Import Records or Add Row to add records to this tab.") : clIsOsteo() ? "Use Import Records or Add Row to add osteoporosis prior authorizations." : clIsPharmacy() ? "Use Import Records or Add Row to add pharmacy patients." : clIsInfusion() ? "Use Import Records or Add Row to add infusion prior authorizations." : clIsTransition() ? "Use Import Records or Add Row to bring in the patients who need a transition." : "Use Import Records to bring in the upcoming-appointment call list."}</div></div>`;
 
   region.innerHTML = `
     <datalist id="cl-team-list">${teams.map((t) => `<option value="${esc(t)}"></option>`).join("")}</datalist>
@@ -5035,6 +5126,7 @@ function wireCallListPage(cfg) {
     else if (rm) clState.remindFilter = clState.remindFilter === rm.dataset.clRemind ? "" : rm.dataset.clRemind;
     else return;
     clSyncFilters(cfg);
+    if (clIsOsteo() && st && clState.statusFilter) document.getElementById("cl-toolbar")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   // --- Toolbar ---
