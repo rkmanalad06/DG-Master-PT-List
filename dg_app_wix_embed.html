@@ -1189,7 +1189,7 @@ function ensureDefaultSheets() {
       if (!Array.isArray(cur.headers) || !cur.headers.length) cur.headers = defaultHeadersForSheet(cfg);
       if (!Array.isArray(cur.rows)) cur.rows = [];
       // Tabs whose Status is derived from a column always carry that column.
-      const need = { dg_pharmacy: ["Assigned To"], ra: ["Patient Name", "DOB", "Sex", "Age", "Home Phone", "Acc #", "Assigned to"], dg_osteoporosis_pas: ["Patient Name", "Acc #", "DRUG", "NEXT APPT", "INSURANCE", "PA", "50/50 TO JP AND SU"] }[cfg.id];
+      const need = (ASSIGN_TABS[cfg.id] || cfg.id === "dg_osteoporosis_pas") ? cfg.defaultHeaders : null;
       if (need) need.forEach((n) => { if (!cur.headers.some((h) => String(h).trim().toLowerCase() === n.toLowerCase())) cur.headers.push(n); });
     }
   }
@@ -1365,8 +1365,10 @@ const SHEET_CONFIG = [
     dobField: "DOB",
     phoneField: "Home Phone",
     dateFields: ["DOB"],
-    completion: { field: null, mode: "manual", label: "Roster with no status field — tracked manually" },
-    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+    completion: { field: "Assigned to", mode: "nonblank", label: "Assigned to is filled in" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone", "Assigned to"],
+    inlineFields: ["Assigned to"],
+    defaultHeaders: ["Patient Name", "DOB", "Sex", "Age", "Home Phone", "Acc #", "Assigned to"],
   },
   {
     id: "psoriatic_arthritis",
@@ -1379,8 +1381,10 @@ const SHEET_CONFIG = [
     dobField: "DOB",
     phoneField: "Home Phone",
     dateFields: ["DOB"],
-    completion: { field: null, mode: "manual", label: "Roster with no status field — tracked manually" },
-    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+    completion: { field: "Assigned to", mode: "nonblank", label: "Assigned to is filled in" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone", "Assigned to"],
+    inlineFields: ["Assigned to"],
+    defaultHeaders: ["Patient Name", "DOB", "Sex", "Age", "Home Phone", "Acc #", "Assigned to"],
   },
   {
     id: "psoriasis",
@@ -1393,8 +1397,10 @@ const SHEET_CONFIG = [
     dobField: "DOB",
     phoneField: "Home Phone",
     dateFields: ["DOB"],
-    completion: { field: null, mode: "manual", label: "Roster with no status field — tracked manually" },
-    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+    completion: { field: "Assigned to", mode: "nonblank", label: "Assigned to is filled in" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone", "Assigned to"],
+    inlineFields: ["Assigned to"],
+    defaultHeaders: ["Patient Name", "DOB", "Sex", "Age", "Home Phone", "Acc #", "Assigned to"],
   },
   {
     id: "psa_and_psoriasis",
@@ -1420,8 +1426,10 @@ const SHEET_CONFIG = [
     dobField: "DOB",
     phoneField: "Home Phone",
     dateFields: ["DOB"],
-    completion: { field: null, mode: "manual", label: "Roster with no status field — tracked manually" },
-    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+    completion: { field: "Assigned to", mode: "nonblank", label: "Assigned to is filled in" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone", "Assigned to"],
+    inlineFields: ["Assigned to"],
+    defaultHeaders: ["Patient Name", "DOB", "Sex", "Age", "Home Phone", "Acc #", "Assigned to"],
   },
   {
     id: "gca",
@@ -4214,7 +4222,7 @@ let CALL_SHEET_ID = "call_list_upcoming";
 let clLastSheet = "call_list_upcoming";
 function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming" || id === "dg_infusion_pas" || !!ASSIGN_TABS[id] || id === "dg_osteoporosis_pas"; }
 // Tabs whose Status is simply Assigned (data in the column) / Unassigned (blank). Value = the assignment column.
-const ASSIGN_TABS = { dg_pharmacy: "Assigned To", ra: "Assigned to" };
+const ASSIGN_TABS = { dg_pharmacy: "Assigned To", ra: "Assigned to", seronegative_ra: "Assigned to", psoriatic_arthritis: "Assigned to", psoriasis: "Assigned to", pmr: "Assigned to" };
 function clIsAssignTab() { return !!ASSIGN_TABS[CALL_SHEET_ID]; }
 function clIsOsteo() { return CALL_SHEET_ID === "dg_osteoporosis_pas"; }
 // ---- DG Osteoporosis PAs: status comes from the "50/50 TO JP AND SU" column ----
@@ -5081,7 +5089,7 @@ function clRenderTable(cfg) {
 
   const emptyMsg = everything.length
     ? `<div class="empty-state">${emptyIcon()}<div class="title">No records match your filters</div><div class="desc">Try clearing the search or status filters.</div></div>`
-    : `<div class="empty-state">${emptyIcon()}<div class="title">${clIsGeneric() || clIsOsteo() ? "No records in this tab yet" : "No patients on this call list yet"}</div><div class="desc">${clIsGeneric() ? (cfg.isReference ? "This reference table has no rows yet." : "Use Import Records or Add Row to add records to this tab.") : clIsOsteo() ? "Use Import Records or Add Row to add osteoporosis prior authorizations." : clIsAssignTab() ? `Use Import Records or Add Row to add patients to ${cfg.label}.` : clIsInfusion() ? "Use Import Records or Add Row to add infusion prior authorizations." : clIsTransition() ? "Use Import Records or Add Row to bring in the patients who need a transition." : "Use Import Records to bring in the upcoming-appointment call list."}</div></div>`;
+    : `<div class="empty-state">${emptyIcon()}<div class="title">${clIsGeneric() || clIsOsteo() || clIsAssignTab() ? "No records in this tab yet" : "No patients on this call list yet"}</div><div class="desc">${clIsGeneric() ? (cfg.isReference ? "This reference table has no rows yet." : "Use Import Records or Add Row to add records to this tab.") : clIsOsteo() ? "Use Import Records or Add Row to add osteoporosis prior authorizations." : clIsAssignTab() ? `Use Import Records or Add Row to add patients to ${cfg.label}.` : clIsInfusion() ? "Use Import Records or Add Row to add infusion prior authorizations." : clIsTransition() ? "Use Import Records or Add Row to bring in the patients who need a transition." : "Use Import Records to bring in the upcoming-appointment call list."}</div></div>`;
 
   region.innerHTML = `
     <datalist id="cl-team-list">${teams.map((t) => `<option value="${esc(t)}"></option>`).join("")}</datalist>
