@@ -1073,6 +1073,7 @@ td.cl-action-td { white-space: normal; }
 .cl-cal-selected { text-align: center; margin-top: 12px; font-size: 13px; color: var(--text-secondary); min-height: 20px; }
 .cl-cal-selected b { color: var(--text-primary); }
 .cl-err { color: var(--status-attention) !important; }
+.cl-stat-pct{font-size:11px;font-weight:600;color:var(--text-secondary);margin-left:6px;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -1113,7 +1114,83 @@ td.cl-action-td { white-space: normal; }
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
   <script>
 // AUTO-GENERATED from the source workbook. Do not hand-edit; re-run the extraction script instead.
-let RAW_SHEETS = {}; // Populated at runtime from the authenticated backend (see bootStore()) when embedded on Wix. Empty in standalone/local mode unless you paste in your own data for offline testing.
+let RAW_SHEETS = {};
+function defaultHeadersForSheet(cfg) {
+  const out = [];
+  const add = (h) => { if (h && typeof h === "string" && !out.includes(h)) out.push(h); };
+  add(cfg.nameField); add(cfg.dobField); add(cfg.acctField); add(cfg.phoneField);
+  (cfg.dateFields || []).forEach(add);
+  add(cfg.completion && cfg.completion.field);
+  (cfg.inlineFields || []).forEach(add);
+  (cfg.searchFields || []).forEach(add);
+  return out;
+}
+
+function ensureDefaultSheets() {
+  if (!RAW_SHEETS || typeof RAW_SHEETS !== "object") RAW_SHEETS = {};
+  for (const cfg of SHEET_CONFIG) {
+    const cur = RAW_SHEETS[cfg.id];
+    if (!cur) {
+      RAW_SHEETS[cfg.id] = { sheetName: cfg.label, headers: defaultHeadersForSheet(cfg), rowCount: 0, rows: [] };
+    } else {
+      if (!Array.isArray(cur.headers) || !cur.headers.length) cur.headers = defaultHeadersForSheet(cfg);
+      if (!Array.isArray(cur.rows)) cur.rows = [];
+    }
+  }
+}
+
+function openAddRowModal(cfg) {
+  const base = (RAW_SHEETS[cfg.id] && RAW_SHEETS[cfg.id].headers) || [];
+  const isCall = !!(cfg.completion && cfg.completion.mode === "call-outcome");
+  const skipCol = isCall ? cfg.completion.field : null;
+  const fields = base.filter((h) => h && h !== skipCol);
+  const dateSet = new Set(cfg.dateFields || []);
+  const wideRe = /note|comment|remark/i;
+  const inputHtml = (h, i) => {
+    const id = "addrow-f" + i;
+    const kind = dateSet.has(h) ? "date" : h === cfg.phoneField ? "tel" : "text";
+    const span = wideRe.test(h) ? ' style="grid-column:1 / -1;margin:0"' : ' style="margin:0"';
+    return `<div class="form-group"${span}><label for="${id}">${esc(h)}</label><input type="${kind}" id="${id}" data-h="${esc(h)}" data-kind="${kind}" autocomplete="off" /></div>`;
+  };
+  const modal = openModal(`
+    <div class="modal-header"><div><h3>Add row</h3><p>Add a record to ${esc(cfg.label)} by hand.</p></div></div>
+    <div class="modal-body">
+      ${fields.length ? `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">${fields.map(inputHtml).join("")}</div>` : `<p class="form-hint">This tab has no columns yet.</p>`}
+      <p class="form-hint" id="addrow-err" role="alert" style="margin-top:10px"></p>
+    </div>
+    <div class="modal-footer"><button class="btn" id="addrow-cancel">Cancel</button><button class="btn" id="addrow-more">Save &amp; add another</button><button class="btn primary" id="addrow-save">Save row</button></div>`, { wide: true });
+  const err = modal.querySelector("#addrow-err");
+  const collect = () => {
+    const row = {};
+    modal.querySelectorAll("[data-h]").forEach((el) => {
+      let v = String(el.value || "").trim();
+      if (el.dataset.kind === "date" && v) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+        if (m) v = `${+m[2]}/${+m[3]}/${m[1]}`;
+      }
+      row[el.dataset.h] = v;
+    });
+    return row;
+  };
+  const save = (again) => {
+    const row = collect();
+    const idFields = [cfg.nameField, cfg.acctField].filter(Boolean);
+    if (idFields.length && !idFields.some((f) => row[f])) { err.textContent = "Enter at least " + idFields.join(" or ") + "."; return; }
+    const res = commitImport(cfg.id, [row], { skipDuplicates: true, fileName: "Manual entry" });
+    if (!res.added) { err.textContent = "That patient is already in this tab (same account # or name + DOB), so nothing was added."; return; }
+    toast("Row added to " + cfg.label);
+    closeModal();
+    render();
+    if (again) setTimeout(() => openAddRowModal(cfg), 220);
+  };
+  modal.querySelector("#addrow-cancel").addEventListener("click", closeModal);
+  modal.querySelector("#addrow-save").addEventListener("click", () => save(false));
+  modal.querySelector("#addrow-more").addEventListener("click", () => save(true));
+  modal.querySelectorAll("[data-h]").forEach((el) => el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); save(false); } }));
+  const first = modal.querySelector("[data-h]");
+  if (first) first.focus();
+}
+ // Populated at runtime from the authenticated backend (see bootStore()) when embedded on Wix. Empty in standalone/local mode unless you paste in your own data for offline testing.
 
 
   </script>
@@ -2487,7 +2564,7 @@ function icon(name) {
 // ---------------------------------------------------------------------------
 // Main render dispatcher
 // ---------------------------------------------------------------------------
-function render() {
+function render() { ensureDefaultSheets();
   destroyCharts();
   const { view, param, query } = parseHash();
   renderSidebar();
@@ -2796,7 +2873,7 @@ function renderSheetPage(cfg) {
       </div>
       <div class="page-header-actions">
         ${!cfg.isReference ? `<button class="btn" id="btn-completion-criteria">${gearIconSvg()} Completion Criteria</button>` : ""}
-        <button class="btn" id="btn-export-sheet">${downloadIconSvg()} Export</button>
+        ${!cfg.isReference ? `<button class="btn" id="btn-add-row">+ Add Row</button>` : ""} <button class="btn" id="btn-export-sheet">${downloadIconSvg()} Export</button>
         ${!cfg.isReference ? `<a class="btn primary" href="#/import-export?target=${cfg.id}">${uploadIconSvg()} Import Records</a>` : ""}
       </div>
     </div>
@@ -2830,7 +2907,7 @@ function sheetDescription(cfg) {
 
 function wireSheetPage(cfg) {
   renderSheetTable(cfg);
-  document.getElementById("btn-export-sheet")?.addEventListener("click", () => exportSheetToExcel(cfg.id));
+  document.getElementById("btn-add-row")?.addEventListener("click", () => openAddRowModal(cfg)); document.getElementById("btn-export-sheet")?.addEventListener("click", () => exportSheetToExcel(cfg.id));
   document.getElementById("btn-completion-criteria")?.addEventListener("click", () => openCompletionCriteriaModal(cfg));
 }
 
@@ -3882,7 +3959,7 @@ function renderWizardStep() {
   }
 
   else if (importWizard.step === 3) {
-    const targetHeaders = RAW_SHEETS[importWizard.targetId].headers;
+    const targetHeaders = (RAW_SHEETS[importWizard.targetId] && RAW_SHEETS[importWizard.targetId].headers) || importWizard.incomingHeaders;
     const matchedCount = Object.values(importWizard.mapping).filter(Boolean).length;
     body.innerHTML = `
       <p class="form-hint" style="margin-bottom:12px">${matchedCount} / ${importWizard.incomingHeaders.length} incoming columns matched automatically. Review and adjust below — columns set to "Do not import" are skipped.</p>
@@ -4231,7 +4308,7 @@ function clKpiHtml() {
     <div class="cl-stats" role="group" aria-label="Status summary">
       ${CALL_STATUSES.map((st) => `
         <button type="button" class="cl-stat cl-tone-${st.tone}" data-cl-status="${st.key}" aria-pressed="${clState.statusFilter === st.key}">
-          <span class="cl-stat-count">${fmtNum(s[st.key])}</span>
+          <span class="cl-stat-count">${fmtNum(s[st.key])}<span class="cl-stat-pct" title="Share of all patients on this call list">${s.total ? Math.round((s[st.key] / s.total) * 100) : 0}%</span></span>
           <span class="cl-stat-label"><span class="cl-dot"></span>${esc(st.label)}</span>
         </button>`).join("")}
     </div>`;
@@ -4252,7 +4329,7 @@ function renderCallListPage(cfg) {
         <div class="page-subtitle">Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.</div>
       </div>
       <div class="page-header-actions">
-        <button class="btn" id="cl-export">${downloadIconSvg()} Export</button>
+        <button class="btn" id="cl-add-row">+ Add Row</button> <button class="btn" id="cl-export">${downloadIconSvg()} Export</button>
         <a class="btn primary" href="#/import-export?target=${cfg.id}">${uploadIconSvg()} Import Records</a>
       </div>
     </div>
@@ -4479,7 +4556,7 @@ function wireCallListPage(cfg) {
     toast("Filters and sorting reset");
   });
   document.getElementById("cl-add-col").addEventListener("click", () => clOpenAddColumnModal(cfg));
-  document.getElementById("cl-export").addEventListener("click", () => clExport(cfg));
+  document.getElementById("cl-add-row")?.addEventListener("click", () => openAddRowModal(cfg)); document.getElementById("cl-export").addEventListener("click", () => clExport(cfg));
   document.getElementById("cl-rv").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-size]");
     if (!b) return;
