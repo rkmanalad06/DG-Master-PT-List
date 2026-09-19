@@ -1501,7 +1501,7 @@ const SHEET_CONFIG = [
     diagnosisLabel: "0908–0911 Patients",
     nameField: "DG Tuesday patients 9/8",
     dobField: "dob",
-    dateFields: ["dob"],
+    dateFields: ["dob", "next appt"],
     completion: { field: null, mode: "manual", label: "Working list with no status field — tracked manually" },
     searchFields: ["DG Tuesday patients 9/8", "diagnosis", "next appt"],
   },
@@ -2633,7 +2633,7 @@ function render() { ensureDefaultSheets();
     if (!cfg) return notFound();
     renderBreadcrumbs([{ label: GROUPS.find((g) => g.id === cfg.group)?.label, href: "#/dashboard" }, { label: cfg.label }]);
     clClosePopover();
-    if (isCallSheet(cfg.id)) { clUse(cfg.id);
+    if (isTableSheet(cfg.id)) { clUse(cfg.id);
       $root.innerHTML = renderCallListPage(cfg);
       wireCallListPage(cfg);
     } else {
@@ -4210,6 +4210,11 @@ let CALL_SHEET_ID = "call_list_upcoming";
 let clLastSheet = "call_list_upcoming";
 function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming" || id === "dg_infusion_pas" || id === "dg_pharmacy"; }
 function clIsPharmacy() { return CALL_SHEET_ID === "dg_pharmacy"; }
+// Every worksheet tab now uses this shared table (checkbox select, bulk delete, drag/resize/add columns).
+// "Generic" = a tab without its own custom workflow; it keeps its normal completion-based Status.
+function isTableSheet(id) { return !!SHEET_BY_ID[id]; }
+function clIsGeneric() { return !isCallSheet(CALL_SHEET_ID); }
+function clIsCallList() { return CALL_SHEET_ID === "call_list_upcoming" || CALL_SHEET_ID === "call_list_no_upcoming"; }
 function clIsTransition() { return CALL_SHEET_ID === "call_list_no_upcoming"; }
 function clWith(id, fn) { const prev = CALL_SHEET_ID, prevTeam = CL.TEAM; CALL_SHEET_ID = id; CL.TEAM = clTeamField(id); try { return fn(); } finally { CALL_SHEET_ID = prev; CL.TEAM = prevTeam; } }
 function clUse(id) {
@@ -4220,12 +4225,14 @@ function clUse(id) {
   CL.LS_LAYOUT = id === "call_list_upcoming" ? "dg_call_layout_v1" : "dg_call_layout_v1_" + id;
 }
 function clAssignSt(data) {
+  if (clIsGeneric()) return { key: "none", tone: "gray", label: "" };
   const k = callInfo(data).assigned ? "assigned" : "pending";
   const st = CALL_STATUS_BY_KEY[k];
   if (clIsInfusion() || clIsPharmacy()) return { ...st, tone: k === "assigned" ? "green" : "red", label: k === "assigned" ? "Assigned" : "Unassigned" };
   return clIsTransition() ? { ...st, tone: k === "assigned" ? "green" : "red" } : st;
 }
 function clStatusOptions() {
+  if (clIsGeneric()) return Object.keys(STATUS_META).map((k) => ({ key: k, label: STATUS_META[k].label }));
   if (clIsPharmacy()) return [{ key: "pending", label: "Unassigned" }, { key: "assigned", label: "Assigned" }];
   if (clIsInfusion()) return [
     { key: "pending", label: "Unassigned" }, { key: "assigned", label: "Assigned" },
@@ -4488,6 +4495,7 @@ function clDaysPhrase(days) {
 // One place that turns a record's fields into its call status. Needs Attention
 // is deliberately never applied once Confirmed / Refused / Resched is recorded.
 function callInfo(data) {
+  if (clIsGeneric()) return { key: "none", done: false, days: null, flagged: false, assigned: false, scheduled: false, status: "generic" };
   if (clIsPharmacy()) {
     const assigned = !!String(data[CL.TEAM] || "").trim();
     return { key: "none", done: assigned, days: null, flagged: false, assigned, scheduled: false, status: assigned ? "t-assigned" : "t-unassigned" };
@@ -4525,6 +4533,7 @@ function callReminder(data) {
   return { state: days === 0 ? "today" : days < 0 ? "overdue" : "upcoming", days, date: d };
 }
 function callPill(data) {
+  if (clIsGeneric()) return { key: "none", tone: "gray", label: "" };
   if (clIsPharmacy()) return { key: "none", tone: "gray", label: "" };
   if (clIsInfusion()) {
     const pi = callInfo(data);
@@ -4617,9 +4626,9 @@ function clColumns(cfg) {
     all = all.filter((h) => String(h).trim().toLowerCase() !== "status");
     if (!all.includes(CL.TEAM)) all.push(CL.TEAM);
   }
-  if (!clIsInfusion() && !clIsPharmacy() && !all.includes(CL.ACTION)) all.push(CL.ACTION);
+  if (clIsCallList() && !all.includes(CL.ACTION)) all.push(CL.ACTION);
   clCustomColumns().forEach((c) => { if (!all.includes(c.name)) all.push(c.name); });
-  if (clIsInfusion() || clIsPharmacy()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else all.push("__status");
+  if (clIsInfusion() || clIsPharmacy()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else if (!(clIsGeneric() && cfg.isReference)) all.push("__status");
   const out = [];
   clLayoutLoad().order.forEach((k) => { if (all.includes(k) && !out.includes(k)) out.push(k); });
   all.forEach((k) => { if (!out.includes(k)) out.push(k); });
@@ -4627,6 +4636,11 @@ function clColumns(cfg) {
 }
 function clColLabel(col) { return col === "__status" ? "Status" : col; }
 function clDefaultWidth(cfg, col) {
+  if (clIsGeneric()) {
+    if (col === "__status") return 140;
+    if (col === cfg.nameField) return 200;
+    return Math.max(130, Math.min(280, String(col).length * 9 + 56));
+  }
   if (clIsPharmacy()) {
     if (col === "__status") return 140;
     if (col === cfg.nameField) return 210;
@@ -4719,7 +4733,24 @@ function clPharmacyKpiHtml() {
     <div class="cl-stat cl-stat-static cl-tone-${completion.tone}" role="group" aria-label="Completion" title="Completion = Assigned ÷ (Assigned + Unassigned)">${inner(completion, comp)}</div>
   </div>`;
 }
+function clGenericKpiHtml() {
+  const cfg = SHEET_BY_ID[CALL_SHEET_ID];
+  if (!cfg || cfg.isReference) return "";
+  const stats = getSheetStats(cfg.id);
+  const untracked = cfg.completion.mode === "manual";
+  return `<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+      ${kpiCard({ label: "Total Records", value: fmtNum(stats.total), icon: "records", sub: cfg.label })}
+      ${untracked
+        ? kpiCard({ label: "Manually Tracked", value: `${stats.complete}/${stats.total}`, icon: "check", sub: "No source status field" })
+        : kpiCard({ label: "Complete", value: fmtNum(stats.complete), icon: "check", sub: `${stats.pct}% of records`, cls: "positive" })}
+      ${cfg.completion.mode === "flag-blank-is-complete"
+        ? kpiCard({ label: "Needs Attention", value: fmtNum(stats.needsAttention), icon: "records", sub: cfg.completion.label, cls: stats.needsAttention ? "warn" : "positive" })
+        : kpiCard({ label: "Remaining", value: fmtNum(stats.remaining), icon: "records", sub: "Not yet complete" })}
+      ${kpiCard({ label: "Duplicates", value: fmtNum(stats.dupCount), icon: "copy", sub: stats.dupCount ? "Review in Duplicate Management" : "None found", cls: stats.dupCount ? "warn" : "positive" })}
+    </div>`;
+}
 function clKpiHtml() {
+  if (clIsGeneric()) return clGenericKpiHtml();
   if (clIsPharmacy()) return clPharmacyKpiHtml();
   if (clIsInfusion()) return clInfusionKpiHtml();
   if (clIsTransition()) return clTransitionKpiHtml();
@@ -4767,16 +4798,17 @@ function clRefreshKpi() {
 function renderCallListPage(cfg) {
   const dupGroups = getDuplicateGroupsForSheet(cfg.id);
   return `
-    <div class="cl-kpi-wrap${clIsInfusion() ? " cl-kpi-static" : ""}" id="cl-kpi">${clKpiHtml()}</div>
+    <div class="cl-kpi-wrap${clIsInfusion() || clIsGeneric() ? " cl-kpi-static" : ""}" id="cl-kpi">${clKpiHtml()}</div>
 
     <div class="page-header">
       <div>
         <div class="page-title">${esc(cfg.label)}</div>
-        <div class="page-subtitle">${clIsPharmacy() ? "Enter a name in Assigned To for each patient. Status follows Assigned To: Assigned once someone is entered, Unassigned while it is blank." : clIsInfusion() ? "Assign each authorization to a Team Member. Status follows Team Member (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
+        <div class="page-subtitle">${clIsGeneric() ? esc(sheetDescription(cfg)) : clIsPharmacy() ? "Enter a name in Assigned To for each patient. Status follows Assigned To: Assigned once someone is entered, Unassigned while it is blank." : clIsInfusion() ? "Assign each authorization to a Team Member. Status follows Team Member (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
       </div>
       <div class="page-header-actions">
-        <button class="btn" id="cl-add-row">+ Add Row</button> <button class="btn" id="cl-export">${downloadIconSvg()} Export</button>
-        <a class="btn primary" href="#/import-export?target=${cfg.id}">${uploadIconSvg()} Import Records</a>
+        ${clIsGeneric() && !cfg.isReference ? `<button class="btn" id="btn-completion-criteria">${gearIconSvg()} Completion Criteria</button>` : ""}
+        ${clIsGeneric() && cfg.isReference ? "" : `<button class="btn" id="cl-add-row">+ Add Row</button>`} <button class="btn" id="cl-export">${downloadIconSvg()} Export</button>
+        ${clIsGeneric() && cfg.isReference ? "" : `<a class="btn primary" href="#/import-export?target=${cfg.id}">${uploadIconSvg()} Import Records</a>`}
       </div>
     </div>
 
@@ -4790,11 +4822,11 @@ function renderCallListPage(cfg) {
         <span class="icon">${searchIconSvg()}</span>
         <input type="text" id="cl-search" placeholder="Search ${esc(cfg.label)}…" value="${esc(clState.search)}" aria-label="Search call list" />
       </div>
-      <select class="filter-select" id="cl-filter-status" aria-label="Filter by status">
+      <select class="filter-select" id="cl-filter-status" aria-label="Filter by status" ${clIsGeneric() && cfg.isReference ? 'style="display:none"' : ""}>
         <option value="">All statuses</option>
         ${clStatusOptions().map((s) => `<option value="${s.key}" ${clState.statusFilter === s.key ? "selected" : ""}>${esc(s.label)}</option>`).join("")}
       </select>
-      <select class="filter-select" id="cl-filter-remind" aria-label="Filter by callback reminder" ${(clIsTransition() || clIsInfusion() || clIsPharmacy()) ? 'style="display:none"' : ""}>
+      <select class="filter-select" id="cl-filter-remind" aria-label="Filter by callback reminder" ${(clIsTransition() || clIsInfusion() || clIsPharmacy() || clIsGeneric()) ? 'style="display:none"' : ""}>
         <option value="">All reminders</option>
         <option value="today" ${clState.remindFilter === "today" ? "selected" : ""}>Callback due today</option>
         <option value="overdue" ${clState.remindFilter === "overdue" ? "selected" : ""}>Callback overdue</option>
@@ -4817,6 +4849,7 @@ function renderCallListPage(cfg) {
 }
 
 function clSortValue(r, col) {
+  if (clIsGeneric() && col === "__status") return r.status || "";
   if (col === "__status") return CALL_STATUSES.findIndex((s) => s.key === (callInfo(r.data).assigned ? "assigned" : "pending"));
   if (col === CL.ACTION) return callPill(r.data).label;
   return r.data[col] || "";
@@ -4828,10 +4861,11 @@ function clFilteredRows(cfg) {
     const fields = [...(cfg.searchFields || []), ...clCustomColumns().map((c) => c.name)];
     rows = rows.filter((r) =>
       fields.some((f) => String(r.data[f] || "").toLowerCase().includes(q)) ||
-      callPill(r.data).label.toLowerCase().includes(q) ||
-      clAssignSt(r.data).label.toLowerCase().includes(q));
+      (clIsGeneric()
+        ? String((STATUS_META[r.status] || {}).label || "").toLowerCase().includes(q)
+        : callPill(r.data).label.toLowerCase().includes(q) || clAssignSt(r.data).label.toLowerCase().includes(q)));
   }
-  if (clState.statusFilter) rows = rows.filter((r) => clStatusMatch(r.data, clState.statusFilter));
+  if (clState.statusFilter) rows = rows.filter((r) => (clIsGeneric() ? r.status === clState.statusFilter : clStatusMatch(r.data, clState.statusFilter)));
   if (clState.remindFilter) rows = rows.filter((r) => callReminder(r.data)?.state === clState.remindFilter);
   if (clState.sort) {
     const { field, dir } = clState.sort;
@@ -4849,7 +4883,8 @@ function clFilteredRows(cfg) {
   return rows;
 }
 
-function clStatusBadge(data) {
+function clStatusBadge(data, rec) {
+  if (clIsGeneric() && rec) return statusBadge(rec.status);
   const info = callInfo(data);
   const st = clAssignSt(data);
   let title = st.label;
@@ -4875,7 +4910,7 @@ function clRowClass(r) {
 function clRowHtml(cfg, r, cols) {
   const isExpanded = expandedRows.has(r.uid);
   const cells = cols.map((c) => {
-    if (c === "__status") return `<td data-col="__status">${clStatusBadge(r.data)}</td>`;
+    if (c === "__status") return `<td data-col="__status">${clStatusBadge(r.data, r)}</td>`;
     if (c === CL.ACTION && !clIsInfusion() && !clIsPharmacy()) return `<td class="cl-action-td" data-col="${esc(c)}">${clActionCellHtml(r)}</td>`;
  if (clIsInfusion() && clIsWrapCol(c) && !clIsDateCol(cfg, c)) return clWrapCellHtml(cfg, r, c);
     const val = r.data[c] || "";
@@ -4891,6 +4926,7 @@ function clRowHtml(cfg, r, cols) {
     <td class="actions-cell">
       <button class="btn sm ghost" data-action="toggle-expand" data-uid="${r.uid}" title="${isExpanded ? "Hide details" : "View details"}" aria-label="${isExpanded ? "Hide details" : "View details"}">${isExpanded ? chevronUpSvg() : chevronDownSvg()}</button>
       <button class="btn sm ghost" data-action="edit-record" data-uid="${r.uid}" title="Edit in a form" aria-label="Edit in a form">${editIconSvg()}</button>
+      ${clIsGeneric() && !cfg.isReference ? (r.status !== "complete" ? `<button class="btn sm ghost" data-action="mark-complete" data-uid="${r.uid}" title="Mark complete" aria-label="Mark complete">${checkIconSvg()}</button>` : `<button class="btn sm ghost" data-action="mark-pending" data-uid="${r.uid}" title="Mark pending" aria-label="Mark pending">${undoIconSvg()}</button>`) : ""}
     </td>
   </tr>`;
   if (!isExpanded) return main;
@@ -4912,7 +4948,7 @@ function clRefreshRow(uid) {
   if (!tr || !r) return;
   tr.className = clRowClass(r);
   const st = [...tr.children].find((td) => td.dataset.col === "__status");
-  if (st) st.innerHTML = clStatusBadge(r.data);
+  if (st) st.innerHTML = clStatusBadge(r.data, r);
   const ac = [...tr.children].find((td) => td.dataset.col === CL.ACTION);
   if (ac) ac.innerHTML = clActionCellHtml(r);
  if (clIsInfusion()) { clRefreshCorr(tr, r); tr.querySelectorAll("textarea.cl-wrap-input").forEach(clGrow); }
@@ -4946,7 +4982,7 @@ function clRenderTable(cfg) {
 
   const emptyMsg = everything.length
     ? `<div class="empty-state">${emptyIcon()}<div class="title">No records match your filters</div><div class="desc">Try clearing the search or status filters.</div></div>`
-    : `<div class="empty-state">${emptyIcon()}<div class="title">No patients on this call list yet</div><div class="desc">${clIsPharmacy() ? "Use Import Records or Add Row to add pharmacy patients." : clIsInfusion() ? "Use Import Records or Add Row to add infusion prior authorizations." : clIsTransition() ? "Use Import Records or Add Row to bring in the patients who need a transition." : "Use Import Records to bring in the upcoming-appointment call list."}</div></div>`;
+    : `<div class="empty-state">${emptyIcon()}<div class="title">${clIsGeneric() ? "No records in this tab yet" : "No patients on this call list yet"}</div><div class="desc">${clIsGeneric() ? (cfg.isReference ? "This reference table has no rows yet." : "Use Import Records or Add Row to add records to this tab.") : clIsPharmacy() ? "Use Import Records or Add Row to add pharmacy patients." : clIsInfusion() ? "Use Import Records or Add Row to add infusion prior authorizations." : clIsTransition() ? "Use Import Records or Add Row to bring in the patients who need a transition." : "Use Import Records to bring in the upcoming-appointment call list."}</div></div>`;
 
   region.innerHTML = `
     <datalist id="cl-team-list">${teams.map((t) => `<option value="${esc(t)}"></option>`).join("")}</datalist>
@@ -5012,6 +5048,7 @@ function wireCallListPage(cfg) {
     toast("Filters and sorting reset");
   });
   document.getElementById("cl-add-col").addEventListener("click", () => clOpenAddColumnModal(cfg));
+  document.getElementById("btn-completion-criteria")?.addEventListener("click", () => openCompletionCriteriaModal(cfg));
  document.getElementById("cl-selall").addEventListener("change", (e) => clSelectAll(cfg, e.target.checked));
  document.getElementById("cl-del-sel").addEventListener("click", () => clDeleteSelected(cfg));
  region.addEventListener("input", (e) => { if (e.target.classList && e.target.classList.contains("cl-wrap-input")) clGrow(e.target); });
@@ -5064,6 +5101,12 @@ function wireCallListPage(cfg) {
     if (act) {
       const uid = act.dataset.uid;
       if (act.dataset.action === "toggle-expand") { expandedRows.has(uid) ? expandedRows.delete(uid) : expandedRows.add(uid); clRenderTable(cfg); }
+      else if (act.dataset.action === "mark-complete" || act.dataset.action === "mark-pending") {
+        const done = act.dataset.action === "mark-complete";
+        setManualStatus(uid, done ? "complete" : "pending");
+        toast(done ? "Marked complete" : "Marked pending");
+        clRenderTable(cfg); clRefreshKpi(); renderSidebar();
+      }
       else if (act.dataset.action === "edit-record") openEditModal(uid, () => { clRenderTable(cfg); clRefreshKpi(); });
       else if (act.dataset.action === "delete-record") confirmDialog(
         "Archive this record?",
@@ -5088,6 +5131,7 @@ function wireCallListPage(cfg) {
     const rec = clRecord(uid);
     if (!rec || (rec.data[field] || "") === input.value) return;
     updateRecord(uid, { [field]: input.value });
+    if (clIsGeneric() && SHEET_BY_ID[CALL_SHEET_ID].completion?.field === field && Store.statusOverrides[uid]) setManualStatus(uid, null);
     toast(`Saved "${field}"`);
     clRefreshRow(uid);
     clRefreshKpi();
@@ -5172,7 +5216,7 @@ let clJustResized = false;
 function clSoftRefresh() {
   const { view, param } = parseHash();
   const region = document.getElementById("cl-table-region");
-  if (view !== "sheet" || !isCallSheet(param) || !region) return false;
+  if (view !== "sheet" || !isTableSheet(param) || !region) return false;
   clUse(param);
   if (clPopover) return true; // don't pull the menu out from under someone; the next sync catches up
   const wrap = region.querySelector(".cl-table-wrap");
@@ -5193,10 +5237,10 @@ function clExport(cfg) {
   const rows = clFilteredRows(cfg).map((r) => {
     const o = {};
     cols.forEach((c) => { o[c] = c === CL.ACTION ? callPill(r.data).label : r.data[c] || ""; });
-    o["Status"] = clAssignSt(r.data).label;
+    o["Status"] = clIsGeneric() ? ((STATUS_META[r.status] || {}).label || "") : clAssignSt(r.data).label;
     const rm = callReminder(r.data);
     if (clIsInfusion()) o["Correction Status"] = clCorrLabel(r.data);
-    if (!clIsTransition() && !clIsInfusion() && !clIsPharmacy()) o["Reminder Date"] = rm?.date ? clFmtMDY(rm.date) : "";
+    if (CALL_SHEET_ID === "call_list_upcoming") o["Reminder Date"] = rm?.date ? clFmtMDY(rm.date) : "";
     return o;
   });
   const ws = XLSX.utils.json_to_sheet(rows);
