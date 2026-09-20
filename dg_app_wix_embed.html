@@ -982,10 +982,10 @@ td.cl-inf-td { text-align: center; }
 table.cl-table tbody tr.cl-row-y td { background: #fff8d6; }
 table.cl-table tbody tr.cl-row-y:hover td { background: #fff1b0; }
 table.cl-table tbody tr.cl-row-hi td { background: #ffe1dc; }
-table.cl-table tbody tr.cl-row-sticky td { background: #ffe98a; }
-table.cl-table tbody tr.cl-row-sticky td:first-child { box-shadow: inset 3px 0 0 #d9a400; }
 table.cl-table tbody tr.cl-row-hi td:first-child { box-shadow: inset 4px 0 0 #d92d20; }
-table.cl-table tbody tr.cl-row-y.cl-row-sel td, table.cl-table tbody tr.cl-row-hi.cl-row-sel td, table.cl-table tbody tr.cl-row-sticky.cl-row-sel td { background: var(--accent-soft, #f3dde0); }
+table.cl-table tbody tr.cl-row-y.cl-row-sel td, table.cl-table tbody tr.cl-row-hi.cl-row-sel td { background: var(--accent-soft, #f3dde0); }
+.cl-note { display: block; width: 100%; box-sizing: border-box; margin: 0 0 14px; padding: 9px 12px; font: inherit; font-size: 13px; line-height: 1.4; color: #5c4300; background: #fff8d6; border: 1px solid #efd766; border-radius: 8px; resize: vertical; min-height: 38px; }
+.cl-note:focus { outline: 2px solid #efd766; outline-offset: 1px; background: #fffbe8; }
 .cl-stats.cl-stats-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 900px) { .cl-stats.cl-stats-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .cl-inf { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 999px; font-size: 15px; font-weight: 800; line-height: 1; }
@@ -4250,23 +4250,25 @@ const ASSIGN_META = {
   pseudogout: { yes: true, label: "Referred to Usmani and Apps", short: "referred", suggest: ["Yes", "No"],
     desc: "Enter Yes in REFER TO USMANI AND APPS for each patient referred. Status: Assigned when Yes; Unassigned when blank or No." },
   psa_and_psoriasis: { yes: false, label: "Assigned", short: "assigned", suggest: ["AFD", "APPS"],
-    desc: "Enter AFD or APPS in Assigned To; use Split unassigned to divide the blank ones between AFD and APPS. Highlights: light yellow = unassigned, gold = Stelara + Aetna, red = High priority." },
+    desc: "Enter AFD or APPS in Assigned To; use Split unassigned to divide the blank ones between AFD and APPS. Highlights: light yellow = unassigned, red = High priority and still unassigned (once assigned, the highlight goes away)." },
   polymyositis: { yes: false, label: "Referred to Usmani", short: "referred", suggest: [],
     desc: "Enter data in REFER TO USMANI for each patient referred. Status: Assigned once it has data; Unassigned while blank." },
 };
 function clAssignMeta() { return ASSIGN_META[CALL_SHEET_ID] || null; }
 function clIsPsa() { return CALL_SHEET_ID === "psa_and_psoriasis"; }
-// Stelara + Aetna: any non-insurance field mentions Stelara AND the insurance field mentions Aetna.
-function psaSticky(data) {
-  let ins = false, st = false;
-  for (const k of Object.keys(data || {})) {
-    if (k === CL.TEAM) continue;
-    const v = String(data[k] || "").toLowerCase();
-    if (!v) continue;
-    if (/insurance/i.test(k)) { if (v.includes("aetna")) ins = true; }
-    else if (v.includes("stelara")) st = true;
-  }
-  return ins && st;
+// Aetna: the current insurance field mentions Aetna.
+function psaAetna(data) {
+  return Object.keys(data || {}).some((k) => /insurance/i.test(k) && String(data[k] || "").toLowerCase().includes("aetna"));
+}
+const PSA_NOTE_DEFAULT = "Note: also have them Stelara and Aetna in yellow sticky in the chart.";
+function psaNote() {
+  const n = Store.editedRows[CL.LAYOUT_UID] && Store.editedRows[CL.LAYOUT_UID].note;
+  return n == null ? PSA_NOTE_DEFAULT : String(n);
+}
+function psaSaveNote(text) {
+  Store.editedRows[CL.LAYOUT_UID] = { ...(Store.editedRows[CL.LAYOUT_UID] || {}), note: text };
+  saveEditedRows();
+  WixBridge.save("editedRow", { uid: CL.LAYOUT_UID, patch: Store.editedRows[CL.LAYOUT_UID] });
 }
 // Who a PSA row is assigned to: AFD and/or APPS (typed loosely).
 function psaWho(v) {
@@ -4335,7 +4337,7 @@ function clAssignSt(data) {
 function clStatusOptions() {
   if (clIsOsteo()) return [{ key: "pending", label: "Unassigned" }, { key: "jp", label: "Assigned to JP" }, { key: "su", label: "Assigned to SU" }, { key: "pa", label: "Pending PA" }, { key: "attention", label: "Needs Attention" }, { key: "cancelled", label: "Cancelled" }];
   if (clIsGeneric()) return Object.keys(STATUS_META).map((k) => ({ key: k, label: STATUS_META[k].label }));
-  if (clIsPsa()) return [{ key: "pending", label: "Unassigned" }, { key: "assigned", label: "Assigned" }, { key: "afd", label: "Assigned to AFD" }, { key: "apps", label: "Assigned to APPS" }, { key: "priority", label: "High priority" }, { key: "sticky", label: "Stelara + Aetna" }];
+  if (clIsPsa()) return [{ key: "pending", label: "Unassigned" }, { key: "assigned", label: "Assigned" }, { key: "afd", label: "Assigned to AFD" }, { key: "apps", label: "Assigned to APPS" }, { key: "priority", label: "High priority (unassigned)" }, { key: "aetna", label: "Aetna insurance" }];
   if (clIsAssignTab()) return [{ key: "pending", label: "Unassigned" }, { key: "assigned", label: "Assigned" }];
   if (clIsInfusion()) return [
     { key: "pending", label: "Unassigned" }, { key: "assigned", label: "Assigned" },
@@ -4393,7 +4395,7 @@ function clStatusMatch(data, key) {
     const i = callInfo(data);
     if (key === "pending") return !i.assigned;
     if (key === "assigned") return i.assigned;
-    if (key === "sticky") return !!i.sticky;
+    if (key === "aetna") return !!i.aetna;
     if (key === "priority") return !!i.high;
     if (key === "afd") return !!(i.who && i.who.afd);
     if (key === "apps") return !!(i.who && i.who.apps);
@@ -4686,7 +4688,7 @@ function callInfo(data) {
   }
   if (clIsAssignTab()) {
     const assigned = clIsAssignedVal(data[CL.TEAM]);
-    return { key: "none", done: assigned, days: null, flagged: false, assigned, scheduled: false, sticky: clIsPsa() && psaSticky(data), high: clIsPsa() && psaHigh(data), who: clIsPsa() ? psaWho(data[CL.TEAM]) : null, status: assigned ? "t-assigned" : "t-unassigned" };
+    return { key: "none", done: assigned, days: null, flagged: false, assigned, scheduled: false, aetna: clIsPsa() && psaAetna(data), high: clIsPsa() && !assigned && psaHigh(data), who: clIsPsa() ? psaWho(data[CL.TEAM]) : null, status: assigned ? "t-assigned" : "t-unassigned" };
   }
   if (clIsInfusion()) {
     const assigned = !!String(data[CL.TEAM] || "").trim();
@@ -4956,14 +4958,14 @@ function clAssignKpiHtml() {
 }
 function clPsaKpiHtml() {
   const recs = clRecords();
-  const c = { total: recs.length, pending: 0, afd: 0, apps: 0, high: 0, sticky: 0 };
+  const c = { total: recs.length, pending: 0, afd: 0, apps: 0, high: 0, aetna: 0 };
   recs.forEach((r) => {
     const i = callInfo(r.data);
     if (!i.assigned) c.pending++;
     if (i.who.afd) c.afd++;
     if (i.who.apps) c.apps++;
     if (i.high) c.high++;
-    if (i.sticky) c.sticky++;
+    if (i.aetna) c.aetna++;
   });
   const pctOf = (n) => (c.total ? Math.round((n / c.total) * 100) : 0);
   const bar = (label, p) => `<span class="cl-stat-bar" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p}"><span class="cl-stat-bar-fill" style="width:${p}%"></span></span>`;
@@ -4981,8 +4983,8 @@ function clPsaKpiHtml() {
     { key: "pending", tone: "yellow", label: "Unassigned", n: c.pending, sub: "Blank: divide between AFD and APPS" },
     { key: "afd", tone: "blue", label: "Assigned to AFD", n: c.afd, sub: "Assigned To says AFD" },
     { key: "apps", tone: "violet", label: "Assigned to APPS", n: c.apps, sub: "Assigned To says APPS" },
-    { key: "priority", tone: "red", label: "High Priority", n: c.high, sub: "Priority column says High" },
-    { key: "sticky", tone: "orange", label: "Stelara + Aetna", n: c.sticky, sub: "Note: Stelara patients on Aetna" },
+    { key: "priority", tone: "red", label: "High Priority", n: c.high, sub: "Priority High and not yet assigned" },
+    { key: "aetna", tone: "orange", label: "Aetna", n: c.aetna, sub: "Current insurance is Aetna" },
   ];
   return `<div class="cl-stats cl-stats-3" role="group" aria-label="PSA and Psoriasis summary">${tiles.map(tile).join("")}</div>`;
 }
@@ -5100,6 +5102,7 @@ function renderCallListPage(cfg) {
         ${clIsGeneric() && cfg.isReference ? "" : `<a class="btn primary" href="#/import-export?target=${cfg.id}">${uploadIconSvg()} Import Records</a>`}
       </div>
     </div>
+    ${clIsPsa() ? `<textarea class="cl-note" id="cl-note" rows="2" aria-label="General note" placeholder="Add a general note for this tab...">${esc(psaNote())}</textarea>` : ""}
 
     ${dupGroups.length ? `<div class="card" style="padding:12px 16px;margin-bottom:20px;border-color:var(--status-attention-bg);background:var(--status-attention-bg)">
       <span style="color:var(--status-attention);font-weight:600;font-size:13px">⚠ ${dupGroups.reduce((s, g) => s + g.records.length, 0)} record(s) in this tab are part of a duplicate group.</span>
@@ -5197,7 +5200,7 @@ function clActionCellHtml(r) {
 }
 function clRowClass(r) {
   const info = callInfo(r.data);
-  return (info.key === "progress" ? "cl-row-progress " : "") + (info.status === "attention" ? "cl-row-attn" : "") + (clIsPsa() ? (info.sticky ? " cl-row-sticky" : !info.assigned ? " cl-row-y" : "") + (info.high ? " cl-row-hi" : "") : "") + (clSel.has(r.uid) ? " cl-row-sel" : "");
+  return (info.key === "progress" ? "cl-row-progress " : "") + (info.status === "attention" ? "cl-row-attn" : "") + (clIsPsa() ? (!info.assigned ? " cl-row-y" : "") + (info.high ? " cl-row-hi" : "") : "") + (clSel.has(r.uid) ? " cl-row-sel" : "");
 }
 function clRowHtml(cfg, r, cols) {
   const isExpanded = expandedRows.has(r.uid);
@@ -5352,6 +5355,7 @@ function wireCallListPage(cfg) {
  document.getElementById("cl-selall").addEventListener("change", (e) => clSelectAll(cfg, e.target.checked));
  document.getElementById("cl-del-sel").addEventListener("click", () => clDeleteSelected(cfg));
  document.getElementById("cl-split")?.addEventListener("click", () => clSplitUnassigned(cfg));
+ document.getElementById("cl-note")?.addEventListener("blur", (e) => { if (e.target.value !== psaNote()) { psaSaveNote(e.target.value); toast("Note saved"); } });
  region.addEventListener("input", (e) => { if (e.target.classList && e.target.classList.contains("cl-wrap-input")) clGrow(e.target); });
  region.addEventListener("change", (e) => {
  const cb = e.target;
@@ -5539,7 +5543,6 @@ function clExport(cfg) {
     const o = {};
     cols.forEach((c) => { if (c === "__infusion") o["On Infusion?"] = gcaOnInfusion(r) ? "Yes" : "No"; else o[c] = c === CL.ACTION ? callPill(r.data).label : r.data[c] || ""; });
     o["Status"] = clIsGeneric() ? ((STATUS_META[r.status] || {}).label || "") : clAssignSt(r.data).label;
-    if (clIsPsa()) o["Stelara + Aetna"] = callInfo(r.data).sticky ? "Yes" : "";
     const rm = callReminder(r.data);
     if (clIsInfusion()) o["Correction Status"] = clCorrLabel(r.data);
     if (CALL_SHEET_ID === "call_list_upcoming") o["Reminder Date"] = rm?.date ? clFmtMDY(rm.date) : "";
