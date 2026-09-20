@@ -1549,10 +1549,12 @@ const SHEET_CONFIG = [
     shortLabel: "All Other DX",
     group: "diagnosis",
     diagnosisLabel: "All Other DX",
-    isReference: true,
     nameField: "Diagnosis",
-    completion: { field: null, mode: "manual", label: "Reference table — not a work queue" },
+    completion: { field: "Refer To", mode: "nonblank", label: "Refer To is filled in" },
     searchFields: ["Diagnosis", "Refer To"],
+    inlineFields: ["Refer To"],
+    defaultHeaders: ["Diagnosis", "Refer To"],
+    orderColumns: true,
   },
 ];
 
@@ -4249,13 +4251,15 @@ let CALL_SHEET_ID = "call_list_upcoming";
 let clLastSheet = "call_list_upcoming";
 function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming" || id === "dg_infusion_pas" || !!ASSIGN_TABS[id] || id === "dg_osteoporosis_pas"; }
 // Tabs whose Status is simply Assigned (data in the column) / Unassigned (blank). Value = the assignment column.
-const ASSIGN_TABS = { dg_pharmacy: "Assigned To", ra: "Assigned to", seronegative_ra: "Assigned to", psoriatic_arthritis: "Assigned to", psoriasis: "Assigned to", pmr: "Assigned to", gca: "Assigned to", pseudogout: "REFER TO USMANI AND APPS", polymyositis: "REFER TO USMANI", psa_and_psoriasis: "Assigned To", osteoporosis: "Assigned to", gout: "REFER TO AFD AND APPS" };
+const ASSIGN_TABS = { dg_pharmacy: "Assigned To", ra: "Assigned to", seronegative_ra: "Assigned to", psoriatic_arthritis: "Assigned to", psoriasis: "Assigned to", pmr: "Assigned to", gca: "Assigned to", pseudogout: "REFER TO USMANI AND APPS", polymyositis: "REFER TO USMANI", psa_and_psoriasis: "Assigned To", osteoporosis: "Assigned to", gout: "REFER TO AFD AND APPS", all_other_dx: "Refer To" };
 // Tabs whose "assigned" state is a referral column. yes = only a Yes counts (blank/No = Unassigned).
 const ASSIGN_META = {
   pseudogout: { yes: true, label: "Referred to Usmani and Apps", short: "referred", suggest: ["Yes", "No"],
     desc: "Enter Yes in REFER TO USMANI AND APPS for each patient referred. Status: Assigned when Yes; Unassigned when blank or No." },
   psa_and_psoriasis: { yes: false, label: "Assigned", short: "assigned", suggest: ["AFD", "APPS"],
     desc: "Enter AFD or APPS in Assigned To; use Split unassigned to divide the blank ones between AFD and APPS. Highlights: light yellow = unassigned, red = High priority and still unassigned (once assigned, the highlight goes away)." },
+  all_other_dx: { yes: false, label: "Assigned", short: "assigned", suggest: [], noun: "Diagnoses",
+    desc: "Enter who to refer to for each diagnosis in Refer To. Status: Assigned once Refer To has data; Unassigned while blank." },
   gout: { yes: false, label: "Assigned", short: "assigned", suggest: [],
     desc: "Enter data in REFER TO AFD AND APPS for each patient. Status: Assigned once it has data; Unassigned while blank." },
   polymyositis: { yes: false, label: "Referred to Usmani", short: "referred", suggest: [],
@@ -4968,7 +4972,7 @@ function clAssignKpiHtml() {
   const M = clAssignMeta();
   const completion = { tone: "violet", label: "Completion", big: comp + "%", sub: `${fmtNum(assigned)} of ${fmtNum(total)} ${M ? M.short : "assigned"}` };
   return `<div class="cl-stats cl-stats-4" role="group" aria-label="Patient summary">
-    ${filterTile({ key: "", tone: "gray", label: "Total Patients", n: total, sub: "All patients in " + SHEET_BY_ID[CALL_SHEET_ID].label, nopct: true })}
+    ${filterTile({ key: "", tone: "gray", label: "Total " + (M && M.noun || "Patients"), n: total, sub: "All " + (M && M.noun || "patients").toLowerCase() + " in " + SHEET_BY_ID[CALL_SHEET_ID].label, nopct: true })}
     ${filterTile({ key: "assigned", tone: "green", label: M ? M.label : "Assigned", n: assigned, sub: M && M.yes ? CL.TEAM + " is Yes" : "Has data in " + CL.TEAM })}
     ${filterTile({ key: "pending", tone: "red", label: "Unassigned", n: pending, sub: M && M.unSub ? M.unSub : M && M.yes ? CL.TEAM + " is blank or No" : CL.TEAM + " is blank" })}
     <div class="cl-stat cl-stat-static cl-tone-${completion.tone}" role="group" aria-label="Completion" title="Completion = ${M ? esc(M.label) : "Assigned"} ÷ (${M ? esc(M.label) : "Assigned"} + Unassigned)">${inner(completion, comp)}</div>
