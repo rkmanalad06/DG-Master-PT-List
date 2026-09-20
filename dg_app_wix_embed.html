@@ -828,6 +828,24 @@ tr.expand-row td {
   margin-bottom: var(--space-3);
 }
 .source-record-card .src-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); }
+/* Duplicate review: side-by-side row comparison */
+.dup-wrap { overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-surface); }
+table.dup-cmp { border-collapse: separate; border-spacing: 0; width: max-content; font-size: 13px; }
+table.dup-cmp th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary); padding: 8px 10px; background: var(--bg-sunken); border-bottom: 1px solid var(--border-subtle); white-space: nowrap; }
+table.dup-cmp td { padding: 3px 5px; border-bottom: 1px solid var(--border-subtle); vertical-align: middle; }
+table.dup-cmp tbody tr:last-child td { border-bottom: none; }
+table.dup-cmp .dup-act { position: sticky; left: 0; z-index: 2; background: var(--bg-surface); white-space: nowrap; min-width: 230px; border-right: 1px solid var(--border-subtle); }
+table.dup-cmp th.dup-act { background: var(--bg-sunken); }
+table.dup-cmp td.dup-match { background: var(--status-complete-bg); }
+table.dup-cmp td.dup-diff { background: var(--status-pending-bg); }
+table.dup-cmp td.dup-gap { background: #fdf6e7; }
+table.dup-cmp th.dup-match { color: var(--status-complete); }
+table.dup-cmp th.dup-diff, table.dup-cmp th.dup-gap { color: var(--status-pending); }
+table.dup-cmp td .inline-edit-input { width: 140px; min-width: 0; }
+.dup-rowtag { display: inline-block; font-size: 11px; font-weight: 700; color: var(--text-secondary); margin-right: 6px; }
+.dup-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text-secondary); margin: 2px 0 8px; }
+.dup-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 5px; }
+.dup-resolved { background: var(--status-complete-bg); color: var(--status-complete); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 12.5px; font-weight: 600; margin-bottom: 8px; }
 .src-field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); }
 .src-field { font-size: 12px; }
 .src-field .k { color: var(--text-tertiary); margin-bottom: 2px; }
@@ -3868,6 +3886,11 @@ function renderDuplicates() {
     window.__dupTab = !g.exact.length && g.potential.length ? "potential" : "exact";
   }
   if (scope && window.__dupTab === "cross-tab") window.__dupTab = "exact";
+  if (window.__dupAutoTab) {
+    window.__dupAutoTab = false;
+    const cur = tabs.find((t) => t.id === window.__dupTab);
+    if (cur && !cur.groups.length) { const nx = tabs.find((t) => t.groups.length); if (nx) window.__dupTab = nx.id; }
+  }
   if (!window.__dupTab) window.__dupTab = "exact";
 
   const sheets = SHEET_CONFIG.filter((c) => !c.isReference);
@@ -3899,6 +3922,7 @@ function renderDuplicates() {
     </div>
     <div class="flex gap-2" style="margin-bottom:16px">
       ${tabs.map((t) => `<button class="btn sm ${window.__dupTab === t.id ? "primary" : ""}" data-dup-tab="${t.id}">${esc(t.label)} (${t.groups.length})</button>`).join("")}
+      ${window.__dupTab === "cross-tab" ? "" : `<label style="margin-left:auto;font-size:12.5px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="dup-allcols" ${window.__dupAllCols ? "checked" : ""}/> Show all columns</label>`}
     </div>
     <div id="dup-list-region"></div>
   `;
@@ -3908,7 +3932,84 @@ function wireDuplicates() {
   document.querySelectorAll("[data-dup-tab]").forEach((b) => b.addEventListener("click", () => { window.__dupTab = b.dataset.dupTab; render(); }));
   const sel = document.getElementById("dup-scope");
   if (sel) sel.addEventListener("change", () => navigate(sel.value ? "duplicates/" + encodeURIComponent(sel.value) : "duplicates"));
+  const ac = document.getElementById("dup-allcols");
+  if (ac) ac.addEventListener("change", () => { window.__dupAllCols = ac.checked; render(); });
   renderDupList();
+  wireDupEditing();
+}
+
+// ---- side-by-side comparison --------------------------------------------------
+function dupCols(cfg) {
+  return clWith(cfg.id, () => clColumns(cfg)).filter((c) => !String(c).startsWith("__"));
+}
+function dupNormVal(cfg, col, v) {
+  const t = String(v == null ? "" : v).trim();
+  if (!t) return "";
+  if (col === cfg.nameField) return nameTokens(splitAcctAndName(t).text).join(" ");
+  if (col === cfg.acctField || ACCT_HDR.test(col)) { const sp = splitAcctAndName(t); return normalizeAcct(/[A-Za-z]/.test(t) ? sp.acct : t); }
+  if (col === cfg.dobField) return normalizeDob(t) || t.toLowerCase();
+  return t.toLowerCase().replace(/\s+/g, " ");
+}
+// 'match' (same in every row) | 'diff' (different values) | 'gap' (filled in some rows, empty in others) | 'empty'
+function dupColClass(cfg, col, values) {
+  const filled = values.filter((v) => String(v == null ? "" : v).trim());
+  if (!filled.length) return "empty";
+  const norm = filled.map((v) => dupNormVal(cfg, col, v));
+  let same = new Set(norm).size === 1;
+  if (!same && col === cfg.nameField) {
+    const tk = filled.map((v) => nameTokens(splitAcctAndName(v).text));
+    same = tk.every((x) => tk.every((y) => { const r = nameRel(x, y); return r === "same" || r === "close"; }));
+  }
+  if (!same) return "diff";
+  return filled.length === values.length ? "match" : "gap";
+}
+function dupCompareTable(g) {
+  const cfg = SHEET_BY_ID[g.sheetId];
+  const all = dupCols(cfg);
+  const idCols = new Set([cfg.nameField, cfg.acctField, cfg.dobField].filter(Boolean));
+  const cls = {};
+  all.forEach((c) => { cls[c] = dupColClass(cfg, c, g.records.map((r) => r.data[c])); });
+  const shown = all.filter((c) => window.__dupAllCols || cls[c] !== "empty" || idCols.has(c));
+  const uids = g.records.map((r) => r.uid);
+  return `<div class="dup-wrap"><table class="dup-cmp" data-sheet="${esc(g.sheetId)}">
+    <thead><tr><th class="dup-act">Row</th>${shown.map((c) => `<th class="dup-${cls[c]}" data-col="${esc(c)}">${esc(clColLabel(c))}</th>`).join("")}</tr></thead>
+    <tbody>${g.records.map((r, i) => `<tr data-uid="${esc(r.uid)}">
+      <td class="dup-act"><span class="dup-rowtag">#${i + 1}${r.isImported ? " · imported" : ""}</span>
+        <button class="btn sm primary" data-action="keep-row" data-uid="${esc(r.uid)}" data-group="${esc(uids.join(","))}" title="Keep this row and archive the others">Keep</button>
+        <button class="btn sm ghost" data-action="archive-from-group" data-uid="${esc(r.uid)}">Archive</button>
+        <button class="btn sm ghost" data-action="view-record" data-uid="${esc(r.uid)}">View</button></td>
+      ${shown.map((c) => `<td class="dup-${cls[c]}" data-col="${esc(c)}"><input type="text" class="inline-edit-input" data-uid="${esc(r.uid)}" data-field="${esc(c)}" value="${esc(r.data[c] == null ? "" : r.data[c])}" placeholder="—" title="${esc(r.data[c] == null ? "" : r.data[c])}" /></td>`).join("")}
+    </tr>`).join("")}</tbody></table></div>`;
+}
+// Re-colour one comparison table from what is currently typed in its cells (no re-render, so focus is kept).
+function dupRepaint(table) {
+  const cfg = SHEET_BY_ID[table.dataset.sheet];
+  const cols = [...table.querySelectorAll("thead th[data-col]")].map((th) => th.dataset.col);
+  cols.forEach((c) => {
+    const cells = [...table.querySelectorAll("tbody td[data-col]")].filter((td) => td.dataset.col === c);
+    const cl = dupColClass(cfg, c, cells.map((td) => td.querySelector("input").value));
+    const cellCls = cl === "empty" ? "dup-empty" : "dup-" + cl;
+    cells.forEach((td) => { td.className = cellCls; });
+    const th = [...table.querySelectorAll("thead th[data-col]")].find((x) => x.dataset.col === c);
+    if (th) th.className = cellCls;
+  });
+}
+function dupKeepRow(keepUid, uids) {
+  const recs = uids.map((u) => getAllRecords().find((r) => r.uid === u)).filter(Boolean);
+  const keep = recs.find((r) => r.uid === keepUid);
+  const others = recs.filter((r) => r.uid !== keepUid);
+  if (!keep) return;
+  const fields = new Set();
+  recs.forEach((r) => Object.keys(r.data).forEach((f) => { if (!String(f).startsWith("__")) fields.add(f); }));
+  const patch = {};
+  fields.forEach((f) => {
+    if (String(keep.data[f] == null ? "" : keep.data[f]).trim()) return;
+    const o = others.find((r) => String(r.data[f] == null ? "" : r.data[f]).trim());
+    if (o) patch[f] = o.data[f];
+  });
+  if (Object.keys(patch).length) updateRecord(keepUid, patch);
+  others.forEach((r) => softDeleteRecord(r.uid));
+  toast(`Kept 1 row, archived ${others.length}${Object.keys(patch).length ? `, filled ${Object.keys(patch).length} blank cell(s)` : ""}`);
 }
 
 function renderDupList() {
@@ -3920,7 +4021,11 @@ function renderDupList() {
     region.innerHTML = `<div class="card">${emptyStateHtml("Nothing here", scope ? `No ${window.__dupTab === "potential" ? "potential" : "exact"} duplicates found in ${SHEET_BY_ID[scope].label}.` : "No groups found in this category.")}</div>`;
     return;
   }
-  region.innerHTML = groups.map((x) => dupGroupCard(x, !!scope)).join("");
+  const legend = window.__dupTab === "cross-tab" ? "" : `<div class="dup-legend">
+      <span><i style="background:var(--status-complete-bg);border:1px solid var(--status-complete)"></i>Same in every row (why they match)</span>
+      <span><i style="background:var(--status-pending-bg);border:1px solid var(--status-pending)"></i>Different, or filled in only some rows</span>
+      <span>Click any cell to edit it. <strong>Keep</strong> archives the other rows and fills blanks from them.</span></div>`;
+  region.innerHTML = legend + groups.map((x) => dupGroupCard(x, !!scope)).join("");
   region.querySelectorAll("[data-action='review-group']").forEach((el) => {
     el.addEventListener("click", () => { setGroupReview(el.dataset.key, { reviewed: true }); toast("Marked as reviewed"); render(); });
   });
@@ -3930,20 +4035,76 @@ function renderDupList() {
   region.querySelectorAll("[data-action='view-record']").forEach((el) => el.addEventListener("click", () => openRecordModal(el.dataset.uid)));
   region.querySelectorAll("[data-action='archive-from-group']").forEach((el) => {
     el.addEventListener("click", () => confirmDialog("Archive this record?", "It will be hidden from all views but can be restored later.", () => {
-      softDeleteRecord(el.dataset.uid); invalidateDupCache(); toast("Record archived"); render();
+      softDeleteRecord(el.dataset.uid); invalidateDupCache(); toast("Record archived"); window.__dupAutoTab = true; render();
     }));
+  });
+  region.querySelectorAll("[data-action='keep-row']").forEach((el) => {
+    el.addEventListener("click", () => {
+      const uids = el.dataset.group.split(",");
+      confirmDialog("Keep this row?", `The other ${uids.length - 1} row(s) will be archived (they can be restored later). Any empty cells in the row you keep are first filled in from the archived rows.`, () => { dupKeepRow(el.dataset.uid, uids); window.__dupAutoTab = true; render(); }, { okClass: "primary", okLabel: "Keep this row" });
+    });
+  });
+}
+// inline editing inside the comparison tables (bound once per page render)
+function wireDupEditing() {
+  const region = document.getElementById("dup-list-region");
+  if (!region) return;
+  region.addEventListener("blur", (e) => {
+    const input = e.target;
+    if (!input.classList?.contains("inline-edit-input")) return;
+    const uid = input.dataset.uid, field = input.dataset.field;
+    const rec = getAllRecords().find((r) => r.uid === uid);
+    if (!rec || String(rec.data[field] == null ? "" : rec.data[field]) === input.value) return;
+    updateRecord(uid, { [field]: input.value });
+    toast(`Saved "${field}"`);
+    const table = input.closest("table.dup-cmp");
+    if (table) {
+      dupRepaint(table);
+      const uids = new Set([...table.querySelectorAll("tbody tr")].map((tr) => tr.dataset.uid));
+      const idx = computeDuplicateIndex();
+      const still = [...idx.exactDuplicates, ...idx.potentialDuplicates].some((gr) => gr.sheetId === table.dataset.sheet && gr.records.filter((r) => uids.has(r.uid)).length >= 2);
+      const card = table.closest(".dup-card");
+      const note = card && card.querySelector(".dup-resolved");
+      if (card && !still && !note) {
+        const div = document.createElement("div");
+        div.className = "dup-resolved";
+        div.textContent = "These rows no longer match, so this group is no longer a duplicate. It will disappear next time this page loads.";
+        table.parentElement.insertAdjacentElement("beforebegin", div);
+      } else if (note && still) note.remove();
+    }
+    renderSidebar();
+  }, true);
+  region.addEventListener("keydown", (e) => {
+    const input = e.target;
+    if (!input.classList?.contains("inline-edit-input")) return;
+    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+    if (e.key === "Escape") { const rec = getAllRecords().find((r) => r.uid === input.dataset.uid); input.value = rec && rec.data[input.dataset.field] != null ? rec.data[input.dataset.field] : ""; input.blur(); }
   });
 }
 function dupGroupCard(g, scoped) {
   const reviewed = isGroupReviewed(g.key);
-  const label = g.type === "cross-tab" ? `Found in: ${g.sheets.map((s) => SHEET_BY_ID[s].label).join(", ")}` : `${g.records.length} records${scoped ? "" : " in " + SHEET_BY_ID[g.sheetId].label}`;
+  const isCross = g.type === "cross-tab";
+  const label = isCross ? `Found in: ${g.sheets.map((s) => SHEET_BY_ID[s].label).join(", ")}` : `${g.records.length} rows${scoped ? "" : " in " + SHEET_BY_ID[g.sheetId].label}`;
   const reasonHtml = g.reasons && g.reasons.length
-    ? `<div class="text-muted" style="font-size:12px;margin-bottom:6px"><strong>Why flagged:</strong> ${g.reasons.map(esc).join(" · ")}</div>`
+    ? `<div class="text-muted" style="font-size:12px;margin-bottom:8px"><strong>Why flagged:</strong> ${g.reasons.map(esc).join(" · ")}</div>`
     : "";
-  const diffHtml = g.type === "cross-tab" ? "" : g.differs && g.differs.length
-    ? `<div class="text-muted" style="font-size:12px;margin-bottom:10px">Rows differ in: ${g.differs.slice(0, 8).map((f) => `<strong>${esc(f)}</strong>`).join(", ")}${g.differs.length > 8 ? ` +${g.differs.length - 8} more` : ""}</div>`
-    : `<div class="text-muted" style="font-size:12px;margin-bottom:10px">These rows are identical in every column.</div>`;
-  return `<div class="card" style="padding:var(--space-4);margin-bottom:var(--space-3)">
+  const body = isCross
+    ? `<div class="src-field-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">
+      ${g.records.map((r) => `<div class="card" style="padding:10px;background:var(--bg-sunken)">
+        <div class="flex justify-between items-center" style="margin-bottom:6px">
+          <span class="badge outline">${esc(SHEET_BY_ID[r.sheetId].label)}</span>
+          ${statusBadge(r.status)}
+        </div>
+        ${r.displayName ? `<div style="font-size:12.5px;font-weight:600;margin-bottom:2px">${esc(r.displayName)}</div>` : ""}
+        <div style="font-size:12px;color:var(--text-secondary)">${r.acct ? "Acct #" + esc(r.acct) : ""} ${r.rawDob ? "· DOB " + esc(r.rawDob) : ""}</div>
+        <div class="flex gap-2 mt-2">
+          <button class="btn sm ghost" data-action="view-record" data-uid="${r.uid}">View</button>
+          <button class="btn sm ghost" data-action="archive-from-group" data-uid="${r.uid}">Archive</button>
+        </div>
+      </div>`).join("")}
+    </div>`
+    : dupCompareTable(g);
+  return `<div class="card dup-card" style="padding:var(--space-4);margin-bottom:var(--space-3)">
     <div class="flex justify-between items-center" style="margin-bottom:10px">
       <div>
         <strong>${esc(g.records[0].displayName || "(no name)")}</strong>
@@ -3951,24 +4112,11 @@ function dupGroupCard(g, scoped) {
       </div>
       <div class="flex gap-2">
         ${reviewed ? `<span class="badge status-complete">Reviewed</span><button class="btn sm ghost" data-action="unreview-group" data-key="${esc(g.key)}">Undo</button>`
-          : `<button class="btn sm" data-action="review-group" data-key="${esc(g.key)}">Mark Reviewed</button>`}
+          : `<button class="btn sm" data-action="review-group" data-key="${esc(g.key)}" title="Not a duplicate, or already handled">Mark Reviewed</button>`}
       </div>
     </div>
-    ${reasonHtml}${diffHtml}
-    <div class="src-field-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">
-      ${g.records.map((r) => `<div class="card" style="padding:10px;background:var(--bg-sunken)">
-        <div class="flex justify-between items-center" style="margin-bottom:6px">
-          <span class="badge outline">${esc(SHEET_BY_ID[r.sheetId].label)}</span>
-          ${statusBadge(r.status)}
-        </div>
-        ${r.displayName && g.records.length > 1 ? `<div style="font-size:12.5px;font-weight:600;margin-bottom:2px">${esc(r.displayName)}</div>` : ""}
-        <div style="font-size:12px;color:var(--text-secondary)">${r.acct ? "Acct #" + esc(r.acct) : ""} ${r.rawDob ? "· DOB " + esc(r.rawDob) : ""}</div>
-        <div class="flex gap-2 mt-2">
-          <button class="btn sm ghost" data-action="view-record" data-uid="${r.uid}">View</button>
-          <button class="btn sm ghost" data-action="archive-from-group" data-uid="${r.uid}">Archive</button>
-        </div>
-      </div>`).join("")}
-    </div>
+    ${reasonHtml}
+    ${body}
   </div>`;
 }
 
