@@ -1476,9 +1476,12 @@ const SHEET_CONFIG = [
     dobField: "DOB",
     phoneField: "Home Phone",
     dateFields: ["DOB", "next scheduled appt"],
-    completion: { field: "REFER TO AFD AND APPS", mode: "flag-blank-is-complete", label: "No open referral flag" },
-    searchFields: ["Patient Name", "Acc #", "Home Phone", "whose patient? AFD/DG/JP", "last seen by"],
+    completion: { field: "REFER TO AFD AND APPS", mode: "nonblank", label: "REFER TO AFD AND APPS has data" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone", "whose patient? AFD/DG/JP", "last seen by", "REFER TO AFD AND APPS"],
     inlineFields: ["REFER TO AFD AND APPS"],
+    defaultHeaders: ["Patient Name", "DOB", "Sex", "Age", "Home Phone", "Acc #", "whose patient? AFD/DG/JP", "Last gout attack <1year or >1 year", "prednisone use in the last 1 year", "colchicine use in last 1 year", "DECT y/n", "last uric acid", "allopurinol dose", "uloric", "tophi", "elevated ESR(>22) or CRP(>1)", "hx of treatement with Krystexxa y/n", "research participant", "last seen by", "next scheduled appt", "REFER TO AFD AND APPS"],
+    orderColumns: true,
+    leadTeam: true,
   },
   {
     id: "pseudogout",
@@ -1523,8 +1526,10 @@ const SHEET_CONFIG = [
     dobField: "DOB",
     phoneField: "Home Phone",
     dateFields: ["DOB"],
-    completion: { field: null, mode: "manual", label: "Roster with no status field — tracked manually" },
-    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+    completion: { field: "Assigned to", mode: "nonblank", label: "Assigned to is filled in" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone", "Assigned to"],
+    inlineFields: ["Assigned to"],
+    defaultHeaders: ["Patient Name", "DOB", "Sex", "Age", "Home Phone", "Acc #", "Assigned to"],
   },
   {
     id: "pts_0908_0911",
@@ -4244,13 +4249,15 @@ let CALL_SHEET_ID = "call_list_upcoming";
 let clLastSheet = "call_list_upcoming";
 function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming" || id === "dg_infusion_pas" || !!ASSIGN_TABS[id] || id === "dg_osteoporosis_pas"; }
 // Tabs whose Status is simply Assigned (data in the column) / Unassigned (blank). Value = the assignment column.
-const ASSIGN_TABS = { dg_pharmacy: "Assigned To", ra: "Assigned to", seronegative_ra: "Assigned to", psoriatic_arthritis: "Assigned to", psoriasis: "Assigned to", pmr: "Assigned to", gca: "Assigned to", pseudogout: "REFER TO USMANI AND APPS", polymyositis: "REFER TO USMANI", psa_and_psoriasis: "Assigned To" };
+const ASSIGN_TABS = { dg_pharmacy: "Assigned To", ra: "Assigned to", seronegative_ra: "Assigned to", psoriatic_arthritis: "Assigned to", psoriasis: "Assigned to", pmr: "Assigned to", gca: "Assigned to", pseudogout: "REFER TO USMANI AND APPS", polymyositis: "REFER TO USMANI", psa_and_psoriasis: "Assigned To", osteoporosis: "Assigned to", gout: "REFER TO AFD AND APPS" };
 // Tabs whose "assigned" state is a referral column. yes = only a Yes counts (blank/No = Unassigned).
 const ASSIGN_META = {
   pseudogout: { yes: true, label: "Referred to Usmani and Apps", short: "referred", suggest: ["Yes", "No"],
     desc: "Enter Yes in REFER TO USMANI AND APPS for each patient referred. Status: Assigned when Yes; Unassigned when blank or No." },
   psa_and_psoriasis: { yes: false, label: "Assigned", short: "assigned", suggest: ["AFD", "APPS"],
     desc: "Enter AFD or APPS in Assigned To; use Split unassigned to divide the blank ones between AFD and APPS. Highlights: light yellow = unassigned, red = High priority and still unassigned (once assigned, the highlight goes away)." },
+  gout: { yes: false, label: "Assigned", short: "assigned", suggest: [],
+    desc: "Enter data in REFER TO AFD AND APPS for each patient. Status: Assigned once it has data; Unassigned while blank." },
   polymyositis: { yes: false, label: "Referred to Usmani", short: "referred", suggest: [],
     desc: "Enter data in REFER TO USMANI for each patient referred. Status: Assigned once it has data; Unassigned while blank." },
 };
@@ -4817,7 +4824,7 @@ function clColumns(cfg) {
     if (!all.includes(CL.TEAM)) all.push(CL.TEAM);
   }
   if (cfg.hideFields || cfg.exactColumns) all = all.filter((h) => !cfgHides(cfg, h));
-  if (cfg.exactColumns) {
+  if (cfg.exactColumns || cfg.orderColumns) {
     const ix = (h) => { const i = cfg.defaultHeaders.findIndex((x) => x.toLowerCase() === String(h).trim().toLowerCase()); return i < 0 ? 999 : i; };
     all = all.map((h, i) => [h, i]).sort((a, b) => ix(a[0]) - ix(b[0]) || a[1] - b[1]).map((x) => x[0]);
   }
@@ -4825,6 +4832,7 @@ function clColumns(cfg) {
   if (clIsCallList() && !all.includes(CL.ACTION)) all.push(CL.ACTION);
   clCustomColumns().forEach((c) => { if (!all.includes(c.name)) all.push(c.name); });
   if (clIsInfusion() || clIsAssignTab() || clIsOsteo()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else if (!(clIsGeneric() && cfg.isReference)) all.push("__status");
+  if (cfg.leadTeam) { const lead = [CL.TEAM, "__status"].filter((k) => all.includes(k)); all = lead.concat(all.filter((k) => !lead.includes(k))); }
   const out = [];
   clLayoutLoad().order.forEach((k) => { if (all.includes(k) && !out.includes(k)) out.push(k); });
   all.forEach((k) => { if (!out.includes(k)) out.push(k); });
@@ -4833,6 +4841,16 @@ function clColumns(cfg) {
 function clColLabel(col) { return col === "__status" ? "Status" : col === "__infusion" ? "On Infusion?" : col; }
 function clDefaultWidth(cfg, col) {
   if (col === "__infusion") return 125;
+  if (CALL_SHEET_ID === "gout") {
+    if (col === "__status") return 140;
+    if (col === cfg.nameField) return 190;
+    if (col === cfg.dobField) return 125;
+    if (/^(sex|age)$/i.test(col)) return 80;
+    if (col === cfg.acctField) return 105;
+    if (col === cfg.phoneField) return 140;
+    if (col === CL.TEAM) return 210;
+    return Math.max(110, Math.min(230, String(col).length * 7 + 44));
+  }
   if (clIsPsa()) {
     if (col === "__status") return 190;
     if (col === CL.TEAM) return 105;
