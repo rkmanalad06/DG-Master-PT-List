@@ -1569,6 +1569,7 @@ const SHEET_CONFIG = [
     inlineFields: ["Refer To"],
     defaultHeaders: ["Diagnosis", "Refer To"],
     orderColumns: true,
+    dupPlain: true,
   },
 ];
 
@@ -1841,6 +1842,102 @@ function normalizeAcct(raw) {
   return digits ? digits.replace(/^0+/, "") || "0" : "";
 }
 
+// ---- Smart identity -------------------------------------------------------
+// Patient Name and Account # are sometimes two columns and sometimes ONE cell
+// ("12345: Smith, John", "Smith, John (12345)", "Acct 12345 - John Smith").
+// These helpers pull the account # and the name out of either place.
+function plainKey(x) {
+  return String(x == null ? "" : x).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+function splitAcctAndName(raw) {
+  let t = String(raw == null ? "" : raw).trim();
+  if (!t) return { acct: "", text: "" };
+  let acct = "";
+  const pre = t.match(/^(\d+)\s*[:\-\u2013\u2014]\s*([\s\S]*)$/);
+  if (pre) { acct = pre[1]; t = pre[2]; }
+  else {
+    const noDates = t.replace(/\b\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/g, " ");
+    const runs = noDates.match(/\d{3,}/g);
+    if (runs && runs.length <= 2) {
+      acct = runs.reduce((a, b) => (b.length > a.length ? b : a));
+      t = noDates.replace(acct, " ");
+    }
+  }
+  if (acct) {
+    t = t.replace(/\b(?:guarantor|acct|acc|account|mrn|chart|pt|patient)\b\.?\s*(?:no|num|number|#)?\.?/gi, " ")
+      .replace(/[:#|()\[\]_\/\\]+/g, " ")
+      .replace(/\s[-\u2013\u2014]+\s/g, " ")
+      .replace(/^[\s,.\-\u2013\u2014]+|[\s,.\-\u2013\u2014]+$/g, "")
+      .replace(/\s+/g, " ");
+  }
+  return { acct, text: t };
+}
+// Word list used to compare names: uppercase, no punctuation, no initials / Jr / Sr, order ignored.
+function nameTokens(text) {
+  const up = String(text || "").toUpperCase().replace(/['\u2019`]/g, "").replace(/[^A-Z ,\-]/g, " ").replace(/[-,]/g, " ");
+  const toks = up.split(/\s+/).filter(Boolean);
+  const real = toks.filter((w) => w.length > 1 && !/^(JR|SR|II|III|IV|MD|DO)$/.test(w));
+  const use = real.length >= 2 ? real : toks;
+  return [...new Set(use)].sort();
+}
+function nearWord(a, b) {
+  if (a === b) return true;
+  if (a.length < 4 || b.length < 4 || Math.abs(a.length - b.length) > 1) return false;
+  if (a.length === b.length) {
+    let d = 0, first = -1;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { d++; if (first < 0) first = i; }
+    if (d <= 1) return true;
+    return d === 2 && a[first] === b[first + 1] && a[first + 1] === b[first] && a.slice(first + 2) === b.slice(first + 2);
+  }
+  const [lo, hi] = a.length < b.length ? [a, b] : [b, a];
+  for (let i = 0; i < hi.length; i++) if (hi.slice(0, i) + hi.slice(i + 1) === lo) return true;
+  return false;
+}
+// 'same' | 'close' (middle name / initial / Jr) | 'fuzzy' (one word spelled slightly differently) | 'none' | 'unknown'
+function nameRel(A, B) {
+  if (!A.length || !B.length) return "unknown";
+  const sa = new Set(A), sb = new Set(B);
+  if (A.length === B.length && A.every((w) => sb.has(w))) return "same";
+  const [small, bigSet] = A.length <= B.length ? [A, sb] : [B, sa];
+  if (small.length >= 2 && small.every((w) => bigSet.has(w))) return "close";
+  if (A.length === B.length && A.length >= 2) {
+    const da = A.filter((w) => !sb.has(w)), db = B.filter((w) => !sa.has(w));
+    if (da.length === 1 && db.length === 1 && nearWord(da[0], db[0])) return "fuzzy";
+  }
+  return "none";
+}
+// Any column whose header looks like an account number ("Acc #", "Account #", "Patient Acct No", "MRN" ...),
+// including columns added with Add Column, counts as an account number even if the tab did not declare one.
+const ACCT_HDR = /(^|[^a-z])(acct|acc|account|mrn)([^a-z]|$)/i;
+function findAcctRaw(cfg, data) {
+  const keys = [];
+  if (cfg.acctField) keys.push(cfg.acctField);
+  for (const k of Object.keys(data)) if (k !== cfg.acctField && k !== cfg.nameField && ACCT_HDR.test(k)) keys.push(k);
+  for (const k of keys) {
+    const v = String(data[k] == null ? "" : data[k]).trim();
+    if (v && /\d/.test(v)) return v;
+  }
+  return "";
+}
+function identityOf(cfg, data) {
+  const nameRaw = cfg.nameField ? data[cfg.nameField] : "";
+  const acctRaw = findAcctRaw(cfg, data);
+  if (cfg.dupPlain) {
+    const pk = plainKey(nameRaw);
+    return { text: String(nameRaw == null ? "" : nameRaw).trim(), acct: "", name: pk, tokens: [], plain: pk };
+  }
+  const a = splitAcctAndName(nameRaw);
+  let acct = "", b = { acct: "", text: "" };
+  const ar = String(acctRaw == null ? "" : acctRaw).trim();
+  if (ar) {
+    if (/[A-Za-z]/.test(ar)) { b = splitAcctAndName(ar); acct = normalizeAcct(b.acct); }
+    else acct = normalizeAcct(ar);
+  }
+  if (!acct) acct = normalizeAcct(a.acct);
+  const text = a.text || b.text;
+  return { text, acct, name: normalizeName(text), tokens: nameTokens(text), plain: "" };
+}
+
 function normalizeName(raw) {
   if (!raw) return "";
   let s = stripAcctPrefix(raw).toUpperCase();
@@ -1974,35 +2071,33 @@ function getAllRecords(forceRefresh) {
         recDay = ex ? dayInfo(ex) : curDay;
       }
 
-      const nameRaw = cfg.nameField ? data[cfg.nameField] : "";
-      const acctRaw = cfg.acctField
-        ? data[cfg.acctField]
-        : cfg.nameFormat === "acct-colon-name"
-        ? parseAcctFromColonName(nameRaw)
-        : "";
-
-      const name = normalizeName(nameRaw);
-      const acct = normalizeAcct(acctRaw);
+      const idn = identityOf(cfg, data);
+      const name = idn.name;
+      const acct = idn.acct;
       const rawDob = cfg.dobField ? data[cfg.dobField] : "";
       const dob = cfg.dobField ? normalizeDob(rawDob) : "";
 
       let identityKey = null;
-      if (acct) identityKey = "A:" + acct;
-      else if (name && dob) identityKey = "ND:" + name + "|" + dob;
+      if (!idn.plain) {
+        if (acct) identityKey = "A:" + acct;
+        else if (name && dob) identityKey = "ND:" + name + "|" + dob;
+      }
 
-      const weakKey = name ? "N:" + name : null;
+      const weakKey = name && !idn.plain ? "N:" + name : null;
 
       records.push({
         uid,
         sheetId: cfg.id,
         data,
         isImported: uid.includes("#imp"),
-        displayName: nameRaw ? displayName(nameRaw, cfg.nameFormat) : "",
+        displayName: idn.text ? displayName(idn.text) : "",
         acct,
         dob,
         rawDob,
         identityKey,
         weakKey,
+        tokens: idn.tokens,
+        plain: idn.plain,
         day: recDay,
         status: computeStatus(cfg, data, uid),
       });
@@ -2091,7 +2186,7 @@ function getSheetStats(sheetId) {
   const remaining = total - complete;
   const pct = total ? Math.round((complete / total) * 100) : 0;
   const dupGroups = getDuplicateGroupsForSheet(sheetId);
-  const dupCount = dupGroups.reduce((sum, g) => sum + g.records.length, 0);
+  const dupCount = new Set(dupGroups.flatMap((g) => g.records.map((r) => r.uid))).size;
 
   const cfg = SHEET_BY_ID[sheetId];
   let sheetStatus;
@@ -2170,79 +2265,138 @@ function computeFieldOverlapGroups(sheetId) {
   return result;
 }
 
+// How two records in the SAME tab are compared. Returns null (not a duplicate),
+// or { lvl: "exact" | "potential", why: "reason shown to the user" }.
+//  - Account # and name are compared together (whichever cell they were typed in).
+//  - Same account # + matching name  -> exact. Same account # but different names is only "potential":
+//    a guarantor account is shared by family members.
+//  - Same name + same DOB -> exact. Same name but different DOB -> NOT a duplicate (two people).
+function dupPairLevel(a, b) {
+  if (a.plain || b.plain) return a.plain && a.plain === b.plain ? { lvl: "exact", why: "Same text" } : null;
+  const acctSame = !!(a.acct && b.acct && a.acct === b.acct);
+  const acctDiff = !!(a.acct && b.acct && a.acct !== b.acct);
+  const dobSame = !!(a.dob && b.dob && a.dob === b.dob);
+  const dobDiff = !!(a.dob && b.dob && a.dob !== b.dob);
+  const nm = nameRel(a.tokens || [], b.tokens || []);
+  const E = (why) => ({ lvl: "exact", why });
+  const P = (why) => ({ lvl: "potential", why });
+  if (acctSame) {
+    if (nm === "same" || nm === "close") return E("Same account # and name");
+    if (dobSame) return E(nm === "none" ? "Same account # and DOB (names differ)" : "Same account # and DOB");
+    if (dobDiff) return P("Same account #, but different DOB" + (nm === "none" ? " and name" : ""));
+    if (nm === "fuzzy") return E("Same account #, name spelled slightly differently");
+    if (nm === "none") return P("Same account # but different names (family member on a shared account, or a typo?)");
+    return E("Same account #");
+  }
+  if (nm === "same" || nm === "close") {
+    if (dobSame) return acctDiff ? P("Same name and DOB, but different account #") : E("Same name and DOB");
+    if (dobDiff) return null;
+    if (acctDiff) return nm === "same" ? P("Same name, different account #") : null;
+    return P(nm === "same" ? "Same name (no DOB or account # to confirm)" : "Similar name (one has a middle name / initial)");
+  }
+  if (nm === "fuzzy" && !acctDiff && !dobDiff) return P(dobSame ? "Similar name spelling and same DOB" : "Similar name spelling (no DOB or account # to confirm)");
+  return null;
+}
+
+function detectSheetDuplicates(sheetId, recs) {
+  const out = { exact: [], potential: [] };
+  const n = recs.length;
+  if (n < 2) return out;
+
+  // candidate pairs: only records that share an account #, a name word, or the same text
+  const blocks = new Map();
+  const put = (k, i) => { let l = blocks.get(k); if (!l) { l = []; blocks.set(k, l); } l.push(i); };
+  recs.forEach((r, i) => {
+    if (r.plain) put("P:" + r.plain, i);
+    if (r.acct) put("A:" + r.acct, i);
+    (r.tokens || []).forEach((w) => put("T:" + w, i));
+  });
+  const seen = new Set();
+  const exactPairs = [], potPairs = [];
+  for (const [k, list] of blocks) {
+    if (list.length < 2) continue;
+    if (k[0] === "T" && list.length > 250) continue; // a very common word says nothing
+    for (let x = 0; x < list.length; x++) {
+      for (let y = x + 1; y < list.length; y++) {
+        const i = list[x], j = list[y];
+        const pk = i * 100000 + j;
+        if (seen.has(pk)) continue;
+        seen.add(pk);
+        const res = dupPairLevel(recs[i], recs[j]);
+        if (!res) continue;
+        (res.lvl === "exact" ? exactPairs : potPairs).push([i, j, res.why]);
+      }
+    }
+  }
+
+  const mk = () => { const p = recs.map((_, i) => i); const f = (x) => { while (p[x] !== x) { p[x] = p[p[x]]; x = p[x]; } return x; }; return { p, f, u: (a, b) => { const ra = f(a), rb = f(b); if (ra !== rb) p[ra] = rb; } }; };
+  const ex = mk();
+  exactPairs.forEach(([i, j]) => ex.u(i, j));
+  const pot = mk();
+  potPairs.forEach(([i, j]) => { if (ex.f(i) !== ex.f(j)) pot.u(ex.f(i), ex.f(j)); });
+
+  const skip = new Set(["__status", "__infusion", "__layout"]);
+  const differs = (list) => {
+    const fields = new Set();
+    list.forEach((r) => Object.keys(r.data).forEach((f) => { if (!skip.has(f)) fields.add(f); }));
+    return [...fields].filter((f) => new Set(list.map((r) => String(r.data[f] == null ? "" : r.data[f]).trim().toLowerCase()).filter(Boolean)).size > 1);
+  };
+  const build = (type, members, reasonsSet) => {
+    const list = members.map((i) => recs[i]);
+    return { key: "DX:" + sheetId + ":" + list.map((r) => r.uid).sort().join(","), sheetId, records: list, type, reasons: [...reasonsSet], differs: differs(list) };
+  };
+
+  const exGroups = new Map();
+  recs.forEach((_, i) => { const r = ex.f(i); if (!exGroups.has(r)) exGroups.set(r, []); exGroups.get(r).push(i); });
+  const exReasons = new Map();
+  exactPairs.forEach(([i, j, why]) => { const r = ex.f(i); if (!exReasons.has(r)) exReasons.set(r, new Set()); exReasons.get(r).add(why); });
+  for (const [root, members] of exGroups) if (members.length > 1) out.exact.push(build("exact", members, exReasons.get(root) || new Set()));
+
+  const poGroups = new Map();
+  recs.forEach((_, i) => {
+    const r = pot.f(ex.f(i));
+    if (!poGroups.has(r)) poGroups.set(r, new Set());
+    poGroups.get(r).add(i);
+  });
+  const poReasons = new Map();
+  potPairs.forEach(([i, j, why]) => { if (ex.f(i) === ex.f(j)) return; const r = pot.f(ex.f(i)); if (!poReasons.has(r)) poReasons.set(r, new Set()); poReasons.get(r).add(why); });
+  for (const [root, members] of poGroups) {
+    if (!poReasons.has(root)) continue; // only components that were joined by a potential link
+    out.potential.push(build("potential", [...members], poReasons.get(root)));
+  }
+  return out;
+}
+
 function computeDuplicateIndex(forceRefresh) {
   if (DUP_CACHE && !forceRefresh) return DUP_CACHE;
 
   const records = getAllRecords();
-  const byStrongKeyPerSheet = new Map(); // sheetId -> Map(key -> [records])
-  const byWeakKeyPerSheet = new Map();
+  const bySheet = new Map();
   const byStrongKeyGlobal = new Map(); // key -> [records] across all sheets
 
   for (const r of records) {
-    if (!byStrongKeyPerSheet.has(r.sheetId)) byStrongKeyPerSheet.set(r.sheetId, new Map());
-    if (!byWeakKeyPerSheet.has(r.sheetId)) byWeakKeyPerSheet.set(r.sheetId, new Map());
-
+    if (!bySheet.has(r.sheetId)) bySheet.set(r.sheetId, []);
+    bySheet.get(r.sheetId).push(r);
     if (r.identityKey) {
-      const m = byStrongKeyPerSheet.get(r.sheetId);
-      if (!m.has(r.identityKey)) m.set(r.identityKey, []);
-      m.get(r.identityKey).push(r);
-
       if (!byStrongKeyGlobal.has(r.identityKey)) byStrongKeyGlobal.set(r.identityKey, []);
       byStrongKeyGlobal.get(r.identityKey).push(r);
     }
-    if (r.weakKey) {
-      const wm = byWeakKeyPerSheet.get(r.sheetId);
-      if (!wm.has(r.weakKey)) wm.set(r.weakKey, []);
-      wm.get(r.weakKey).push(r);
-    }
   }
 
-  const exactDuplicates = []; // within same sheet, strong key match
-  const potentialDuplicates = []; // within same sheet, weak (name-only) match, not already exact
-  const crossTabGroups = []; // strong key match spanning >1 sheet
+  const exactDuplicates = []; // within one tab: same patient, high confidence
+  const potentialDuplicates = []; // within one tab: might be the same patient
+  const crossTabGroups = []; // same patient spanning >1 tab
 
-  for (const [sheetId, m] of byStrongKeyPerSheet) {
-    for (const [key, recs] of m) {
-      if (recs.length > 1) {
-        exactDuplicates.push({ key, sheetId, records: recs, type: "exact" });
-      }
-    }
-  }
-
-  const exactKeysBySheet = new Map();
-  for (const d of exactDuplicates) {
-    if (!exactKeysBySheet.has(d.sheetId)) exactKeysBySheet.set(d.sheetId, new Set());
-    exactKeysBySheet.get(d.sheetId).add(d.key);
-  }
-
-  for (const [sheetId, wm] of byWeakKeyPerSheet) {
-    for (const [key, recs] of wm) {
-      if (recs.length < 2) continue;
-      // skip if these exact same records are already fully covered by a strong-key exact group
-      const strongKeys = new Set(recs.map((r) => r.identityKey).filter(Boolean));
-      const alreadyExact = strongKeys.size === 1 && exactKeysBySheet.get(sheetId)?.has([...strongKeys][0]);
-      if (alreadyExact && strongKeys.size <= 1 && new Set(recs.map(r=>r.identityKey||r.uid)).size < recs.length + 1 && recs.every(r=>r.identityKey===recs[0].identityKey)) continue;
-      // only flag as potential if there's genuine ambiguity (different or missing DOB/acct)
-      if (strongKeys.size > 1 || recs.some((r) => !r.identityKey)) {
-        potentialDuplicates.push({ key, sheetId, records: recs, type: "potential" });
-      }
-    }
+  for (const [sheetId, recs] of bySheet) {
+    const d = detectSheetDuplicates(sheetId, recs);
+    exactDuplicates.push(...d.exact);
+    potentialDuplicates.push(...d.potential);
   }
 
   for (const [key, recs] of byStrongKeyGlobal) {
     const sheets = new Set(recs.map((r) => r.sheetId));
     if (sheets.size > 1) {
       crossTabGroups.push({ key, records: recs, sheets: [...sheets], type: "cross-tab" });
-    }
-  }
-
-  // Field-overlap potential duplicates (2-3+ matching columns, no reliable identity key needed)
-  const coveredUidSets = potentialDuplicates.map((g) => new Set(g.records.map((r) => r.uid)));
-  for (const sheetId of byStrongKeyPerSheet.keys()) {
-    for (const group of computeFieldOverlapGroups(sheetId)) {
-      const uidSet = new Set(group.records.map((r) => r.uid));
-      const alreadyCovered = coveredUidSets.some((s) => s.size === uidSet.size && [...uidSet].every((u) => s.has(u)));
-      if (!alreadyCovered) potentialDuplicates.push(group);
     }
   }
 
@@ -2325,14 +2479,10 @@ function getExistingIdentitySetForSheet(sheetId) {
 }
 
 function computeImportRowIdentity(cfg, row) {
-  const nameRaw = cfg.nameField ? row[cfg.nameField] : "";
-  const acctRaw = cfg.acctField
-    ? row[cfg.acctField]
-    : cfg.nameFormat === "acct-colon-name"
-    ? parseAcctFromColonName(nameRaw)
-    : "";
-  const name = normalizeName(nameRaw);
-  const acct = normalizeAcct(acctRaw);
+  const idn = identityOf(cfg, row);
+  if (idn.plain) return null;
+  const name = idn.name;
+  const acct = idn.acct;
   const dob = cfg.dobField ? normalizeDob(row[cfg.dobField]) : "";
   if (acct) return "A:" + acct;
   if (name && dob) return "ND:" + name + "|" + dob;
@@ -2447,9 +2597,9 @@ function getDashboardStats() {
   const totalUniquePatients = identityKeys.size;
 
   const dupIdx = computeDuplicateIndex();
-  const duplicateRecordCount =
-    dupIdx.exactDuplicates.reduce((s, g) => s + g.records.length, 0) +
-    dupIdx.potentialDuplicates.reduce((s, g) => s + g.records.length, 0);
+  const duplicateRecordCount = new Set(
+    [...dupIdx.exactDuplicates, ...dupIdx.potentialDuplicates].flatMap((g) => g.records.map((r) => r.uid))
+  ).size;
 
   const perSheet = patientSheets.map((s) => ({ id: s.id, ...getSheetStats(s.id) }));
   const trackable = perSheet.filter((s) => s.sheetStatus !== "untracked" && s.sheetStatus !== "reference");
@@ -2648,7 +2798,7 @@ function renderSidebar() {
 
   html += `<div class="nav-group"><div class="nav-group-label">Data Management</div>`;
   html += navItem("raw-data", null, view, param, icon("database"), "Raw Data Center");
-  html += navItem("duplicates", null, view, param, icon("copy"), "Duplicate Management", null, computeDuplicateIndex().exactDuplicates.length + computeDuplicateIndex().potentialDuplicates.length);
+  html += navItem("duplicates", null, view, view === "duplicates" ? null : param, icon("copy"), "Duplicate Management", null, computeDuplicateIndex().exactDuplicates.length + computeDuplicateIndex().potentialDuplicates.length);
   html += navItem("import-export", null, view, param, icon("upload"), "Import / Export");
   html += navItem("history", null, view, param, icon("history"), "Change History");
   html += `</div>`;
@@ -2728,7 +2878,10 @@ function render() { ensureDefaultSheets();
     $root.innerHTML = renderRawData(query);
     wireRawData();
   } else if (view === "duplicates") {
-    renderBreadcrumbs([{ label: "Data Management" }, { label: "Duplicate Management" }]);
+    const dupSc = dupScope();
+    renderBreadcrumbs(dupSc
+      ? [{ label: "Data Management" }, { label: "Duplicate Management", href: "#/duplicates" }, { label: SHEET_BY_ID[dupSc].label }]
+      : [{ label: "Data Management" }, { label: "Duplicate Management" }]);
     $root.innerHTML = renderDuplicates();
     wireDuplicates();
   } else if (view === "import-export") {
@@ -2878,7 +3031,7 @@ function tabOverviewRow(s) {
         <span class="pct-label">${untracked ? "—" : s.pct + "%"}</span>
       </div>
     </td>
-    <td>${s.dupCount ? `<span class="badge status-needs-attention">${s.dupCount}</span>` : `<span class="text-muted">0</span>`}</td>
+    <td>${s.dupCount ? `<span class="badge status-needs-attention" style="cursor:pointer" title="Review duplicates in ${esc(cfg.label)}" onclick="event.stopPropagation();navigate('duplicates/${s.id}')">${s.dupCount}</span>` : `<span class="text-muted">0</span>`}</td>
     <td>${tabStatusBadge(s.sheetStatus)}</td>
   </tr>`;
 }
@@ -3019,12 +3172,12 @@ function renderSheetPage(cfg) {
       ${cfg.completion.mode === "flag-blank-is-complete"
         ? kpiCard({ label: "Needs Attention", value: fmtNum(stats.needsAttention), icon: "records", sub: cfg.completion.label, cls: stats.needsAttention ? "warn" : "positive" })
         : kpiCard({ label: "Remaining", value: fmtNum(stats.remaining), icon: "records", sub: "Not yet complete" })}
-      ${kpiCard({ label: "Duplicates", value: fmtNum(stats.dupCount), icon: "copy", sub: stats.dupCount ? "Review in Duplicate Management" : "None found", cls: stats.dupCount ? "warn" : "positive" })}
+      ${kpiCard({ label: "Duplicates", value: fmtNum(stats.dupCount), icon: "copy", sub: stats.dupCount ? "Review duplicates in this tab" : "None found", cls: stats.dupCount ? "warn" : "positive" })}
     </div>` : ""}
 
     ${dupGroups.length ? `<div class="card" style="padding:12px 16px;margin-bottom:20px;border-color:var(--status-attention-bg);background:var(--status-attention-bg)">
-      <span style="color:var(--status-attention);font-weight:600;font-size:13px">⚠ ${dupGroups.reduce((s,g)=>s+g.records.length,0)} record(s) in this tab are part of a duplicate group.</span>
-      <a class="link-inline" href="#/duplicates" style="margin-left:8px;font-size:12.5px">Review duplicates →</a>
+      <span style="color:var(--status-attention);font-weight:600;font-size:13px">⚠ ${dupUniqueCount(dupGroups)} record(s) in this tab are part of a duplicate group.</span>
+      <a class="link-inline" href="#/duplicates/${esc(cfg.id)}" style="margin-left:8px;font-size:12.5px">Review duplicates in this tab →</a>
     </div>` : ""}
 
     <div id="sheet-table-region"></div>
@@ -3683,26 +3836,66 @@ function wireGenericTableClicks() {
 // ============================================================================
 // DUPLICATE MANAGEMENT
 // ============================================================================
-function renderDuplicates() {
+function dupScope() {
+  const { view, param } = parseHash();
+  return view === "duplicates" && param && SHEET_BY_ID[param] ? param : null;
+}
+function dupUniqueCount(groups) {
+  return new Set(groups.flatMap((g) => g.records.map((r) => r.uid))).size;
+}
+function dupGroupsFor(scope) {
   const idx = computeDuplicateIndex();
+  return {
+    exact: scope ? idx.exactDuplicates.filter((g) => g.sheetId === scope) : idx.exactDuplicates,
+    potential: scope ? idx.potentialDuplicates.filter((g) => g.sheetId === scope) : idx.potentialDuplicates,
+    cross: scope ? [] : idx.crossTabGroups,
+  };
+}
+
+function renderDuplicates() {
+  const scope = dupScope();
+  const idx = computeDuplicateIndex();
+  const g = dupGroupsFor(scope);
   const tabs = [
-    { id: "exact", label: "Exact Duplicates", groups: idx.exactDuplicates },
-    { id: "potential", label: "Potential Duplicates", groups: idx.potentialDuplicates },
-    { id: "cross-tab", label: "Same Patient, Multiple Tabs", groups: idx.crossTabGroups },
+    { id: "exact", label: "Exact Duplicates", groups: g.exact },
+    { id: "potential", label: "Potential Duplicates", groups: g.potential },
   ];
+  if (!scope) tabs.push({ id: "cross-tab", label: "Same Patient, Multiple Tabs", groups: g.cross });
+
+  const seenKey = scope || "*";
+  if (window.__dupScopeSeen !== seenKey) {
+    window.__dupScopeSeen = seenKey;
+    window.__dupTab = !g.exact.length && g.potential.length ? "potential" : "exact";
+  }
+  if (scope && window.__dupTab === "cross-tab") window.__dupTab = "exact";
   if (!window.__dupTab) window.__dupTab = "exact";
+
+  const sheets = SHEET_CONFIG.filter((c) => !c.isReference);
+  const cnt = (id) => dupUniqueCount([...idx.exactDuplicates, ...idx.potentialDuplicates].filter((x) => x.sheetId === id));
+  const scopeSel = `<select class="filter-select" id="dup-scope" aria-label="Show duplicates for one tab">
+      <option value="">All tabs (${dupUniqueCount([...idx.exactDuplicates, ...idx.potentialDuplicates])})</option>
+      ${sheets.map((c) => `<option value="${esc(c.id)}" ${scope === c.id ? "selected" : ""}>${esc(c.label)} (${cnt(c.id)})</option>`).join("")}
+    </select>`;
+  const scopeLabel = scope ? SHEET_BY_ID[scope].label : "";
 
   return `
     <div class="page-header">
       <div>
-        <div class="page-title">Duplicate Management</div>
-        <div class="page-subtitle">Nothing is deleted automatically. Review each group, compare records, and decide what to keep.</div>
+        <div class="page-title">${scope ? "Duplicates in " + esc(scopeLabel) : "Duplicate Management"}</div>
+        <div class="page-subtitle">${scope
+          ? "Only duplicates found inside this tab are shown. Nothing is deleted automatically."
+          : "Nothing is deleted automatically. Review each group, compare records, and decide what to keep."}
+          Patient name and account # are compared together, even when both are typed in the same cell.</div>
+      </div>
+      <div class="page-header-actions">
+        ${scopeSel}
+        ${scope ? `<a class="btn" href="#/sheet/${esc(scope)}">← Back to ${esc(scopeLabel)}</a> <a class="btn" href="#/duplicates">All tabs</a>` : ""}
       </div>
     </div>
-    <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
-      ${kpiCard({ label: "Exact Duplicates", value: fmtNum(idx.exactDuplicates.length), icon: "copy", sub: fmtNum(idx.exactDuplicates.reduce((s,g)=>s+g.records.length,0)) + " records", cls: idx.exactDuplicates.length ? "warn" : "positive" })}
-      ${kpiCard({ label: "Potential Duplicates", value: fmtNum(idx.potentialDuplicates.length), icon: "copy", sub: fmtNum(idx.potentialDuplicates.reduce((s,g)=>s+g.records.length,0)) + " records" })}
-      ${kpiCard({ label: "Same Patient, Multiple Tabs", value: fmtNum(idx.crossTabGroups.length), icon: "users", sub: "Cross-referenced, not necessarily errors" })}
+    <div class="kpi-grid" style="grid-template-columns:repeat(${scope ? 2 : 3},1fr)">
+      ${kpiCard({ label: "Exact Duplicates", value: fmtNum(g.exact.length), icon: "copy", sub: fmtNum(dupUniqueCount(g.exact)) + " records", cls: g.exact.length ? "warn" : "positive" })}
+      ${kpiCard({ label: "Potential Duplicates", value: fmtNum(g.potential.length), icon: "copy", sub: fmtNum(dupUniqueCount(g.potential)) + " records" })}
+      ${scope ? "" : kpiCard({ label: "Same Patient, Multiple Tabs", value: fmtNum(g.cross.length), icon: "users", sub: "Cross-referenced, not necessarily errors" })}
     </div>
     <div class="flex gap-2" style="margin-bottom:16px">
       ${tabs.map((t) => `<button class="btn sm ${window.__dupTab === t.id ? "primary" : ""}" data-dup-tab="${t.id}">${esc(t.label)} (${t.groups.length})</button>`).join("")}
@@ -3713,18 +3906,21 @@ function renderDuplicates() {
 
 function wireDuplicates() {
   document.querySelectorAll("[data-dup-tab]").forEach((b) => b.addEventListener("click", () => { window.__dupTab = b.dataset.dupTab; render(); }));
+  const sel = document.getElementById("dup-scope");
+  if (sel) sel.addEventListener("change", () => navigate(sel.value ? "duplicates/" + encodeURIComponent(sel.value) : "duplicates"));
   renderDupList();
 }
 
 function renderDupList() {
-  const idx = computeDuplicateIndex();
-  const groups = { exact: idx.exactDuplicates, potential: idx.potentialDuplicates, "cross-tab": idx.crossTabGroups }[window.__dupTab] || [];
+  const scope = dupScope();
+  const g = dupGroupsFor(scope);
+  const groups = { exact: g.exact, potential: g.potential, "cross-tab": g.cross }[window.__dupTab] || [];
   const region = document.getElementById("dup-list-region");
   if (!groups.length) {
-    region.innerHTML = `<div class="card">${emptyStateHtml("Nothing here", "No groups found in this category.")}</div>`;
+    region.innerHTML = `<div class="card">${emptyStateHtml("Nothing here", scope ? `No ${window.__dupTab === "potential" ? "potential" : "exact"} duplicates found in ${SHEET_BY_ID[scope].label}.` : "No groups found in this category.")}</div>`;
     return;
   }
-  region.innerHTML = groups.map((g) => dupGroupCard(g)).join("");
+  region.innerHTML = groups.map((x) => dupGroupCard(x, !!scope)).join("");
   region.querySelectorAll("[data-action='review-group']").forEach((el) => {
     el.addEventListener("click", () => { setGroupReview(el.dataset.key, { reviewed: true }); toast("Marked as reviewed"); render(); });
   });
@@ -3738,12 +3934,15 @@ function renderDupList() {
     }));
   });
 }
-function dupGroupCard(g) {
+function dupGroupCard(g, scoped) {
   const reviewed = isGroupReviewed(g.key);
-  const label = g.type === "cross-tab" ? `Found in: ${g.sheets.map((s) => SHEET_BY_ID[s].label).join(", ")}` : `${g.records.length} records in ${SHEET_BY_ID[g.sheetId].label}`;
-  const reasonHtml = g.type === "field-overlap"
-    ? `<div class="text-muted" style="font-size:12px;margin-bottom:10px">Flagged because ${g.matchedFields.length} column(s) matched exactly: ${g.matchedFields.map((f) => `<strong>${esc(f)}</strong>`).join(", ") || "(name only)"}</div>`
+  const label = g.type === "cross-tab" ? `Found in: ${g.sheets.map((s) => SHEET_BY_ID[s].label).join(", ")}` : `${g.records.length} records${scoped ? "" : " in " + SHEET_BY_ID[g.sheetId].label}`;
+  const reasonHtml = g.reasons && g.reasons.length
+    ? `<div class="text-muted" style="font-size:12px;margin-bottom:6px"><strong>Why flagged:</strong> ${g.reasons.map(esc).join(" · ")}</div>`
     : "";
+  const diffHtml = g.type === "cross-tab" ? "" : g.differs && g.differs.length
+    ? `<div class="text-muted" style="font-size:12px;margin-bottom:10px">Rows differ in: ${g.differs.slice(0, 8).map((f) => `<strong>${esc(f)}</strong>`).join(", ")}${g.differs.length > 8 ? ` +${g.differs.length - 8} more` : ""}</div>`
+    : `<div class="text-muted" style="font-size:12px;margin-bottom:10px">These rows are identical in every column.</div>`;
   return `<div class="card" style="padding:var(--space-4);margin-bottom:var(--space-3)">
     <div class="flex justify-between items-center" style="margin-bottom:10px">
       <div>
@@ -3755,13 +3954,14 @@ function dupGroupCard(g) {
           : `<button class="btn sm" data-action="review-group" data-key="${esc(g.key)}">Mark Reviewed</button>`}
       </div>
     </div>
-    ${reasonHtml}
+    ${reasonHtml}${diffHtml}
     <div class="src-field-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">
       ${g.records.map((r) => `<div class="card" style="padding:10px;background:var(--bg-sunken)">
         <div class="flex justify-between items-center" style="margin-bottom:6px">
           <span class="badge outline">${esc(SHEET_BY_ID[r.sheetId].label)}</span>
           ${statusBadge(r.status)}
         </div>
+        ${r.displayName && g.records.length > 1 ? `<div style="font-size:12.5px;font-weight:600;margin-bottom:2px">${esc(r.displayName)}</div>` : ""}
         <div style="font-size:12px;color:var(--text-secondary)">${r.acct ? "Acct #" + esc(r.acct) : ""} ${r.rawDob ? "· DOB " + esc(r.rawDob) : ""}</div>
         <div class="flex gap-2 mt-2">
           <button class="btn sm ghost" data-action="view-record" data-uid="${r.uid}">View</button>
@@ -5156,7 +5356,7 @@ function clGenericKpiHtml() {
       ${cfg.completion.mode === "flag-blank-is-complete"
         ? kpiCard({ label: "Needs Attention", value: fmtNum(stats.needsAttention), icon: "records", sub: cfg.completion.label, cls: stats.needsAttention ? "warn" : "positive" })
         : kpiCard({ label: "Remaining", value: fmtNum(stats.remaining), icon: "records", sub: "Not yet complete" })}
-      ${kpiCard({ label: "Duplicates", value: fmtNum(stats.dupCount), icon: "copy", sub: stats.dupCount ? "Review in Duplicate Management" : "None found", cls: stats.dupCount ? "warn" : "positive" })}
+      ${kpiCard({ label: "Duplicates", value: fmtNum(stats.dupCount), icon: "copy", sub: stats.dupCount ? "Review duplicates in this tab" : "None found", cls: stats.dupCount ? "warn" : "positive" })}
     </div>`;
 }
 function clOsteoKpiHtml() {
@@ -5263,8 +5463,8 @@ function renderCallListPage(cfg) {
     ${clIsPsa() ? `<textarea class="cl-note" id="cl-note" rows="2" aria-label="General note" placeholder="Add a general note for this tab...">${esc(psaNote())}</textarea>` : ""}
 
     ${dupGroups.length ? `<div class="card" style="padding:12px 16px;margin-bottom:20px;border-color:var(--status-attention-bg);background:var(--status-attention-bg)">
-      <span style="color:var(--status-attention);font-weight:600;font-size:13px">⚠ ${dupGroups.reduce((s, g) => s + g.records.length, 0)} record(s) in this tab are part of a duplicate group.</span>
-      <a class="link-inline" href="#/duplicates" style="margin-left:8px;font-size:12.5px">Review duplicates →</a>
+      <span style="color:var(--status-attention);font-weight:600;font-size:13px">⚠ ${dupUniqueCount(dupGroups)} record(s) in this tab are part of a duplicate group.</span>
+      <a class="link-inline" href="#/duplicates/${esc(cfg.id)}" style="margin-left:8px;font-size:12.5px">Review duplicates in this tab →</a>
     </div>` : ""}
 
     <div class="table-toolbar cl-toolbar" id="cl-toolbar">
