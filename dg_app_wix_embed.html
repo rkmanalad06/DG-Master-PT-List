@@ -1002,6 +1002,21 @@ table.cl-table tbody tr.cl-row-y:hover td { background: #fff1b0; }
 table.cl-table tbody tr.cl-row-hi td { background: #ffe1dc; }
 table.cl-table tbody tr.cl-row-hi td:first-child { box-shadow: inset 4px 0 0 #d92d20; }
 table.cl-table tbody tr.cl-row-y.cl-row-sel td, table.cl-table tbody tr.cl-row-hi.cl-row-sel td { background: var(--accent-soft, #f3dde0); }
+/* Admin row highlights: the whole row takes the rule's color */
+table.cl-table tbody tr.cl-hl { --hl-bg: #fde3e1; --hl-bar: #d92d20; }
+table.cl-table tbody tr.cl-hl-orange { --hl-bg: #ffe9d2; --hl-bar: #e8710a; }
+table.cl-table tbody tr.cl-hl-yellow { --hl-bg: #fff5c7; --hl-bar: #c79a00; }
+table.cl-table tbody tr.cl-hl-green { --hl-bg: #dff3e6; --hl-bar: #1a8f4c; }
+table.cl-table tbody tr.cl-hl-blue { --hl-bg: #dfeaff; --hl-bar: #2a62d6; }
+table.cl-table tbody tr.cl-hl-violet { --hl-bg: #ece3ff; --hl-bar: #7a4bd6; }
+table.cl-table tbody tr.cl-hl-gray { --hl-bg: #e9ecf1; --hl-bar: #667085; }
+table.cl-table tbody tr.cl-hl td, table.cl-table tbody tr.cl-hl td.cl-corr-td { background: var(--hl-bg); }
+table.cl-table tbody tr.cl-hl td input.inline-edit-input, table.cl-table tbody tr.cl-hl td textarea.cl-wrap-input { background: transparent; }
+table.cl-table tbody tr.cl-hl td:first-child { box-shadow: inset 4px 0 0 var(--hl-bar); }
+table.cl-table tbody tr.cl-hl:hover td { filter: brightness(.96); }
+table.cl-table tbody tr.cl-hl.cl-row-sel td { background: var(--accent-soft, #f3dde0); }
+.cl-auto-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: #ffe7a8; color: #7a4b00; }
+.cl-month-chip { display: inline-block; font-size: 12.5px; font-weight: 600; padding: 2px 10px; border-radius: 999px; background: var(--ink-100, #eef0f4); color: var(--text-secondary); white-space: nowrap; }
 .cl-note { display: block; width: 100%; box-sizing: border-box; margin: 0 0 14px; padding: 9px 12px; font: inherit; font-size: 13px; line-height: 1.4; color: #5c4300; background: #fff8d6; border: 1px solid #efd766; border-radius: 8px; resize: vertical; min-height: 38px; }
 .cl-note:focus { outline: 2px solid #efd766; outline-offset: 1px; background: #fffbe8; }
 .cl-days { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
@@ -1395,6 +1410,8 @@ const SHEET_CONFIG = [
     id: "dg_infusion_pas",
     label: "DG Infusion PAs",
     shortLabel: "Infusion PAs",
+    adminLabel: "DG Infusion PAs – Medicare view",
+    toggleLabel: "Medicare",
     group: "work-queues",
     nameField: "MEDICARE - Patient Name",
     acctField: "Account #",
@@ -1403,6 +1420,24 @@ const SHEET_CONFIG = [
     searchFields: ["Account #", "MEDICARE - Patient Name", "Current Provider", "CPT / Drug", "Assigned To", "PA Initiated / Done", "FU Provider", "Team member", "Corrections / Notes"],
     inlineFields: ["PA Initiated / Done", "Assigned To", "Team member", "Corrections / Notes"],
     defaultHeaders: ["Account #", "MEDICARE - Patient Name", "Current Provider", "CPT / Drug", "Future IV Appt", "Next Infusion Appt", "Assigned To", "PA Initiated / Done", "Next FU Appt", "FU Provider", "Team member", "Corrections / Notes"],
+  },
+  {
+    id: "dg_infusion_other",
+    label: "DG Infusion PAs – Other Insurance",
+    shortLabel: "Infusion – Other Ins.",
+    adminLabel: "DG Infusion PAs – Other Insurance view",
+    toggleLabel: "Other Insurance",
+    subOf: "dg_infusion_pas",
+    // shown exactly as listed; the two columns every infusion tab shares stay in the data but are hidden here (Admin > Columns can show them)
+    defaultHidden: ["PA Initiated / Done", "Corrections / Notes"],
+    group: "work-queues",
+    nameField: "Patient Name",
+    acctField: "Acc #",
+    dateFields: ["Next Appt", "Last/Current Appt", "Follow-Up Date"],
+    completion: { field: "PA Initiated / Done", mode: "nonblank", label: "PA initiated/done is filled in" },
+    searchFields: ["Acc #", "Patient Name", "Current Provider", "Drug", "Assigned To", "Insurance", "Provider Listed", "Team Member", "PA Initiated / Done", "Corrections / Notes"],
+    inlineFields: ["PA Initiated / Done", "Assigned To", "Team Member", "Corrections / Notes"],
+    defaultHeaders: ["Acc #", "Patient Name", "Current Provider", "Drug", "Next Appt", "Last/Current Appt", "Assigned To", "Insurance", "Follow-Up Date", "Provider Listed", "Team Member", "PA Initiated / Done", "Corrections / Notes"],
   },
   {
     id: "dg_osteoporosis_pas",
@@ -2212,7 +2247,7 @@ function getCompletionConfig(sheetId) {
 
 // Returns one of: 'complete' | 'pending' | 'needs-attention' | 'not-started'
 function computeStatus(cfg, data, uid) {
-  if (isCallSheet(cfg.id) && cfg.id !== "dg_infusion_pas") return clWith(cfg.id, () => CALL_GENERIC_STATUS[callInfo(data).status]);
+  if (isCallSheet(cfg.id) && !isInfusionId(cfg.id)) return clWith(cfg.id, () => CALL_GENERIC_STATUS[callInfo(data).status]);
 
   const manual = Store.statusOverrides[uid];
   if (manual) return manual;
@@ -2880,12 +2915,19 @@ function renderSidebar() {
   html += navItem("dashboard", null, view, param, icon("grid"), "Dashboard");
 
   for (const group of GROUPS.filter((g) => g.id !== "dashboard" && g.id !== "data-management")) {
-    const sheets = SHEET_CONFIG.filter((s) => s.group === group.id && !s.tabHidden);
+    const sheets = SHEET_CONFIG.filter((s) => s.group === group.id && !s.tabHidden && !s.subOf);
     if (!sheets.length) continue;
     html += `<div class="nav-group"><div class="nav-group-label">${esc(group.label)}</div>`;
+    const curParam = view === "sheet" && SHEET_BY_ID[param] && SHEET_BY_ID[param].subOf ? SHEET_BY_ID[param].subOf : param;
     for (const s of sheets) {
-      const st = statsById[s.id];
-      html += navItem("sheet", s.id, view, param, sheetIcon(s.id), s.label, st);
+      let st = statsById[s.id];
+      const kids = SHEET_CONFIG.filter((k) => k.subOf === s.id && statsById[k.id]);
+      if (st && kids.length) {
+        const tot = st.total + kids.reduce((a, k) => a + statsById[k.id].total, 0);
+        const comp = (st.complete || 0) + kids.reduce((a, k) => a + (statsById[k.id].complete || 0), 0);
+        st = { ...st, total: tot, complete: comp, pct: tot ? Math.round((comp / tot) * 100) : 0 };
+      }
+      html += navItem("sheet", s.id, view, curParam, sheetIcon(s.id), s.label, st);
     }
     html += `</div>`;
   }
@@ -4719,7 +4761,21 @@ function uploadIconIllus() { return `<div class="icon">${'<svg width="40" height
 // ============================================================================
 let CALL_SHEET_ID = "call_list_upcoming";
 let clLastSheet = "call_list_upcoming";
-function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming" || id === "dg_infusion_pas" || !!ASSIGN_TABS[id] || id === "dg_osteoporosis_pas"; }
+function clPageTitle(cfg) { return cfg.subOf && SHEET_BY_ID[cfg.subOf] ? SHEET_BY_ID[cfg.subOf].label : cfg.label; }
+function clToggleIds(cfg) {
+  const root = cfg.subOf || cfg.id;
+  const ids = [root].concat(SHEET_CONFIG.filter((c) => c.subOf === root).map((c) => c.id));
+  return ids.length > 1 ? ids : [];
+}
+function clToggleHtml(cfg) {
+  const ids = clToggleIds(cfg);
+  if (!ids.length) return "";
+  const counts = {};
+  getAllRecords().forEach((r) => { counts[r.sheetId] = (counts[r.sheetId] || 0) + 1; });
+  return `<div class="cl-days cl-view-toggle" id="cl-view-toggle" role="group" aria-label="Switch between insurance types">${ids.map((id) => `<button type="button" class="cl-day" data-view-sheet="${esc(id)}" aria-pressed="${id === cfg.id}"><span>${esc(SHEET_BY_ID[id].toggleLabel || SHEET_BY_ID[id].label)}</span><b>${fmtNum(counts[id] || 0)}</b></button>`).join("")}</div>`;
+}
+function isInfusionId(id) { return id === "dg_infusion_pas" || id === "dg_infusion_other"; }
+function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming" || isInfusionId(id) || !!ASSIGN_TABS[id] || id === "dg_osteoporosis_pas"; }
 // Tabs whose Status is simply Assigned (data in the column) / Unassigned (blank). Value = the assignment column.
 const ASSIGN_TABS = { dg_pharmacy: "Assigned To", ra: "Assigned to", seronegative_ra: "Assigned to", psoriatic_arthritis: "Assigned to", psoriasis: "Assigned to", pmr: "Assigned to", gca: "Assigned to", pseudogout: "REFER TO USMANI AND APPS", polymyositis: "REFER TO USMANI", psa_and_psoriasis: "Assigned To", osteoporosis: "Assigned to", gout: "REFER TO AFD AND APPS", all_other_dx: "Refer To", pts_0908_0911: "Assigned to" };
 // Tabs whose "assigned" state is a referral column. yes = only a Yes counts (blank/No = Unassigned).
@@ -4742,7 +4798,47 @@ function clIsPsa() { return CALL_SHEET_ID === "psa_and_psoriasis"; }
 function clIsDays() { return !!(SHEET_BY_ID[CALL_SHEET_ID] && SHEET_BY_ID[CALL_SHEET_ID].dayGroups); }
 function clIsDexaCol(c) { return clIsDays() && /^dexa/i.test(String(c)); }
 function clDexaYes(v) { return /^\s*y(es)?\b/i.test(String(v || "")); }
+// Clinic month & year (e.g. "October 2026"), worked out from a date column. Built in for DG Osteoporosis PAs (NEXT APPT);
+// the Admin page can point any tab at any date column, or switch it off.
+const CL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+function clMonthCol() {
+  const r = ((AC().rules || {})[CALL_SHEET_ID]) || {};
+  if (r.monthCol === "none") return "";
+  if (r.monthCol) return r.monthCol;
+  return clIsOsteo() ? OP.NEXT : "";
+}
+function clMonthInfo(data) {
+  const col = clMonthCol();
+  if (!col) return null;
+  const d = parseDateLoose(data[col]);
+  if (!d) return null;
+  return { key: d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"), label: CL_MONTHS[d.getMonth()] + " " + d.getFullYear(), sort: d.getFullYear() * 12 + d.getMonth() };
+}
+function clMonthScoped(rows) {
+  if (!clState.month || !clMonthCol()) return rows;
+  if (clState.month === "none") return rows.filter((r) => !clMonthInfo(r.data));
+  return rows.filter((r) => { const m = clMonthInfo(r.data); return !!m && m.key === clState.month; });
+}
+function clMonthList() {
+  const map = new Map();
+  let none = 0;
+  const recs = clRecords();
+  recs.forEach((r) => {
+    const m = clMonthInfo(r.data);
+    if (!m) { none++; return; }
+    const cur = map.get(m.key);
+    if (cur) cur.n++; else map.set(m.key, { key: m.key, label: m.label, sort: m.sort, n: 1 });
+  });
+  return { months: [...map.values()].sort((a, b) => a.sort - b.sort), none, total: recs.length };
+}
+function clMonthsHtml() {
+  if (!clMonthCol()) return "";
+  const { months, none, total } = clMonthList();
+  const btn = (key, label, n) => `<button type="button" class="cl-day" data-month="${esc(key)}" aria-pressed="${clState.month === key}"><span>${esc(label)}</span><b>${fmtNum(n)}</b></button>`;
+  return btn("", "All months", total) + months.map((m) => btn(m.key, m.label, m.n)).join("") + (none ? btn("none", "No date", none) : "");
+}
 function clDayScoped(rows) {
+  rows = clMonthScoped(rows);
   if (!clIsDays() || !clState.day) return rows;
   if (clState.day === "none") return rows.filter((r) => !r.day);
   return rows.filter((r) => r.day && r.day.key === clState.day);
@@ -4882,7 +4978,7 @@ function clWith(id, fn) {
 function clUse(id) {
   CALL_SHEET_ID = id;
   CL.TEAM = clTeamField(id);
-  if (clLastSheet !== id) { clLastSheet = id; clSel.clear(); Object.assign(clState, { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1, day: "" }); }
+  if (clLastSheet !== id) { clLastSheet = id; clSel.clear(); Object.assign(clState, { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1, day: "", month: "" }); }
   CL.LAYOUT_UID = "__layout#" + id;
   CL.LS_LAYOUT = id === "call_list_upcoming" ? "dg_call_layout_v1" : "dg_call_layout_v1_" + id;
 }
@@ -5082,7 +5178,7 @@ function clDeleteSelected(cfg) {
 const CL_CORR_FIELD = "Corrections / Notes";
 const CL_CORR_STATUS = "CORRECTION STATUS";
 const CL_PA_FIELD = "PA Initiated / Done";
-function clIsInfusion() { return CALL_SHEET_ID === "dg_infusion_pas"; }
+function clIsInfusion() { return isInfusionId(CALL_SHEET_ID); }
 function clIsGca() { return CALL_SHEET_ID === "gca"; }
 // GCA "On Infusion?" — a patient is on infusion when they appear in DG Infusion PAs.
 // Matches by account # (authoritative) or by patient name; DOB must also agree when both sides have one.
@@ -5092,7 +5188,7 @@ function infusionIndex() {
   if (INF_IDX.cache === recs) return INF_IDX;
   const byAcct = new Set(), byName = new Map();
   recs.forEach((r) => {
-    if (r.sheetId !== "dg_infusion_pas") return;
+    if (!isInfusionId(r.sheetId)) return;
     if (r.acct) byAcct.add(r.acct);
     const nm = r.weakKey ? r.weakKey.slice(2) : "";
     if (!nm) return;
@@ -5142,14 +5238,15 @@ function clCorrBtnHtml(r) {
   const i = callInfo(r.data);
   if (!i.corr) return "";
   const uid = r.uid;
+  const chip = i.auto ? `<span class="cl-auto-chip" title="Set automatically by an Admin rule (nothing is typed in the cell)"><span aria-hidden="true">\u26A0</span> ${esc(i.auto)}</span>` : "";
   if (i.corr === "resolved" || i.corr === "notresolved") {
     const res = i.corr === "resolved";
-    return `<span class="cl-corr-row"><span class="cl-corr-final cl-tone-${res ? "green" : "red"}"><span aria-hidden="true">${res ? "✓" : "✕"}</span> ${res ? "Resolved" : "Not resolved"}</span><button type="button" class="cl-link-btn muted" data-cl-corr="progress" data-uid="${uid}" title="Move back to In progress">Reopen</button></span>`;
+    return `<span class="cl-corr-row">${chip}<span class="cl-corr-final cl-tone-${res ? "green" : "red"}"><span aria-hidden="true">${res ? "✓" : "✕"}</span> ${res ? "Resolved" : "Not resolved"}</span><button type="button" class="cl-link-btn muted" data-cl-corr="progress" data-uid="${uid}" title="Move back to In progress">Reopen</button></span>`;
   }
   const pending = i.corr === "pending";
   const pill = `<span class="cl-pill cl-static cl-tone-${pending ? "gray" : "yellow"}">${pending ? "Pending" : "In progress"}</span>`;
   const b = (key, tone, label) => `<button type="button" class="cl-mini cl-tone-${tone}" data-cl-corr="${key}" data-uid="${uid}">${label}</button>`;
-  return `<span class="cl-corr-row">${pill}${pending ? b("progress", "yellow", "In progress") : ""}${b("resolved", "green", "✓ Resolved")}${b("notresolved", "red", "✕ Not resolved")}</span>`;
+  return `<span class="cl-corr-row">${chip}${pill}${pending ? b("progress", "yellow", "In progress") : ""}${b("resolved", "green", "✓ Resolved")}${b("notresolved", "red", "✕ Not resolved")}</span>`;
 }
 function clCorrLabel(data) {
   const s = callInfo(data).corr;
@@ -5181,7 +5278,7 @@ function clSetCorrection(uid, key) {
   clApply(uid, { [CL_CORR_STATUS]: label }, { toast: "Correction marked " + label });
 }
 function clInfusionKpiHtml() {
-  const recs = clRecords();
+  const recs = clDayScoped(clRecords());
   const c = { total: recs.length, assigned: 0, pending: 0, corr: 0, cp: 0, cg: 0, cn: 0, resolved: 0, sent: 0, resubmit: 0, approved: 0, others: 0 };
   recs.forEach((r) => {
     const i = callInfo(r.data);
@@ -5218,7 +5315,7 @@ function clInfusionKpiHtml() {
     <div class="cl-kpi-heading">Prior Auth Status</div>
     <div class="cl-stats cl-stats-4" role="group" aria-label="Prior auth status summary">${row2.map(tile).join("")}</div>`;
 }
-const clState = { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1, pageSize: 50, day: "" };
+const clState = { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1, pageSize: 50, day: "", month: "" };
 
 // ---------------------------------------------------------------------------
 // Rules
@@ -5267,10 +5364,12 @@ function callInfo(data) {
   }
   if (clIsInfusion()) {
     const assigned = clAssignedOr(data[CL.TEAM]);
-    const corrText = String(data[CL_CORR_FIELD] || "").trim();
+    const own = String(data[CL_CORR_FIELD] || "").trim();
+    const auto = own ? "" : acAutoText(data);
+    const corrText = own || auto;
     const cst = String(data[CL_CORR_STATUS] || "").trim().toLowerCase();
     const corr = corrText ? (/not.?resolved|unresolved/.test(cst) ? "notresolved" : cst.includes("resolved") ? "resolved" : cst.includes("progress") ? "progress" : "pending") : "";
-    return { key: clPaKey(data[CL_PA_FIELD]) || "none", done: false, days: null, flagged: false, assigned, scheduled: false, corr, status: assigned ? "t-assigned" : "t-unassigned" };
+    return { key: clPaKey(data[CL_PA_FIELD]) || "none", done: false, days: null, flagged: false, assigned, scheduled: false, corr, auto, status: assigned ? "t-assigned" : "t-unassigned" };
   }
   if (clIsTransition()) {
     const assigned = clAssignedOr(data[CL.TEAM]);
@@ -5415,6 +5514,7 @@ function clColumns(cfg, withHidden) {
   if (clIsCallList() && !all.includes(CL.ACTION)) all.push(CL.ACTION);
   clCustomColumns().forEach((c) => { if (!all.includes(c.name)) all.push(c.name); });
   if (clIsAssignTab() || clIsOsteo() || clIsInfusion()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else if (!(clIsGeneric() && cfg.isReference)) all.push("__status");
+  { const mc = clMonthCol(); if (mc) { const mi = all.indexOf(mc); if (mi >= 0) all.splice(mi + 1, 0, "__month"); else all.push("__month"); } }
   if (cfg.leadTeam) { const lead = [CL.TEAM, "__status"].filter((k) => all.includes(k)); all = lead.concat(all.filter((k) => !lead.includes(k))); }
   {
     const cc = acColCfg(cfg.id);
@@ -5425,12 +5525,17 @@ function clColumns(cfg, withHidden) {
   }
   const out = [];
   clLayoutLoad().order.forEach((k) => { if (all.includes(k) && !out.includes(k)) out.push(k); });
-  all.forEach((k) => { if (!out.includes(k)) out.push(k); });
+  all.forEach((k) => {
+    if (out.includes(k)) return;
+    if (k === "__month") { const mi = out.indexOf(clMonthCol()); if (mi >= 0) { out.splice(mi + 1, 0, k); return; } }
+    out.push(k);
+  });
   return out;
 }
 function clColLabel(col) { return clLabels()[col] || clBaseLabel(col); }
 function clDefaultWidth(cfg, col) {
   if (col === "__infusion") return 125;
+  if (col === "__month") return 165;
   if (clIsDays()) {
     if (col === "__status") return 140;
     if (col === cfg.nameField) return 210;
@@ -5626,7 +5731,7 @@ function clGenericKpiHtml() {
     </div>`;
 }
 function clOsteoKpiHtml() {
-  const recs = clRecords();
+  const recs = clDayScoped(clRecords());
   const c = { total: recs.length, pending: 0, jp: 0, su: 0, pa: 0, attn: 0, cancelled: 0 };
   recs.forEach((r) => {
     const i = callInfo(r.data);
@@ -5708,6 +5813,8 @@ function clRefreshKpi() {
   if (el) el.innerHTML = clKpiHtml();
   const dz = document.getElementById("cl-days");
   if (dz) dz.innerHTML = clDaysHtml();
+  const mz = document.getElementById("cl-months");
+  if (mz) mz.innerHTML = clMonthsHtml();
 }
 
 function renderCallListPage(cfg) {
@@ -5717,7 +5824,7 @@ function renderCallListPage(cfg) {
 
     <div class="page-header">
       <div>
-        <div class="page-title">${esc(cfg.label)}</div>
+        <div class="page-title">${esc(clPageTitle(cfg))}</div>
         <div class="page-subtitle">${clIsGeneric() ? esc(sheetDescription(cfg)) : clIsOsteo() ? "Type JP or SU (or Justin / Putz, Sabahat / Usmani) in 50/50 TO JP AND SU to assign, or Cancelled to cancel. Unassigned patients with an appointment within " + CL.ATTN_DAYS + " days are flagged Needs Attention." : clIsAssignTab() ? (clAssignMeta() ? clAssignMeta().desc : `Enter a name in ${CL.TEAM} for each patient. Status follows ${CL.TEAM}: Assigned once someone is entered, Unassigned while it is blank.`) : clIsInfusion() ? "Assign each authorization to a Team Member. Status follows Team Member (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
       </div>
       <div class="page-header-actions">
@@ -5726,7 +5833,9 @@ function renderCallListPage(cfg) {
         ${clIsGeneric() && cfg.isReference ? "" : `<a class="btn primary" href="#/import-export?target=${cfg.id}">${uploadIconSvg()} Import Records</a>`}
       </div>
     </div>
+    ${clToggleHtml(cfg)}
     ${clIsDays() ? `<div class="cl-days" id="cl-days" role="group" aria-label="Filter by clinic day">${clDaysHtml()}</div>` : ""}
+    ${clMonthCol() ? `<div class="cl-days cl-months" id="cl-months" role="group" aria-label="Filter by clinic month and year">${clMonthsHtml()}</div>` : ""}
     ${clIsPsa() ? `<textarea class="cl-note" id="cl-note" rows="2" aria-label="General note" placeholder="Add a general note for this tab...">${esc(psaNote())}</textarea>` : ""}
 
     ${dupGroups.length ? `<div class="card" style="padding:12px 16px;margin-bottom:20px;border-color:var(--status-attention-bg);background:var(--status-attention-bg)">
@@ -5772,6 +5881,7 @@ function clSortValue(r, col) {
   if (clIsOsteo() && col === "__status") return clAssignSt(r.data).label;
   if (col === "__status") return CALL_STATUSES.findIndex((s) => s.key === (callInfo(r.data).assigned ? "assigned" : "pending"));
   if (col === "__infusion") return gcaOnInfusion(r) ? "Yes" : "No";
+  if (col === "__month") { const m = clMonthInfo(r.data); return m ? m.sort : 1e9; }
   if (col === CL.ACTION) return callPill(r.data).label;
   return r.data[col] || "";
 }
@@ -5788,6 +5898,7 @@ function clFilteredRows(cfg) {
   }
   if (clState.statusFilter) rows = rows.filter((r) => (String(clState.statusFilter).startsWith("cx-") ? acCardMatch(String(clState.statusFilter).slice(3), r.data) : clIsGeneric() ? r.status === clState.statusFilter : clStatusMatch(r.data, clState.statusFilter)));
   if (clState.remindFilter) rows = rows.filter((r) => callReminder(r.data)?.state === clState.remindFilter);
+  if (clMonthCol() && !clState.sort && !clState.month) rows = rows.map((r, i) => [r, i]).sort((a, b) => { const ma = clMonthInfo(a[0].data), mb = clMonthInfo(b[0].data); return (ma ? ma.sort : 1e9) - (mb ? mb.sort : 1e9) || a[1] - b[1]; }).map((x) => x[0]);
   if (clIsDays() && !clState.sort && !clState.day) rows = rows.map((r, i) => [r, i]).sort((a, b) => (a[0].day ? a[0].day.sort : 100000) - (b[0].day ? b[0].day.sort : 100000) || a[1] - b[1]).map((x) => x[0]);
   if (clState.sort) {
     const { field, dir } = clState.sort;
@@ -5827,13 +5938,15 @@ function clActionCellHtml(r) {
 }
 function clRowClass(r) {
   const info = callInfo(r.data);
-  return (info.key === "progress" ? "cl-row-progress " : "") + (info.status === "attention" ? "cl-row-attn" : "") + (clIsPsa() ? (!info.assigned ? " cl-row-y" : "") + (info.high ? " cl-row-hi" : "") : "") + (clSel.has(r.uid) ? " cl-row-sel" : "");
+  const hl = acRowHl(r.data);
+  return (hl ? "cl-hl cl-hl-" + (hl.tone || "red") + " " : "") + (info.key === "progress" ? "cl-row-progress " : "") + (info.status === "attention" ? "cl-row-attn" : "") + (clIsPsa() ? (!info.assigned ? " cl-row-y" : "") + (info.high ? " cl-row-hi" : "") : "") + (clSel.has(r.uid) ? " cl-row-sel" : "");
 }
 function clRowHtml(cfg, r, cols) {
   const isExpanded = expandedRows.has(r.uid);
   const cells = cols.map((c) => {
     if (c === "__status") return `<td data-col="__status">${clStatusBadge(r.data, r)}</td>`;
     if (c === "__infusion") return `<td class="cl-inf-td" data-col="__infusion">${clInfusionCellHtml(r)}</td>`;
+    if (c === "__month") { const m = clMonthInfo(r.data); return `<td data-col="__month">${m ? `<span class="cl-month-chip">${esc(m.label)}</span>` : `<span class="text-muted">\u2014</span>`}</td>`; }
     if (c === CL.ACTION && clIsCallList()) return `<td class="cl-action-td" data-col="${esc(c)}">${clActionCellHtml(r)}</td>`;
  if (clIsInfusion() && clIsWrapCol(c) && !clIsDateCol(cfg, c)) return clWrapCellHtml(cfg, r, c);
     const val = r.data[c] || "";
@@ -5996,6 +6109,17 @@ function wireCallListPage(cfg) {
  document.getElementById("cl-del-sel").addEventListener("click", () => clDeleteSelected(cfg));
  document.getElementById("cl-split")?.addEventListener("click", () => clSplitUnassigned(cfg));
  document.getElementById("cl-setday")?.addEventListener("click", () => clSetDayModal(cfg));
+ document.getElementById("cl-view-toggle")?.addEventListener("click", (e) => {
+   const b = e.target.closest("[data-view-sheet]");
+   if (b && b.dataset.viewSheet !== cfg.id) location.hash = "#/sheet/" + b.dataset.viewSheet;
+ });
+ document.getElementById("cl-months")?.addEventListener("click", (e) => {
+   const b = e.target.closest("[data-month]");
+   if (!b) return;
+   clState.month = b.dataset.month;
+   clSel.clear();
+   clSyncFilters(cfg);
+ });
  document.getElementById("cl-days")?.addEventListener("click", (e) => {
    const b = e.target.closest("[data-day]");
    if (!b) return;
@@ -6190,7 +6314,7 @@ function clExport(cfg) {
   const cols = clColumns(cfg).filter((c) => c !== "__status");
   const rows = clFilteredRows(cfg).map((r) => {
     const o = {};
-    cols.forEach((c) => { if (c === "__infusion") o[clColLabel(c)] = gcaOnInfusion(r) ? "Yes" : "No"; else o[clColLabel(c)] = c === CL.ACTION ? callPill(r.data).label : r.data[c] || ""; });
+    cols.forEach((c) => { if (c === "__infusion") o[clColLabel(c)] = gcaOnInfusion(r) ? "Yes" : "No"; else if (c === "__month") { const m = clMonthInfo(r.data); o[clColLabel(c)] = m ? m.label : ""; } else o[clColLabel(c)] = c === CL.ACTION ? callPill(r.data).label : (r.data[c] || (clIsInfusion() && c === CL_CORR_FIELD ? callInfo(r.data).auto : "")) || ""; });
     o["Status"] = clIsGeneric() ? ((STATUS_META[r.status] || {}).label || "") : clAssignSt(r.data).label;
     const rm = callReminder(r.data);
     if (clIsInfusion()) o["Correction Status"] = clCorrLabel(r.data);
@@ -6463,9 +6587,10 @@ const AC_GROUP_IDS = ["call-lists", "work-queues", "diagnosis"];
 const AC_TONES = [["gray", "Gray"], ["red", "Red"], ["green", "Green"], ["blue", "Blue"], ["yellow", "Yellow"], ["orange", "Orange"], ["violet", "Purple"]];
 const AC_OPS = [
   ["filled", "is filled in"], ["blank", "is blank"], ["eq", "equals"], ["neq", "does not equal"],
-  ["contains", "contains"], ["ncontains", "does not contain"], ["starts", "starts with"],
+  ["contains", "contains"], ["cany", "contains any of (comma list)"], ["ncontains", "does not contain"], ["starts", "starts with"],
   ["in", "is one of (comma list)"], ["nin", "is not one of (comma list)"],
-  ["dpast", "is a date in the past"], ["dwithin", "is a date within the next N days"],
+  ["dpast", "is a date in the past"], ["dfuture", "is a date in the future"], ["dwithin", "is a date within the next N days"],
+  ["dbefore", "is a date earlier than column\u2026"], ["dafter", "is a date later than column\u2026"],
 ];
 const CL_PA_LABELS = { sent: "Sent", resubmit: "Resubmit", approved: "Approved", others: "Others" };
 Object.defineProperty(CL_PA_LABELS, "__base", { value: { ...CL_PA_LABELS }, enumerable: false });
@@ -6475,7 +6600,7 @@ let AC_EDITING = false;   // admin page is open: this browser shows the draft wh
 let AC_SIG = "";
 let acMemOk = "";
 
-function acBlank() { return { v: 1, groups: {}, tabs: {}, tabOrder: [], customTabs: [], cols: {}, rules: {}, kpi: {}, options: {}, attnDays: null }; }
+function acBlank() { return { v: 1, groups: {}, tabs: {}, tabOrder: [], customTabs: [], cols: {}, rules: {}, kpi: {}, options: {}, attnDays: null, alerts: {} }; }
 function acParse(raw) {
   try { const o = JSON.parse(raw || ""); if (o && typeof o === "object" && !Array.isArray(o)) return { ...acBlank(), ...o }; } catch (e) { /* fall through */ }
   return acBlank();
@@ -6510,7 +6635,7 @@ function acEdit(fn) {
   acApply(true);
 }
 function acDiffSections(pub, dr) {
-  const names = { groups: "Group names", tabs: "Tab names and visibility", tabOrder: "Tab order", customTabs: "New tabs", cols: "Columns", rules: "Status rules", kpi: "KPI cards", options: "Options", attnDays: "Needs Attention days" };
+  const names = { groups: "Group names", tabs: "Tab names and visibility", tabOrder: "Tab order", customTabs: "New tabs", cols: "Columns", rules: "Status rules", kpi: "KPI cards", options: "Options", attnDays: "Needs Attention days", alerts: "Row highlights & auto-corrections" };
   return Object.keys(names).filter((k) => JSON.stringify(pub[k]) !== JSON.stringify(dr[k])).map((k) => names[k]);
 }
 function acPublish() {
@@ -6624,8 +6749,13 @@ function acApply(force) {
 // ---------------------------------------------------------------------------
 // Helpers other parts of the app use
 // ---------------------------------------------------------------------------
-function acColCfg(sheetId) { return ((AC().cols || {})[sheetId]) || {}; }
-function clBaseLabel(col) { return col === "__status" ? "Status" : col === "__infusion" ? "On Infusion?" : col; }
+function acColCfg(sheetId) {
+  const c = ((AC().cols || {})[sheetId]) || {};
+  const dh = SHEET_BY_ID[sheetId] && SHEET_BY_ID[sheetId].defaultHidden;
+  return c.hidden === undefined && dh ? { ...c, hidden: dh } : c;
+}
+function acHiddenDraft(cc, id) { return cc.hidden !== undefined ? cc.hidden : ((SHEET_BY_ID[id] && SHEET_BY_ID[id].defaultHidden) || []); }
+function clBaseLabel(col) { return col === "__status" ? "Status" : col === "__infusion" ? "On Infusion?" : col === "__month" ? "Clinic Month" : col; }
 function colLabelFor(sheetId, col) { return (acColCfg(sheetId).labels || {})[col] || clBaseLabel(col); }
 function clLabels() { return acColCfg(CALL_SHEET_ID).labels || {}; }
 function clHiddenCols() { return acColCfg(CALL_SHEET_ID).hidden || []; }
@@ -6644,7 +6774,9 @@ function clAssignedTest(v) {
 }
 function clAssignedOr(v) { const o = clAssignedTest(v); return o !== null ? o : !!String(v == null ? "" : v).trim(); }
 function acCond(c, data) {
-  if (c.col === "__assigned") { const a = !!callInfo(data).assigned; return c.op === "no" ? !a : a; }
+  if (c.col === "__assigned") { if (AC_AUTO_BUSY) return false; const a = !!callInfo(data).assigned; return c.op === "no" ? !a : a; }
+  if (c.col === "__corr") { if (AC_AUTO_BUSY) return false; return acCorrOp(c.op, callInfo(data).corr); }
+  if (c.col === "__pa") return c.op === "pa_" + (clPaKey(data[CL_PA_FIELD]) || "none");
   const v = String(data[c.col] == null ? "" : data[c.col]).trim();
   const t = String(c.val == null ? "" : c.val).trim();
   const lc = v.toLowerCase(), tl = t.toLowerCase();
@@ -6655,14 +6787,83 @@ function acCond(c, data) {
     case "eq": return lc === tl;
     case "neq": return lc !== tl;
     case "contains": return !!tl && lc.includes(tl);
+    case "cany": return list().some((x) => lc.includes(x));
     case "ncontains": return !tl || !lc.includes(tl);
     case "starts": return !!tl && lc.startsWith(tl);
     case "in": return list().includes(lc);
     case "nin": return !list().includes(lc);
     case "dpast": { const d = parseDateLoose(v); return !!d && clDaysFromToday(d) < 0; }
+    case "dfuture": { const d = parseDateLoose(v); return !!d && clDaysFromToday(d) > 0; }
+    case "dbefore": case "dafter": {
+      const a = parseDateLoose(v), b = parseDateLoose(String(data[c.val] == null ? "" : data[c.val]).trim());
+      if (!a || !b) return false;
+      return c.op === "dbefore" ? a < b : a > b;
+    }
     case "dwithin": { const d = parseDateLoose(v); if (!d) return false; const n = clDaysFromToday(d); return n >= 0 && n <= (+t || 7); }
     default: return false;
   }
+}
+// ---------------------------------------------------------------------------
+// Row alerts: (1) rules that color the WHOLE row, (2) rules that add an automatic correction
+// such as "Wrong dates". Both are edited on the Admin page (Row highlights).
+// ---------------------------------------------------------------------------
+let AC_AUTO_BUSY = false;
+const AC_CORR_OPS = [
+  ["corr_open", "has an open correction (Pending or In progress)"], ["corr_pending", "is Pending"], ["corr_progress", "is In progress"],
+  ["corr_resolved", "is Resolved"], ["corr_notresolved", "is Not resolved"], ["corr_any", "has any correction (even resolved)"], ["corr_none", "has no correction"],
+];
+function acPaOps() { return [["pa_sent", "is " + CL_PA_LABELS.sent], ["pa_resubmit", "is " + CL_PA_LABELS.resubmit], ["pa_approved", "is " + CL_PA_LABELS.approved], ["pa_others", "is " + CL_PA_LABELS.others], ["pa_none", "is blank"]]; }
+function acCorrOp(op, st) {
+  switch (op) {
+    case "corr_open": return st === "pending" || st === "progress";
+    case "corr_pending": return st === "pending";
+    case "corr_progress": return st === "progress";
+    case "corr_resolved": return st === "resolved";
+    case "corr_notresolved": return st === "notresolved";
+    case "corr_any": return !!st;
+    case "corr_none": return !st;
+    default: return false;
+  }
+}
+const AC_ALERT_DEF = {};
+// What a tab does before the admin changes anything.
+function acDefaultAlerts(id) {
+  if (!isInfusionId(id)) return { hl: [], auto: [] };
+  if (AC_ALERT_DEF[id]) return AC_ALERT_DEF[id];
+  const auto = [{ id: "wd1", on: true, text: "Wrong dates", logic: "all", conds: [{ col: CL_PA_FIELD, op: "cany", val: "wrong date, incorrect date, date wrong, dates wrong, date incorrect, dates incorrect, dates are wrong, dates are incorrect" }] }];
+  const hl = [{ id: "hl1", on: true, label: "Open correction or note", tone: "red", logic: "all", conds: [{ col: "__corr", op: "corr_open", val: "" }] }];
+  return (AC_ALERT_DEF[id] = { hl, auto });
+}
+function acAlertsOf(settings, id) {
+  const a = ((settings.alerts || {})[id]) || {};
+  const d = acDefaultAlerts(id);
+  return { hl: Array.isArray(a.hl) ? a.hl : d.hl, auto: Array.isArray(a.auto) ? a.auto : d.auto };
+}
+function acAlerts(id) { return acAlertsOf(AC(), id); }
+// The first highlight rule that matches this row (or null).
+function acRowHl(data) {
+  const list = acAlerts(CALL_SHEET_ID).hl;
+  for (let i = 0; i < list.length; i++) {
+    const r = list[i];
+    if (r.on === false || !(r.conds || []).length) continue;
+    if (acMatches(r.logic, r.conds, data)) return r;
+  }
+  return null;
+}
+// Automatic correction text for a row whose Corrections / Notes cell is empty ("" = none).
+function acAutoText(data) {
+  if (AC_AUTO_BUSY) return "";
+  const list = acAlerts(CALL_SHEET_ID).auto;
+  if (!list.length) return "";
+  AC_AUTO_BUSY = true;
+  try {
+    for (let i = 0; i < list.length; i++) {
+      const r = list[i];
+      if (r.on === false || !(r.conds || []).length) continue;
+      if (acMatches(r.logic, r.conds, data)) return String(r.text || "").trim() || "Wrong dates";
+    }
+  } finally { AC_AUTO_BUSY = false; }
+  return "";
 }
 function acCards(sheetId) { const k = ((AC().kpi || {})[sheetId]) || {}; return Array.isArray(k.custom) ? k.custom : []; }
 // Empty condition list = every row.
@@ -6823,6 +7024,16 @@ function importAutoMap(sheetId, incomingHeaders, fallbackHeaders) {
       if (t) claim(h, t);
     }
   }
+  // DG Infusion - Other Ins.: common spellings of the two columns every infusion tab shares
+  if (sheetId === "dg_infusion_other") {
+    const al = { corrections: "Corrections / Notes", correction: "Corrections / Notes", notes: "Corrections / Notes", correctionsnotes: "Corrections / Notes", correctionnotes: "Corrections / Notes", statuscorrectionsnotes: "Corrections / Notes",
+      priorauth: "PA Initiated / Done", pa: "PA Initiated / Done", padone: "PA Initiated / Done", painitiated: "PA Initiated / Done", painitiateddone: "PA Initiated / Done", priorauthinitiateddone: "PA Initiated / Done", priorauthinitiated: "PA Initiated / Done" };
+    for (const h of incomingHeaders) {
+      if (mapping[h]) continue;
+      const t = targets.find((x) => !used.has(x.key) && x.key === al[impLoose(h)]);
+      if (t) claim(h, t);
+    }
+  }
   // 0908-0911: the first column is headed with the day ("DG Tuesday patients 9/8") and holds the patient names
   if (cfg && cfg.dayGroups && cfg.nameField && !used.has(cfg.nameField)) {
     const h = incomingHeaders.find((x) => !mapping[x] && /^\s*(?:dg\s+)?(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?\s*(?:patients?)?\b/i.test(x));
@@ -6844,7 +7055,7 @@ function acTabList() {
   // every tab (built-in and new) in display order, with its base name/group
   return SHEET_CONFIG.filter((c) => !c.isReference).map((c) => ({ id: c.id, cfg: c, base: c.__base || { label: c.label, shortLabel: c.shortLabel, group: c.group } }));
 }
-function acSheetOptions(cur) { return acTabList().map((t) => `<option value="${esc(t.id)}" ${cur === t.id ? "selected" : ""}>${esc(t.cfg.label)}</option>`).join(""); }
+function acSheetOptions(cur) { return acTabList().map((t) => `<option value="${esc(t.id)}" ${cur === t.id ? "selected" : ""}>${esc(t.cfg.adminLabel || t.cfg.label)}</option>`).join(""); }
 function acEnsureSheet() {
   const list = acTabList();
   if (!list.some((t) => t.id === acUI.sheet)) acUI.sheet = list.length ? list[0].id : "";
@@ -6853,7 +7064,7 @@ function acEnsureSheet() {
 // The kind of tab decides which status rules apply
 function acKind(id) {
   if (id === "dg_osteoporosis_pas") return "osteo";
-  if (id === "dg_infusion_pas") return "infusion";
+  if (isInfusionId(id)) return "infusion";
   if (id === "call_list_upcoming") return "callup";
   if (id === "call_list_no_upcoming") return "transition";
   if (ASSIGN_TABS[id]) return "assign";
@@ -6907,8 +7118,8 @@ function acWireGate() {
 function renderAdmin() {
   if (!acUnlocked()) return acGateHtml();
   const dirty = acHasDraft();
-  const secs = [["tabs", "Tabs & groups"], ["cols", "Columns"], ["rules", "Status rules"], ["kpi", "KPI cards"], ["opts", "Options"], ["sec", "Security & versions"]];
-  const body = { tabs: acTabsHtml, cols: acColsHtml, rules: acRulesHtml, kpi: acKpiHtml, opts: acOptsHtml, sec: acSecHtml }[acUI.section]();
+  const secs = [["tabs", "Tabs & groups"], ["cols", "Columns"], ["rules", "Status rules"], ["kpi", "KPI cards"], ["alerts", "Row highlights"], ["opts", "Options"], ["sec", "Security & versions"]];
+  const body = { tabs: acTabsHtml, cols: acColsHtml, rules: acRulesHtml, kpi: acKpiHtml, alerts: acAlertsHtml, opts: acOptsHtml, sec: acSecHtml }[acUI.section]();
   const pub = acRec().publishedAt ? new Date(acRec().publishedAt).toLocaleString() : "never";
   return `<div class="page-header"><div><div class="page-title">Admin Control Center</div>
       <div class="page-subtitle">Change how tabs, columns, status rules and KPI cards work. Your edits are saved as a <b>draft</b>. Nobody else sees them until you click <b>Publish for everyone</b>.</div></div>
@@ -6936,7 +7147,7 @@ function acRefresh() {
 // ---------- section: tabs ----------
 function acTabsHtml() {
   const d = acDraft();
-  const list = acTabList();
+  const list = acTabList().filter((t) => !t.cfg.subOf);
   const groupBlocks = AC_GROUP_IDS.map((gid) => {
     const rows = list.filter((t) => t.cfg.group === gid);
     if (!rows.length) return "";
@@ -6970,7 +7181,7 @@ function acMoveTab(id, dir) {
   const list = acTabList();
   const me = list.find((t) => t.id === id);
   if (!me) return;
-  const same = list.filter((t) => t.cfg.group === me.cfg.group).map((t) => t.id);
+  const same = list.filter((t) => t.cfg.group === me.cfg.group && !t.cfg.subOf).map((t) => t.id);
   const i = same.indexOf(id), j = i + dir;
   if (j < 0 || j >= same.length) return;
   const ids = list.map((t) => t.id);
@@ -7028,7 +7239,7 @@ function acColsHtml() {
   const cc = (d.cols || {})[id] || {};
   const keys = acColKeys(id);
   const added = new Set((cc.added || []).map((c) => c.name));
-  const hid = new Set(cc.hidden || []);
+  const hid = new Set(acHiddenDraft(cc, id));
   const rows = keys.map((k, i) => {
     const virtual = String(k).startsWith("__");
     const label = (cc.labels || {})[k] || "";
@@ -7106,8 +7317,15 @@ function acRulesHtml() {
   }
   if (kind === "callup") assignCard += `<div class="card ac-card"><h3>Call outcome</h3><p class="form-hint">On this call list a row is complete once its Action is Called &amp; Confirmed, Called &amp; Refused or Resched. You can rename the Action buttons under Options.</p></div>`;
   const nd = (d.attnDays === null || d.attnDays === undefined) ? "" : d.attnDays;
+  const mcol = r.monthCol || "";
+  const monthCard = `<div class="card ac-card"><h3>Clinic month &amp; year grouping</h3>
+      <p class="form-hint">Adds a <b>Clinic Month</b> column and month buttons at the top of the tab (for example October 2026, November 2026) that filter the table and the cards. The month is read from a date column. DG Osteoporosis PAs uses NEXT APPT.</p>
+      <div class="ac-row"><div class="form-group"><label>Date column the month comes from</label><select class="ac-in" data-ac="rule-month">
+        <option value="" ${mcol === "" ? "selected" : ""}>Built-in (${kind === "osteo" ? "NEXT APPT" : "off for this tab"})</option>
+        <option value="none" ${mcol === "none" ? "selected" : ""}>Off</option>
+        ${cols.map((c) => `<option value="${esc(c)}" ${mcol === c ? "selected" : ""}>${esc(colLabelFor(id, c))}</option>`).join("")}</select></div></div></div>`;
   return `<div class="card ac-card"><div class="ac-pick"><label for="ac-sheet">Tab</label><select class="ac-in" id="ac-sheet" data-ac="sheet">${acSheetOptions(id)}</select></div></div>
-    ${assignCard}${compCard}
+    ${assignCard}${compCard}${monthCard}
     <div class="card ac-card"><h3>Needs Attention window (all tabs that use it)</h3>
       <div class="ac-row"><div class="form-group"><label>Flag a row when its next appointment is within this many days</label><input type="number" min="0" max="365" class="ac-in ac-sm" data-ac="attn" value="${esc(nd)}" placeholder="7" /></div></div>
       <p class="form-hint">Applies to the two call lists and DG Osteoporosis PAs. Empty = 7 days.</p></div>`;
@@ -7140,7 +7358,9 @@ function acKpiHtml() {
       ${assignedCond
         ? `<select class="ac-in" data-ac="cd-op" ${at}><option value="yes" ${cd.op !== "no" ? "selected" : ""}>is assigned</option><option value="no" ${cd.op === "no" ? "selected" : ""}>is not assigned</option></select><span></span>`
         : `<select class="ac-in" data-ac="cd-op" ${at}>${AC_OPS.map(([v, l]) => `<option value="${v}" ${cd.op === v ? "selected" : ""}>${l}</option>`).join("")}</select>
-           <input class="ac-in" data-ac="cd-val" ${at} value="${esc(cd.val || "")}" placeholder="value" ${["filled", "blank", "dpast"].includes(cd.op) ? "disabled" : ""} />`}
+           ${cd.op === "dbefore" || cd.op === "dafter"
+             ? `<select class="ac-in" data-ac="cd-val" ${at}>${cols.map((x) => `<option value="${esc(x)}" ${cd.val === x ? "selected" : ""}>${esc(colLabelFor(id, x))}</option>`).join("")}</select>`
+             : `<input class="ac-in" data-ac="cd-val" ${at} value="${esc(cd.val || "")}" placeholder="value" ${["filled", "blank", "dpast", "dfuture"].includes(cd.op) ? "disabled" : ""} />`}`}
       <button class="btn sm ghost" data-ac="cd-del" ${at} aria-label="Remove condition">✕</button></div>`;
   }).join("");
   const logicSel = (c, ci, key) => `<select class="ac-in ac-sm" data-ac="cx-logic" data-ci="${ci}" data-ck="${key}"><option value="all" ${c[key] !== "any" ? "selected" : ""}>ALL</option><option value="any" ${c[key] === "any" ? "selected" : ""}>ANY</option></select>`;
@@ -7184,6 +7404,83 @@ function acKpiHtml() {
       <div class="form-group" style="max-width:360px"><label>Heading above your cards (optional)</label><input class="ac-in" data-ac="kpi-heading" value="${esc(k.heading || "")}" /></div>
       ${cards || `<p class="form-hint">No custom cards yet.</p>`}
       <button class="btn primary" data-ac="cx-add" style="margin-top:10px">+ New card</button></div>`;
+}
+
+// ---------- section: row highlights & automatic corrections ----------
+function acAlList(d, id, ak) {
+  d.alerts = d.alerts || {};
+  const o = (d.alerts[id] = d.alerts[id] || {});
+  if (!Array.isArray(o[ak])) o[ak] = JSON.parse(JSON.stringify(acAlertsOf(d, id)[ak]));
+  return o[ak];
+}
+function acAlertsHtml() {
+  const id = acEnsureSheet();
+  if (!id) return `<div class="card ac-card"><p>No tabs yet.</p></div>`;
+  const d = acDraft();
+  const kind = acKind(id);
+  const infusion = kind === "infusion";
+  const al = acAlertsOf(d, id);
+  const own = ((d.alerts || {})[id]) || {};
+  const custom = Array.isArray(own.hl) || Array.isArray(own.auto);
+  const cols = acDataCols(id);
+  const colOptions = (cur) => cols.map((c) => `<option value="${esc(c)}" ${cur === c ? "selected" : ""}>${esc(colLabelFor(id, c))}</option>`).join("");
+  const valBox = (cd, at) => {
+    const op = cd.op || "";
+    if (op === "dbefore" || op === "dafter") return `<select class="ac-in" data-ac="alc-val" ${at}>${colOptions(cd.val)}</select>`;
+    const none = ["filled", "blank", "dpast", "dfuture", "yes", "no"].includes(op) || /^(corr_|pa_)/.test(op);
+    return `<input class="ac-in" data-ac="alc-val" ${at} value="${esc(cd.val || "")}" placeholder="${none ? "" : "value"}" ${none ? "disabled" : ""} />`;
+  };
+  const condRows = (ak, ri, conds) => (conds || []).map((cd, di) => {
+    const at = `data-ak="${ak}" data-ri="${ri}" data-di="${di}"`;
+    const virt = [];
+    if (infusion) virt.push(["__pa", "Prior Auth status (" + colLabelFor(id, CL_PA_FIELD) + ")"]);
+    if (infusion && ak === "hl") virt.push(["__corr", "Correction status"]);
+    if (ak === "hl" && kind !== "generic") virt.push(["__assigned", "Assignment status (per the Status rules)"]);
+    const ops = cd.col === "__corr" ? AC_CORR_OPS : cd.col === "__pa" ? acPaOps() : cd.col === "__assigned" ? [["yes", "is assigned"], ["no", "is not assigned"]] : AC_OPS;
+    return `<div class="ac-cond">
+      <select class="ac-in" data-ac="alc-col" ${at}>${virt.map(([v, l]) => `<option value="${v}" ${cd.col === v ? "selected" : ""}>${esc(l)}</option>`).join("")}${colOptions(cd.col)}</select>
+      <select class="ac-in" data-ac="alc-op" ${at}>${ops.map(([v, l]) => `<option value="${v}" ${cd.op === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
+      ${valBox(cd, at)}
+      <button class="btn sm ghost" data-ac="alc-del" ${at} aria-label="Remove condition">\u2715</button></div>`;
+  }).join("");
+  const box = (ak, r, ri, n) => {
+    const at = `data-ak="${ak}" data-ri="${ri}"`;
+    const has = (r.conds || []).length;
+    let live = "";
+    try {
+      const cnt = has ? clWith(id, () => clRecords().filter((x) => acMatches(r.logic, r.conds, x.data)).length) : 0;
+      live = `<span class="badge neutral">Right now: ${fmtNum(cnt)} row${cnt === 1 ? "" : "s"} match</span>`;
+    } catch (e) { live = ""; }
+    return `<div class="ac-cardbox ${r.on === false ? "ac-off" : ""}">
+      <div class="ac-row">
+        <div class="form-group"><label>On</label><input type="checkbox" data-ac="al-on" ${at} ${r.on === false ? "" : "checked"} aria-label="Rule is on" /></div>
+        ${ak === "hl"
+          ? `<div class="form-group"><label>Rule name</label><input class="ac-in" data-ac="al-name" ${at} value="${esc(r.label || "")}" /></div>
+             <div class="form-group"><label>Row color</label>${acToneSel(`data-ac="al-tone" ${at}`, r.tone || "red")}</div>`
+          : `<div class="form-group"><label>Correction to set</label><input class="ac-in" data-ac="al-name" ${at} value="${esc(r.text || "")}" placeholder="Wrong dates" /></div>`}
+        <div class="form-group"><label>&nbsp;</label><div style="display:flex;gap:6px">
+          <button class="btn sm ghost" data-ac="al-up" ${at} ${ri === 0 ? "disabled" : ""} aria-label="Move up">\u2191</button>
+          <button class="btn sm ghost" data-ac="al-down" ${at} ${ri === n - 1 ? "disabled" : ""} aria-label="Move down">\u2193</button>
+          <button class="btn sm danger" data-ac="al-del" ${at}>Delete</button></div></div>
+      </div>
+      <div class="ac-cond-h">${ak === "hl" ? "Color the whole row when" : "Add this correction when"} <select class="ac-in ac-sm" data-ac="al-logic" ${at}><option value="all" ${r.logic !== "any" ? "selected" : ""}>ALL</option><option value="any" ${r.logic === "any" ? "selected" : ""}>ANY</option></select> of these are true${has ? ":" : " (add at least one condition):"}</div>
+      ${condRows(ak, ri, r.conds)}
+      <button class="btn sm" data-ac="alc-add" ${at}>+ Add condition</button>
+      <div style="margin-top:12px">${live}</div>
+    </div>`;
+  };
+  const hlCards = al.hl.map((r, i) => box("hl", r, i, al.hl.length)).join("");
+  const autoCards = al.auto.map((r, i) => box("auto", r, i, al.auto.length)).join("");
+  return `<div class="card ac-card"><div class="ac-pick"><label for="ac-sheet">Tab</label><select class="ac-in" id="ac-sheet" data-ac="sheet">${acSheetOptions(id)}</select>
+      ${custom ? `<button class="btn sm" data-ac="al-reset" style="margin-left:12px">Restore this tab's built-in rules</button>` : ""}</div></div>
+    <div class="card ac-card"><h3>Row highlight rules</h3>
+      <p class="form-hint">When a row matches a rule, the <b>whole row</b> takes that color. Rules are checked from the top; the first one that matches wins.${infusion ? " The built-in rule colors a row red while it has a correction or note that is still open. Once you click Resolved or Not resolved the color goes away." : ""}</p>
+      ${hlCards || `<p class="form-hint">No highlight rules on this tab.</p>`}
+      <button class="btn primary" data-ac="al-add" data-ak="hl" style="margin-top:10px">+ New highlight rule</button></div>
+    ${infusion ? `<div class="card ac-card"><h3>Automatic corrections</h3>
+      <p class="form-hint">When a row matches and its <b>${esc(colLabelFor(id, CL_CORR_FIELD))}</b> cell is empty, the row gets this correction automatically (shown as a yellow badge; nothing is typed into your data). It then works like any correction: Pending, In progress, Resolved, Not resolved, counts in the Corrections card, and is highlighted by the rules above. Built in: when the PA column says something like "approved but wrong dates" or "approved but incorrect dates", the correction is Wrong dates.</p>
+      ${autoCards || `<p class="form-hint">No automatic corrections on this tab.</p>`}
+      <button class="btn primary" data-ac="al-add" data-ak="auto" style="margin-top:10px">+ New automatic correction</button></div>` : ""}`;
 }
 
 // ---------- section: options ----------
@@ -7278,7 +7575,7 @@ function acOnEvent(e, type) {
       if (!nv || nv === clBaseLabel(k)) delete labels[k]; else labels[k] = nv;
       if (prev !== clBaseLabel(k) && prev !== nv) { const al = (c.aliases = c.aliases || {}); al[k] = [...new Set([...(al[k] || []), prev])].filter((x) => x !== nv && x !== k); }
     }); break;
-    case "colshow": acEdit((d) => { const c = (d.cols[id] = d.cols[id] || {}); const h = new Set(c.hidden || []); if (v) h.delete(k); else h.add(k); c.hidden = [...h]; }); break;
+    case "colshow": acEdit((d) => { const c = (d.cols[id] = d.cols[id] || {}); const h = new Set(acHiddenDraft(c, id)); if (v) h.delete(k); else h.add(k); c.hidden = [...h]; }); break;
     case "colup": acColMove(k, -1); break;
     case "coldown": acColMove(k, 1); break;
     case "coldel": acEdit((d) => { const c = (d.cols[id] = d.cols[id] || {}); c.added = (c.added || []).filter((x) => x.name !== k); if (c.labels) delete c.labels[k]; c.order = (c.order || []).filter((x) => x !== k); }); break;
@@ -7291,7 +7588,7 @@ function acOnEvent(e, type) {
       else if (existing.includes(name.toLowerCase())) msg = `A column named "${name}" already exists on this tab (it may just be hidden).`;
       const lowerName = name.toLowerCase();
       const back = name ? acColKeys(id).find((x) => ((acColCfg(id).hidden || []).includes(x)) && (String(x).toLowerCase() === lowerName || colLabelFor(id, x).toLowerCase() === lowerName)) : null;
-      if (back) { acEdit((d) => { const c = (d.cols[id] = d.cols[id] || {}); c.hidden = (c.hidden || []).filter((x) => x !== back); }); toast(`Brought back "${colLabelFor(id, back)}" with its data and rules`); break; }
+      if (back) { acEdit((d) => { const c = (d.cols[id] = d.cols[id] || {}); c.hidden = acHiddenDraft(c, id).filter((x) => x !== back); }); toast(`Brought back "${colLabelFor(id, back)}" with its data and rules`); break; }
       acUI.err = msg;
       if (msg) { document.getElementById("ac-col-err").textContent = msg; return; }
       acEdit((d) => { const c = (d.cols[id] = d.cols[id] || {}); c.added = [...(c.added || []), { name, type: document.getElementById("ac-newcol-type").value }]; });
@@ -7331,7 +7628,7 @@ function acOnEvent(e, type) {
     case "cd-add": acEdit((d) => { const c = cardOf(d), ck = el.dataset.ck || "conds"; c[ck] = c[ck] || []; c[ck].push({ col: acDataCols(id)[0] || "", op: "filled", val: "" }); }); break;
     case "cd-del": acEdit((d) => { cardOf(d)[el.dataset.ck || "conds"].splice(di, 1); }); break;
     case "cd-col": acEdit((d) => { const cd = cardOf(d)[el.dataset.ck || "conds"][di]; cd.col = v; if (v === "__assigned") { cd.op = "yes"; cd.val = ""; } else if (cd.op === "yes" || cd.op === "no") cd.op = "filled"; }); break;
-    case "cd-op": acEdit((d) => { cardOf(d)[el.dataset.ck || "conds"][di].op = v; }); break;
+    case "cd-op": acEdit((d) => { const cd = cardOf(d)[el.dataset.ck || "conds"][di]; cd.op = v; if ((v === "dbefore" || v === "dafter") && !acDataCols(id).includes(cd.val)) cd.val = acDataCols(id).find((x) => x !== cd.col) || ""; }); break;
     case "cd-val": acEdit((d) => { cardOf(d)[el.dataset.ck || "conds"][di].val = String(v); }); break;
     // options
     case "act-label": case "act-tone": acEdit((d) => {
@@ -7360,6 +7657,31 @@ function acOnEvent(e, type) {
     }
     case "restore": confirmDialog("Load the previous version?", "The version published before the current one becomes your draft. Nothing changes for other users until you publish it.", () => { acSaveRec({ draft: String(acRec().prev || "") }); acApply(true); toast("Previous version loaded into the draft"); acRefresh(); }, { okClass: "primary", okLabel: "Load into draft" }); return;
     case "reset": confirmDialog("Reset the draft?", "The draft goes back to the original app settings (no renamed tabs or columns, no custom cards). Publish it to apply that for everyone.", () => { acSaveRec({ draft: JSON.stringify(acBlank()) }); acApply(true); toast("Draft reset"); acRefresh(); }, { okLabel: "Reset draft" }); return;
+    // row highlights & automatic corrections
+    case "al-add": { const ak = el.dataset.ak; acEdit((d) => { acAlList(d, id, ak).push(ak === "hl" ? { id: "h" + Date.now().toString(36), on: true, label: "New highlight rule", tone: "red", logic: "all", conds: [] } : { id: "a" + Date.now().toString(36), on: true, text: "Wrong dates", logic: "all", conds: [] }); }); break; }
+    case "al-del": { const ak = el.dataset.ak, ri = +el.dataset.ri; confirmDialog("Delete this rule?", "It will be removed from the draft.", () => { acEdit((d) => { acAlList(d, id, ak).splice(ri, 1); }); acRefresh(); }, { okLabel: "Delete rule" }); return; }
+    case "al-up": case "al-down": { const ak = el.dataset.ak, ri = +el.dataset.ri, j = ri + (act === "al-up" ? -1 : 1); acEdit((d) => { const L = acAlList(d, id, ak); if (j < 0 || j >= L.length) return; const t = L[ri]; L[ri] = L[j]; L[j] = t; }); break; }
+    case "al-on": { const ak = el.dataset.ak, ri = +el.dataset.ri; acEdit((d) => { acAlList(d, id, ak)[ri].on = !!v; }); break; }
+    case "al-name": { const ak = el.dataset.ak, ri = +el.dataset.ri; acEdit((d) => { const r = acAlList(d, id, ak)[ri]; if (ak === "hl") r.label = String(v).trim(); else r.text = String(v).trim(); }); break; }
+    case "al-tone": { const ak = el.dataset.ak, ri = +el.dataset.ri; acEdit((d) => { acAlList(d, id, ak)[ri].tone = v; }); break; }
+    case "al-logic": { const ak = el.dataset.ak, ri = +el.dataset.ri; acEdit((d) => { acAlList(d, id, ak)[ri].logic = v; }); break; }
+    case "al-reset": acEdit((d) => { if (d.alerts) delete d.alerts[id]; }); break;
+    case "alc-add": { const ak = el.dataset.ak, ri = +el.dataset.ri; acEdit((d) => { const r = acAlList(d, id, ak)[ri]; r.conds = r.conds || []; r.conds.push({ col: acDataCols(id)[0] || "", op: "filled", val: "" }); }); break; }
+    case "alc-del": { const ak = el.dataset.ak, ri = +el.dataset.ri; acEdit((d) => { acAlList(d, id, ak)[ri].conds.splice(di, 1); }); break; }
+    case "alc-col": { const ak = el.dataset.ak, ri = +el.dataset.ri; acEdit((d) => {
+      const cd = acAlList(d, id, ak)[ri].conds[di];
+      cd.col = v; cd.val = "";
+      if (v === "__corr") cd.op = "corr_open"; else if (v === "__pa") cd.op = "pa_approved"; else if (v === "__assigned") cd.op = "yes";
+      else if (/^(corr_|pa_)/.test(cd.op) || cd.op === "yes" || cd.op === "no") cd.op = "filled";
+      else if ((cd.op === "dbefore" || cd.op === "dafter")) cd.val = acDataCols(id).find((x) => x !== v) || "";
+    }); break; }
+    case "alc-op": { const ak = el.dataset.ak, ri = +el.dataset.ri; acEdit((d) => {
+      const cd = acAlList(d, id, ak)[ri].conds[di];
+      cd.op = v;
+      if ((v === "dbefore" || v === "dafter") && !acDataCols(id).includes(cd.val)) cd.val = acDataCols(id).find((x) => x !== cd.col) || "";
+    }); break; }
+    case "alc-val": { const ak = el.dataset.ak, ri = +el.dataset.ri; acEdit((d) => { acAlList(d, id, ak)[ri].conds[di].val = String(v); }); break; }
+    case "rule-month": acEdit((d) => { const r = (d.rules[id] = d.rules[id] || {}); if (v) r.monthCol = v; else delete r.monthCol; }); break;
     default: redo = false;
   }
   if (redo) acRefresh();
