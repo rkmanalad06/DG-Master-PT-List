@@ -1169,6 +1169,42 @@ table.cl-table tbody tr.cl-row-sel:hover{background:var(--accent-soft,#f3dde0)}
 .cl-pill.cl-static{cursor:default}
 .cl-stats.cl-stats-4{grid-template-columns:repeat(4,minmax(0,1fr))}
 @media (max-width:900px){.cl-stats.cl-stats-4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* ---- Admin Control Center ---- */
+.ac-card { padding: 18px 20px; margin-bottom: 16px; }
+.ac-card h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.ac-gate { max-width: 420px; padding: 22px; }
+.ac-bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 14px 18px; margin-bottom: 16px; }
+.ac-bar.ac-dirty { border-color: var(--status-pending); background: var(--status-pending-bg); }
+.ac-bar-text { display: flex; flex-direction: column; gap: 2px; font-size: 13px; min-width: 240px; }
+.ac-bar-text span { color: var(--text-secondary); font-size: 12px; }
+.ac-bar-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.ac-nav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); }
+.ac-navbtn { border: none; background: transparent; padding: 9px 14px; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.ac-navbtn:hover { color: var(--text-primary); }
+.ac-navbtn.on { color: var(--accent); border-bottom-color: var(--accent); }
+.ac-in { width: 100%; box-sizing: border-box; padding: 7px 10px; font: inherit; font-size: 13px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--bg-surface); color: var(--text-primary); }
+.ac-in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ac-in:disabled { background: var(--bg-sunken); color: var(--text-tertiary); }
+.ac-in.ac-sm { width: auto; min-width: 90px; }
+textarea.ac-in { resize: vertical; }
+.ac-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; align-items: end; margin-top: 10px; }
+.ac-row .form-group { margin-bottom: 0; }
+.ac-pick { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.ac-pick label { font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
+.ac-pick select { max-width: 320px; }
+.ac-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+.ac-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-tertiary); padding: 6px 8px; border-bottom: 1px solid var(--border-subtle); }
+.ac-table td { padding: 6px 8px; border-bottom: 1px solid var(--border-subtle); vertical-align: middle; }
+.ac-table tr.ac-off td { opacity: .55; }
+.ac-table tr.ac-off td:last-child { opacity: 1; }
+.ac-key { font-weight: 600; }
+.ac-group { margin-top: 14px; }
+.ac-group-h { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-tertiary); }
+.ac-cardbox { border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px; margin-top: 12px; background: var(--bg-sunken); }
+.ac-cond-h { margin: 12px 0 6px; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+.ac-cond { display: grid; grid-template-columns: minmax(140px, 1.3fr) minmax(130px, 1fr) minmax(110px, 1fr) auto; gap: 8px; margin-bottom: 6px; align-items: center; }
+#ac-preview-bar { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 90; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--ink-900); color: #fff; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.28); font-size: 13px; max-width: calc(100vw - 24px); flex-wrap: wrap; }
+#ac-preview-bar .btn { background: #fff; color: var(--ink-900); }
 </style>
 </head>
 <body>
@@ -1242,14 +1278,14 @@ function openAddRowModal(cfg) {
   const base = (RAW_SHEETS[cfg.id] && RAW_SHEETS[cfg.id].headers) || [];
   const isCall = !!(cfg.completion && (cfg.completion.mode === "call-outcome" || cfg.completion.mode === "transition"));
   const skipCol = isCall ? cfg.completion.field : null;
-  const fields = base.filter((h) => h && h !== skipCol && !(ASSIGN_TABS[cfg.id] && String(h).trim().toLowerCase() === "status") && !cfgHides(cfg, h));
+  const fields = base.filter((h) => h && h !== skipCol && !(ASSIGN_TABS[cfg.id] && String(h).trim().toLowerCase() === "status") && !cfgHides(cfg, h) && !(acColCfg(cfg.id).hidden || []).includes(h));
   const dateSet = new Set(cfg.dateFields || []);
   const wideRe = /note|comment|remark/i;
   const inputHtml = (h, i) => {
     const id = "addrow-f" + i;
     const kind = dateSet.has(h) ? (/time/i.test(h) ? "datetime-local" : "date") : h === cfg.phoneField ? "tel" : "text";
     const span = wideRe.test(h) ? ' style="grid-column:1 / -1;margin:0"' : ' style="margin:0"';
-    return `<div class="form-group"${span}><label for="${id}">${esc(h)}</label><input type="${kind}" id="${id}" data-h="${esc(h)}" data-kind="${kind}" autocomplete="off" /></div>`;
+    return `<div class="form-group"${span}><label for="${id}">${esc(colLabelFor(cfg.id, h))}</label><input type="${kind}" id="${id}" data-h="${esc(h)}" data-kind="${kind}" autocomplete="off" /></div>`;
   };
   const modal = openModal(`
     <div class="modal-header"><div><h3>Add row</h3><p>Add a record to ${esc(cfg.label)} by hand.</p></div></div>
@@ -1790,6 +1826,7 @@ async function bootStore() {
   saveChangeLog();
   invalidateCache();
   invalidateDupCache();
+  acApply(true);
 }
 
 // Polls the shared backend so users see each other's edits without a full
@@ -1809,6 +1846,8 @@ function startWixSync() {
     saveEditedRows(); saveDeletedRows(); saveCompletionOverrides(); saveImportLog(); saveChangeLog();
     invalidateCache();
     invalidateDupCache();
+    acApply(true);
+    if (parseHash().view === "admin" && acUnlocked()) { renderSidebar(); return; }
     const modalOpen = !!document.getElementById("active-modal");
     const typingInline = document.activeElement?.classList?.contains("inline-edit-input");
     if (modalOpen || typingInline) return;
@@ -2166,7 +2205,9 @@ function invalidateCache() {
 function getCompletionConfig(sheetId) {
   const override = Store.completionOverrides[sheetId];
   const base = SHEET_BY_ID[sheetId]?.completion || { field: null, mode: "manual" };
-  return override ? { ...base, ...override } : base;
+  const adm = (((AC().rules || {})[sheetId]) || {}).completion || {};
+  const b2 = Object.keys(adm).length ? { ...base, ...adm } : base;
+  return override ? { ...b2, ...override } : b2;
 }
 
 // Returns one of: 'complete' | 'pending' | 'needs-attention' | 'not-started'
@@ -2643,7 +2684,7 @@ function resetCompletionCriteria(sheetId) {
 
 function getDashboardStats() {
   const records = getAllRecords();
-  const patientSheets = SHEET_CONFIG.filter((s) => !s.isReference);
+  const patientSheets = SHEET_CONFIG.filter((s) => !s.isReference && !s.tabHidden);
   const totalRecords = records.length;
 
   const identityKeys = new Set(records.filter((r) => r.identityKey).map((r) => r.identityKey));
@@ -2839,7 +2880,7 @@ function renderSidebar() {
   html += navItem("dashboard", null, view, param, icon("grid"), "Dashboard");
 
   for (const group of GROUPS.filter((g) => g.id !== "dashboard" && g.id !== "data-management")) {
-    const sheets = SHEET_CONFIG.filter((s) => s.group === group.id);
+    const sheets = SHEET_CONFIG.filter((s) => s.group === group.id && !s.tabHidden);
     if (!sheets.length) continue;
     html += `<div class="nav-group"><div class="nav-group-label">${esc(group.label)}</div>`;
     for (const s of sheets) {
@@ -2854,9 +2895,11 @@ function renderSidebar() {
   html += navItem("duplicates", null, view, view === "duplicates" ? null : param, icon("copy"), "Duplicate Management", null, computeDuplicateIndex().exactDuplicates.length + computeDuplicateIndex().potentialDuplicates.length);
   html += navItem("import-export", null, view, param, icon("upload"), "Import / Export");
   html += navItem("history", null, view, param, icon("history"), "Change History");
+  html += navItem("admin", null, view, param, icon("lock"), "Admin");
   html += `</div>`;
 
   $sidebar.innerHTML = html;
+  acPreviewBanner();
 }
 
 function navItem(view, param, curView, curParam, iconHtml, label, stats, badgeCount) {
@@ -2891,6 +2934,7 @@ function icon(name) {
     database: '<ellipse cx="12" cy="5" rx="8" ry="3" stroke="currentColor" stroke-width="2"/><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" stroke="currentColor" stroke-width="2"/>',
     copy: '<rect x="9" y="9" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="2"/>',
     upload: '<path d="M12 16V4M6 10l6-6 6 6M4 20h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+    lock: '<rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     history: '<path d="M3 3v5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 7v5l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
   };
   return `<svg viewBox="0 0 24 24" fill="none">${icons[name] || ""}</svg>`;
@@ -2900,6 +2944,7 @@ function icon(name) {
 // Main render dispatcher
 // ---------------------------------------------------------------------------
 function render() { ensureDefaultSheets();
+  AC_EDITING = parseHash().view === "admin" && acUnlocked(); acApply();
   destroyCharts();
   const { view, param, query } = parseHash();
   renderSidebar();
@@ -2952,6 +2997,10 @@ function render() { ensureDefaultSheets();
     renderBreadcrumbs([{ label: "Data Management", href: "#/raw-data" }, { label: profile.displayName }]);
     $root.innerHTML = renderPatientDetail(profile);
     wirePatientDetail(profile);
+  } else if (view === "admin") {
+    renderBreadcrumbs([{ label: "Data Management" }, { label: "Admin" }]);
+    $root.innerHTML = renderAdmin();
+    wireAdmin();
   } else if (view === "search") {
     renderBreadcrumbs([{ label: "Search Results" }]);
     $root.innerHTML = renderSearchResults(query.q || "");
@@ -3645,7 +3694,7 @@ function openRecordModal(uid) {
     </div>
     <div class="modal-body">
       <div class="src-field-grid">
-        ${fields.map((f) => `<div class="src-field"><div class="k">${esc(f)}</div><div class="v">${esc(r.data[f])}</div></div>`).join("")}
+        ${fields.map((f) => `<div class="src-field"><div class="k">${esc(colLabelFor(r.sheetId, f))}</div><div class="v">${esc(r.data[f])}</div></div>`).join("")}
       </div>
       <div class="mt-4 flex gap-3" style="flex-wrap:wrap">
         ${r.identityKey ? `<a class="link-inline" href="#/patient/${encodeURIComponent(r.identityKey)}" onclick="closeModal()">View full patient profile across all tabs →</a>` : ""}
@@ -3672,7 +3721,7 @@ function openEditModal(uid, onSaved) {
       <form id="edit-form">
         ${columns.map((c) => `
           <div class="form-group">
-            <label>${esc(c)}</label>
+            <label>${esc(colLabelFor(cfg.id, c))}</label>
             <input type="text" name="${esc(c)}" value="${esc(r.data[c] || "")}" />
           </div>
         `).join("")}
@@ -4189,7 +4238,7 @@ function sourceRecordCard(r) {
       ${statusBadge(r.status)}
     </div>
     <div class="src-field-grid">
-      ${fields.map((f) => `<div class="src-field"><div class="k">${esc(f)}</div><div class="v">${esc(r.data[f])}</div></div>`).join("")}
+      ${fields.map((f) => `<div class="src-field"><div class="k">${esc(colLabelFor(r.sheetId, f))}</div><div class="v">${esc(r.data[f])}</div></div>`).join("")}
     </div>
   </div>`;
 }
@@ -4546,22 +4595,7 @@ function renderWizardStep() {
       // Falls back to the incoming file's own headers when the target sheet
       // has no base data loaded yet (e.g. importing before the one-time
       // roster seed has run) — 1:1 column mapping instead of a hard crash.
-      const targetHeaders = (RAW_SHEETS[importWizard.targetId] && RAW_SHEETS[importWizard.targetId].headers) || importWizard.incomingHeaders;
-      importWizard.mapping = {};
-      const oldNew = importWizard.targetId === "dg_infusion_pas" ? INF_OLD_TO_NEW : {};
-      const oldNewLc = Object.fromEntries(Object.entries(oldNew).map(([o, n]) => [o.toLowerCase().trim(), n]));
-      const taken = new Set();
-      for (const h of importWizard.incomingHeaders) {
-        const exact = targetHeaders.find((t) => t.toLowerCase().trim() === h.toLowerCase().trim());
-        if (exact) { importWizard.mapping[h] = exact; taken.add(exact); }
-      }
-      for (const h of importWizard.incomingHeaders) {
-        if (importWizard.mapping[h]) continue;
-        const via = oldNewLc[h.toLowerCase().trim()];
-        const t = via && !taken.has(via) ? targetHeaders.find((x) => x === via) : "";
-        importWizard.mapping[h] = t || "";
-        if (t) taken.add(t);
-      }
+      importWizard.mapping = importAutoMap(importWizard.targetId, importWizard.incomingHeaders, importWizard.incomingHeaders);
       importWizard.step = 3;
       renderWizardStep();
       updateWizardChrome();
@@ -4569,7 +4603,7 @@ function renderWizardStep() {
   }
 
   else if (importWizard.step === 3) {
-    const targetHeaders = (RAW_SHEETS[importWizard.targetId] && RAW_SHEETS[importWizard.targetId].headers) || importWizard.incomingHeaders;
+    const targets = importTargets(importWizard.targetId, importWizard.incomingHeaders);
     const matchedCount = Object.values(importWizard.mapping).filter(Boolean).length;
     body.innerHTML = `
       <p class="form-hint" style="margin-bottom:12px">${matchedCount} / ${importWizard.incomingHeaders.length} incoming columns matched automatically. Review and adjust below — columns set to "Do not import" are skipped.</p>
@@ -4583,7 +4617,7 @@ function renderWizardStep() {
               <td>
                 <select data-map-col="${esc(h)}">
                   <option value="">Do not import</option>
-                  ${targetHeaders.map((t) => `<option value="${esc(t)}" ${importWizard.mapping[h] === t ? "selected" : ""}>${esc(t)}</option>`).join("")}
+                  ${targets.map((t) => `<option value="${esc(t.key)}" ${importWizard.mapping[h] === t.key ? "selected" : ""}>${esc(importTargetText(t))}</option>`).join("")}
                 </select>
               </td>
               <td>${importWizard.mapping[h] ? `<span class="badge status-complete">Matched</span>` : `<span class="badge status-not-started">Skipped</span>`}</td>
@@ -4592,7 +4626,7 @@ function renderWizardStep() {
         </tbody>
       </table>
       <div class="mt-4">
-        ${targetHeaders.filter((t) => !Object.values(importWizard.mapping).includes(t)).length ? `<p class="form-hint">Target columns with no incoming match (will stay blank for imported rows): ${targetHeaders.filter((t) => !Object.values(importWizard.mapping).includes(t)).map(esc).join(", ")}</p>` : ""}
+        ${targets.filter((t) => !Object.values(importWizard.mapping).includes(t.key)).length ? `<p class="form-hint">Target columns with no incoming match (will stay blank for imported rows): ${targets.filter((t) => !Object.values(importWizard.mapping).includes(t.key)).map((t) => esc(t.label)).join(", ")}</p>` : ""}
       </div>
     `;
     footer.innerHTML = `<button class="btn" id="wiz-back">Back</button><button class="btn primary" id="wiz-next">Next: Preview</button>`;
@@ -4640,7 +4674,7 @@ function renderWizardStep() {
       <p class="form-hint">Preview of the first 5 mapped rows:</p>
       <div class="data-table-wrap" style="max-height:220px">
         <table class="data-table">
-          <thead><tr>${Object.values(importWizard.mapping).filter(Boolean).map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>
+          <thead><tr>${Object.values(importWizard.mapping).filter(Boolean).map((h) => `<th>${esc(colLabelFor(importWizard.targetId, h))}</th>`).join("")}</tr></thead>
           <tbody>${mappedRows.slice(0, 5).map((r) => `<tr>${Object.values(importWizard.mapping).filter(Boolean).map((h) => `<td>${esc(r[h])}</td>`).join("")}</tr>`).join("")}</tbody>
         </table>
       </div>
@@ -4811,6 +4845,7 @@ function cfgHides(cfg, h) {
   return !!(cfg.exactColumns && !(cfg.defaultHeaders || []).some((x) => x.toLowerCase() === k));
 }
 function clIsAssignedVal(v) {
+  const ov = clAssignedTest(v); if (ov !== null) return ov;
   const t = String(v || "").trim();
   const M = clAssignMeta();
   return M && M.yes ? /^y(es)?\b/i.test(t) : !!t;
@@ -4865,7 +4900,8 @@ function clAssignSt(data) {
   if (clIsInfusion() || clIsAssignTab()) return { ...st, tone: k === "assigned" ? "green" : "red", label: k === "assigned" ? "Assigned" : "Unassigned" };
   return clIsTransition() ? { ...st, tone: k === "assigned" ? "green" : "red" } : st;
 }
-function clStatusOptions() {
+function clStatusOptions() { return acStatusOptions(clStatusOptionsBase()); }
+function clStatusOptionsBase() {
   if (clIsOsteo()) return [{ key: "pending", label: "Unassigned" }, { key: "jp", label: "Assigned to JP" }, { key: "su", label: "Assigned to SU" }, { key: "pa", label: "Pending PA" }, { key: "attention", label: "Needs Attention" }, { key: "cancelled", label: "Cancelled" }];
   if (clIsGeneric()) return Object.keys(STATUS_META).map((k) => ({ key: k, label: STATUS_META[k].label }));
   if (clIsDays()) return [{ key: "pending", label: "Unassigned" }, { key: "assigned", label: "Assigned" }, { key: "dexa", label: "DEXA due: add to appt" }];
@@ -4876,8 +4912,8 @@ function clStatusOptions() {
     { key: "correction", label: "Corrections: All open" }, { key: "corr-pending", label: "Corrections: Pending" },
     { key: "corr-progress", label: "Corrections: In progress" }, { key: "resolved", label: "Corrections: Resolved" },
     { key: "notresolved", label: "Corrections: Not resolved" },
-    { key: "pa-sent", label: "Prior Auth: Sent" }, { key: "pa-resubmit", label: "Prior Auth: Resubmit" },
-    { key: "pa-approved", label: "Prior Auth: Approved" }, { key: "pa-others", label: "Prior Auth: Others" },
+    { key: "pa-sent", label: "Prior Auth: " + CL_PA_LABELS.sent }, { key: "pa-resubmit", label: "Prior Auth: " + CL_PA_LABELS.resubmit },
+    { key: "pa-approved", label: "Prior Auth: " + CL_PA_LABELS.approved }, { key: "pa-others", label: "Prior Auth: " + CL_PA_LABELS.others },
   ];
   return clIsTransition()
     ? [{ key: "pending", label: "Not yet assigned" }, { key: "assigned", label: "Assigned" }, { key: "scheduled", label: "Scheduled" }]
@@ -5081,12 +5117,17 @@ function clInfusionCellHtml(r) {
     ? `<span class="cl-inf cl-inf-yes" title="Found in DG Infusion PAs" aria-label="On infusion: yes">\u2713</span>`
     : `<span class="cl-inf cl-inf-no" title="Not found in DG Infusion PAs" aria-label="On infusion: no">\u2717</span>`;
 }
-function clTeamField(id) {
+function clTeamFieldBase(id) {
   const want = ASSIGN_TABS[id] || (id === "dg_osteoporosis_pas" ? "50/50 TO JP AND SU" : null);
   if (id === "dg_infusion_pas") return "Team member";
   if (!want) return "Team Member";
   const h = ((RAW_SHEETS[id] && RAW_SHEETS[id].headers) || []).find((x) => String(x).trim().toLowerCase() === want.toLowerCase());
   return h || want;
+}
+function clTeamField(id) {
+  const o = acAssignCol(id);
+  if (o) { const h = ((RAW_SHEETS[id] && RAW_SHEETS[id].headers) || []).find((x) => String(x).trim().toLowerCase() === o.toLowerCase()); return h || o; }
+  return clTeamFieldBase(id);
 }
 function clPaKey(v) {
   const s = String(v || "").trim().toLowerCase();
@@ -5168,10 +5209,10 @@ function clInfusionKpiHtml() {
     { key: "correction", tone: "yellow", label: "Corrections", n: c.corr, sub: corrSub, title: corrSub + " · " + c.resolved + " resolved" },
   ];
   const row2 = [
-    { key: "pa-sent", tone: "blue", label: "Sent", n: c.sent, sub: "Prior auth sent" },
-    { key: "pa-resubmit", tone: "orange", label: "Resubmit", n: c.resubmit, sub: "Needs to be resubmitted" },
-    { key: "pa-approved", tone: "green", label: "Approved", n: c.approved, sub: "Prior auth approved" },
-    { key: "pa-others", tone: "gray", label: "Others", n: c.others, sub: "Anything else, with notes" },
+    { key: "pa-sent", tone: "blue", label: CL_PA_LABELS.sent, n: c.sent, sub: "Prior auth sent" },
+    { key: "pa-resubmit", tone: "orange", label: CL_PA_LABELS.resubmit, n: c.resubmit, sub: "Needs to be resubmitted" },
+    { key: "pa-approved", tone: "green", label: CL_PA_LABELS.approved, n: c.approved, sub: "Prior auth approved" },
+    { key: "pa-others", tone: "gray", label: CL_PA_LABELS.others, n: c.others, sub: "Anything else, with notes" },
   ];
   return `<div class="cl-stats cl-stats-4" role="group" aria-label="Patient summary">${row1.map(tile).join("")}</div>
     <div class="cl-kpi-heading">Prior Auth Status</div>
@@ -5225,14 +5266,14 @@ function callInfo(data) {
     return { key: "none", done: assigned, days: null, flagged: false, assigned, scheduled: false, aetna: clIsPsa() && psaAetna(data), dexa: clIsDays() && Object.keys(data || {}).some((k) => clIsDexaCol(k) && clDexaYes(data[k])), high: clIsPsa() && !assigned && psaHigh(data), who: clIsPsa() ? psaWho(data[CL.TEAM]) : null, status: assigned ? "t-assigned" : "t-unassigned" };
   }
   if (clIsInfusion()) {
-    const assigned = !!String(data[CL.TEAM] || "").trim();
+    const assigned = clAssignedOr(data[CL.TEAM]);
     const corrText = String(data[CL_CORR_FIELD] || "").trim();
     const cst = String(data[CL_CORR_STATUS] || "").trim().toLowerCase();
     const corr = corrText ? (/not.?resolved|unresolved/.test(cst) ? "notresolved" : cst.includes("resolved") ? "resolved" : cst.includes("progress") ? "progress" : "pending") : "";
     return { key: clPaKey(data[CL_PA_FIELD]) || "none", done: false, days: null, flagged: false, assigned, scheduled: false, corr, status: assigned ? "t-assigned" : "t-unassigned" };
   }
   if (clIsTransition()) {
-    const assigned = !!String(data[CL.TEAM] || "").trim();
+    const assigned = clAssignedOr(data[CL.TEAM]);
     const scheduled = !!String(data[CL.NEXT] || "").trim();
     return { key: scheduled ? "scheduled" : "letter", done: false, days: null, flagged: false, assigned, scheduled, status: assigned ? "t-assigned" : "t-unassigned" };
   }
@@ -5241,7 +5282,7 @@ function callInfo(data) {
   const nextDate = parseDateLoose(data[CL.NEXT]);
   const days = nextDate ? clDaysFromToday(nextDate) : null;
   const flagged = !done && days !== null && days <= CL.ATTN_DAYS;
-  const assigned = !!String(data[CL.TEAM] || "").trim();
+  const assigned = clAssignedOr(data[CL.TEAM]);
   let status;
   if (key === "confirmed" || key === "refused" || key === "resched") status = key;
   else if (flagged) status = "attention";
@@ -5261,7 +5302,7 @@ function callPill(data) {
   if (clIsAssignTab() || clIsOsteo()) return { key: "none", tone: "gray", label: "" };
   if (clIsInfusion()) {
     const pi = callInfo(data);
-    return { key: pi.key, tone: "gray", label: { sent: "Sent", resubmit: "Resubmit", approved: "Approved", others: "Others" }[pi.key] || "" };
+    return { key: pi.key, tone: "gray", label: CL_PA_LABELS[pi.key] || "" };
   }
   if (clIsTransition()) {
     const ti = callInfo(data);
@@ -5343,18 +5384,22 @@ function clLayoutLoad() {
     Object.keys(widths).forEach((k) => { w2[INF_OLD_TO_NEW[k] || k] = widths[k]; });
     widths = w2;
   }
+  if ((l.rev || 0) !== (acColCfg(CALL_SHEET_ID).rev || 0)) order = [];
   return { order, widths };
 }
-function clLayoutSave(l) { lsSet(CL.LS_LAYOUT, l); }
+function clLayoutSave(l) { l.rev = acColCfg(CALL_SHEET_ID).rev || 0; lsSet(CL.LS_LAYOUT, l); }
 function clCustomColumns() {
-  try { const c = JSON.parse(Store.editedRows[CL.LAYOUT_UID]?.columns || "[]"); return Array.isArray(c) ? c : []; } catch (e) { return []; }
+  let base = [];
+  try { const c = JSON.parse(Store.editedRows[CL.LAYOUT_UID]?.columns || "[]"); base = Array.isArray(c) ? c : []; } catch (e) { base = []; }
+  const add = acColCfg(CALL_SHEET_ID).added || [];
+  return add.length ? base.concat(add.filter((a) => !base.some((b) => b.name === a.name))) : base;
 }
 function clSaveCustomColumns(cols) {
   Store.editedRows[CL.LAYOUT_UID] = { ...(Store.editedRows[CL.LAYOUT_UID] || {}), columns: JSON.stringify(cols) };
   saveEditedRows();
   WixBridge.save("editedRow", { uid: CL.LAYOUT_UID, patch: Store.editedRows[CL.LAYOUT_UID] });
 }
-function clColumns(cfg) {
+function clColumns(cfg, withHidden) {
   let all = (RAW_SHEETS[cfg.id]?.headers || []).slice();
   if (clIsAssignTab() || clIsOsteo()) {
     // Status is always derived from the assignment column, so any stored "Status" header is replaced by the computed column.
@@ -5371,12 +5416,19 @@ function clColumns(cfg) {
   clCustomColumns().forEach((c) => { if (!all.includes(c.name)) all.push(c.name); });
   if (clIsAssignTab() || clIsOsteo() || clIsInfusion()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else if (!(clIsGeneric() && cfg.isReference)) all.push("__status");
   if (cfg.leadTeam) { const lead = [CL.TEAM, "__status"].filter((k) => all.includes(k)); all = lead.concat(all.filter((k) => !lead.includes(k))); }
+  {
+    const cc = acColCfg(cfg.id);
+    if (!withHidden) { const hid = new Set(cc.hidden || []); if (hid.size) all = all.filter((k) => !hid.has(k)); }
+    const o = cc.order || [];
+    if (o.length) { const rk = (k) => { const i = o.indexOf(k); return i < 0 ? 9999 : i; }; all = all.map((k, i) => [k, i]).sort((a, b) => rk(a[0]) - rk(b[0]) || a[1] - b[1]).map((x) => x[0]); }
+    if (withHidden) return all;
+  }
   const out = [];
   clLayoutLoad().order.forEach((k) => { if (all.includes(k) && !out.includes(k)) out.push(k); });
   all.forEach((k) => { if (!out.includes(k)) out.push(k); });
   return out;
 }
-function clColLabel(col) { return col === "__status" ? "Status" : col === "__infusion" ? "On Infusion?" : col; }
+function clColLabel(col) { return clLabels()[col] || clBaseLabel(col); }
 function clDefaultWidth(cfg, col) {
   if (col === "__infusion") return 125;
   if (clIsDays()) {
@@ -5607,7 +5659,8 @@ function clOsteoKpiHtml() {
   ];
   return `<div class="cl-stats cl-stats-4" role="group" aria-label="Osteoporosis PA summary">${tiles.map(tile).join("")}</div>`;
 }
-function clKpiHtml() {
+function clKpiHtml() { return acKpiWrap(clKpiHtmlBase()); }
+function clKpiHtmlBase() {
   if (clIsOsteo()) return clOsteoKpiHtml();
   if (clIsGeneric()) return clGenericKpiHtml();
   if (clIsPsa()) return clPsaKpiHtml();
@@ -5665,7 +5718,7 @@ function renderCallListPage(cfg) {
     <div class="page-header">
       <div>
         <div class="page-title">${esc(cfg.label)}</div>
-        <div class="page-subtitle">${clIsGeneric() ? esc(sheetDescription(cfg)) : clIsOsteo() ? "Type JP or SU (or Justin / Putz, Sabahat / Usmani) in 50/50 TO JP AND SU to assign, or Cancelled to cancel. Unassigned patients with an appointment within 7 days are flagged Needs Attention." : clIsAssignTab() ? (clAssignMeta() ? clAssignMeta().desc : `Enter a name in ${CL.TEAM} for each patient. Status follows ${CL.TEAM}: Assigned once someone is entered, Unassigned while it is blank.`) : clIsInfusion() ? "Assign each authorization to a Team Member. Status follows Team Member (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
+        <div class="page-subtitle">${clIsGeneric() ? esc(sheetDescription(cfg)) : clIsOsteo() ? "Type JP or SU (or Justin / Putz, Sabahat / Usmani) in 50/50 TO JP AND SU to assign, or Cancelled to cancel. Unassigned patients with an appointment within " + CL.ATTN_DAYS + " days are flagged Needs Attention." : clIsAssignTab() ? (clAssignMeta() ? clAssignMeta().desc : `Enter a name in ${CL.TEAM} for each patient. Status follows ${CL.TEAM}: Assigned once someone is entered, Unassigned while it is blank.`) : clIsInfusion() ? "Assign each authorization to a Team Member. Status follows Team Member (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
       </div>
       <div class="page-header-actions">
         ${clIsGeneric() && !cfg.isReference ? `<button class="btn" id="btn-completion-criteria">${gearIconSvg()} Completion Criteria</button>` : ""}
@@ -5733,7 +5786,7 @@ function clFilteredRows(cfg) {
         ? String((STATUS_META[r.status] || {}).label || "").toLowerCase().includes(q)
         : callPill(r.data).label.toLowerCase().includes(q) || clAssignSt(r.data).label.toLowerCase().includes(q)));
   }
-  if (clState.statusFilter) rows = rows.filter((r) => (clIsGeneric() ? r.status === clState.statusFilter : clStatusMatch(r.data, clState.statusFilter)));
+  if (clState.statusFilter) rows = rows.filter((r) => (String(clState.statusFilter).startsWith("cx-") ? acCardMatch(String(clState.statusFilter).slice(3), r.data) : clIsGeneric() ? r.status === clState.statusFilter : clStatusMatch(r.data, clState.statusFilter)));
   if (clState.remindFilter) rows = rows.filter((r) => callReminder(r.data)?.state === clState.remindFilter);
   if (clIsDays() && !clState.sort && !clState.day) rows = rows.map((r, i) => [r, i]).sort((a, b) => (a[0].day ? a[0].day.sort : 100000) - (b[0].day ? b[0].day.sort : 100000) || a[1] - b[1]).map((x) => x[0]);
   if (clState.sort) {
@@ -5982,6 +6035,7 @@ function wireCallListPage(cfg) {
     const rm = t.closest("[data-remove-col]");
     if (rm) {
       const name = rm.dataset.removeCol;
+      if ((acColCfg(cfg.id).added || []).some((c) => c.name === name)) { toast("This column is managed in the Admin page.", "error"); return; }
       confirmDialog("Remove this column?", `"${name}" will be hidden for everyone. Values already typed into it stay saved in the records.`, () => {
         clSaveCustomColumns(clCustomColumns().filter((c) => c.name !== name));
         logChange({ sheetId: cfg.id, action: "column", summary: `Removed column "${name}" from ${cfg.label}` });
@@ -6136,7 +6190,7 @@ function clExport(cfg) {
   const cols = clColumns(cfg).filter((c) => c !== "__status");
   const rows = clFilteredRows(cfg).map((r) => {
     const o = {};
-    cols.forEach((c) => { if (c === "__infusion") o["On Infusion?"] = gcaOnInfusion(r) ? "Yes" : "No"; else o[c] = c === CL.ACTION ? callPill(r.data).label : r.data[c] || ""; });
+    cols.forEach((c) => { if (c === "__infusion") o[clColLabel(c)] = gcaOnInfusion(r) ? "Yes" : "No"; else o[clColLabel(c)] = c === CL.ACTION ? callPill(r.data).label : r.data[c] || ""; });
     o["Status"] = clIsGeneric() ? ((STATUS_META[r.status] || {}).label || "") : clAssignSt(r.data).label;
     const rm = callReminder(r.data);
     if (clIsInfusion()) o["Correction Status"] = clCorrLabel(r.data);
@@ -6399,6 +6453,933 @@ document.getElementById("global-search").addEventListener("keydown", (e) => {
 document.getElementById("btn-import-topbar").addEventListener("click", openImportWizard);
 
 // ============================================================================
+// ADMIN CONTROL CENTER — settings layer
+// One JSON document of overrides ("published" = what everyone sees, "draft" = what the admin is
+// editing). It is stored like the shared column layouts (a special record in editedRows), so it
+// syncs to every user through the same Wix bridge and needs no changes on the Wix side.
+// ============================================================================
+const AC_UID = "__admin#settings";
+const AC_GROUP_IDS = ["call-lists", "work-queues", "diagnosis"];
+const AC_TONES = [["gray", "Gray"], ["red", "Red"], ["green", "Green"], ["blue", "Blue"], ["yellow", "Yellow"], ["orange", "Orange"], ["violet", "Purple"]];
+const AC_OPS = [
+  ["filled", "is filled in"], ["blank", "is blank"], ["eq", "equals"], ["neq", "does not equal"],
+  ["contains", "contains"], ["ncontains", "does not contain"], ["starts", "starts with"],
+  ["in", "is one of (comma list)"], ["nin", "is not one of (comma list)"],
+  ["dpast", "is a date in the past"], ["dwithin", "is a date within the next N days"],
+];
+const CL_PA_LABELS = { sent: "Sent", resubmit: "Resubmit", approved: "Approved", others: "Others" };
+Object.defineProperty(CL_PA_LABELS, "__base", { value: { ...CL_PA_LABELS }, enumerable: false });
+const AC_CACHE = { pubRaw: null, pub: null, drRaw: null, dr: null };
+let AC_PREVIEW = false;   // admin is previewing the draft in the whole app
+let AC_EDITING = false;   // admin page is open: this browser shows the draft while editing
+let AC_SIG = "";
+let acMemOk = "";
+
+function acBlank() { return { v: 1, groups: {}, tabs: {}, tabOrder: [], customTabs: [], cols: {}, rules: {}, kpi: {}, options: {}, attnDays: null }; }
+function acParse(raw) {
+  try { const o = JSON.parse(raw || ""); if (o && typeof o === "object" && !Array.isArray(o)) return { ...acBlank(), ...o }; } catch (e) { /* fall through */ }
+  return acBlank();
+}
+function acRec() { return Store.editedRows[AC_UID] || {}; }
+function acPublished() {
+  const raw = String(acRec().published || "");
+  if (AC_CACHE.pubRaw !== raw) { AC_CACHE.pubRaw = raw; AC_CACHE.pub = acParse(raw); }
+  return AC_CACHE.pub;
+}
+function acDraftRaw() { return String(acRec().draft || ""); }
+function acDraft() {
+  const raw = acDraftRaw();
+  if (!raw) return acPublished();
+  if (AC_CACHE.drRaw !== raw) { AC_CACHE.drRaw = raw; AC_CACHE.dr = acParse(raw); }
+  return AC_CACHE.dr;
+}
+function acHasDraft() { return !!acDraftRaw() && JSON.stringify(acDraft()) !== JSON.stringify(acPublished()); }
+// The settings the app is using right now: the published ones, unless the admin is editing or previewing.
+function AC() { return (AC_PREVIEW || AC_EDITING) && acDraftRaw() ? acDraft() : acPublished(); }
+
+function acSaveRec(patch) {
+  Store.editedRows[AC_UID] = { ...(Store.editedRows[AC_UID] || {}), ...patch };
+  saveEditedRows();
+  WixBridge.save("editedRow", { uid: AC_UID, patch: Store.editedRows[AC_UID] });
+}
+// Change the draft (never the published settings).
+function acEdit(fn) {
+  const d = JSON.parse(JSON.stringify(acDraft()));
+  fn(d);
+  acSaveRec({ draft: JSON.stringify(d) });
+  acApply(true);
+}
+function acDiffSections(pub, dr) {
+  const names = { groups: "Group names", tabs: "Tab names and visibility", tabOrder: "Tab order", customTabs: "New tabs", cols: "Columns", rules: "Status rules", kpi: "KPI cards", options: "Options", attnDays: "Needs Attention days" };
+  return Object.keys(names).filter((k) => JSON.stringify(pub[k]) !== JSON.stringify(dr[k])).map((k) => names[k]);
+}
+function acPublish() {
+  const d = acDraft(), was = acPublished();
+  const sections = acDiffSections(was, d);
+  acSaveRec({ prev: String(acRec().published || ""), published: JSON.stringify(d), draft: "", publishedAt: new Date().toISOString() });
+  AC_PREVIEW = false;
+  acApply(true);
+  invalidateCache(); invalidateDupCache();
+  logChange({ action: "admin", summary: "Admin published changes: " + (sections.join(", ") || "no changes") });
+}
+
+// ---------------------------------------------------------------------------
+// PIN gate (a deterrent, not real security: the app runs in the visitor's browser)
+// ---------------------------------------------------------------------------
+async function acHash(pin, salt) {
+  const text = salt + ":" + pin;
+  try {
+    if (window.crypto && crypto.subtle) {
+      const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+      return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+    }
+  } catch (e) { /* fall back below */ }
+  let h = 5381;
+  for (const ch of text) h = ((h << 5) + h + ch.charCodeAt(0)) >>> 0;
+  return "x" + h.toString(16);
+}
+function acUnlocked() {
+  const h = String(acRec().pinHash || "");
+  if (!h) return false;
+  let s = "";
+  try { s = sessionStorage.getItem("dg_admin_ok") || ""; } catch (e) { /* ignore */ }
+  return (s || acMemOk) === h;
+}
+function acSetUnlocked(h) { acMemOk = h; try { sessionStorage.setItem("dg_admin_ok", h); } catch (e) { /* ignore */ } }
+function acLock() { acMemOk = ""; try { sessionStorage.removeItem("dg_admin_ok"); } catch (e) { /* ignore */ } AC_PREVIEW = false; }
+
+// ---------------------------------------------------------------------------
+// Applying the settings to the live app (tabs, groups, options)
+// ---------------------------------------------------------------------------
+function acMakeCustomCfg(t) {
+  const cols = (t.cols || []).slice();
+  return {
+    id: t.id, label: t.label, shortLabel: t.label, group: t.group || "diagnosis", custom: true,
+    nameField: t.nameCol || cols[0], dateFields: [],
+    completion: { field: t.assignCol, mode: "nonblank", label: (t.assignCol || "Assigned") + " is filled in" },
+    searchFields: cols.slice(), inlineFields: [t.assignCol].filter(Boolean), defaultHeaders: cols,
+  };
+}
+function acApply(force) {
+  const a = AC();
+  const raw = JSON.stringify(a);
+  const sig = raw + "|" + (AC_PREVIEW ? "p" : "") + (AC_EDITING ? "e" : "");
+  if (!force && sig === AC_SIG) return;
+  AC_SIG = sig;
+
+  GROUPS.forEach((g) => { if (g.__base === undefined) g.__base = g.label; g.label = (a.groups && a.groups[g.id]) || g.__base; });
+
+  // new tabs
+  const wanted = new Set((a.customTabs || []).map((t) => t.id));
+  for (let i = SHEET_CONFIG.length - 1; i >= 0; i--) {
+    const c = SHEET_CONFIG[i];
+    if (c.custom && !wanted.has(c.id)) { SHEET_CONFIG.splice(i, 1); delete SHEET_BY_ID[c.id]; delete ASSIGN_TABS[c.id]; }
+  }
+  (a.customTabs || []).forEach((t) => {
+    let c = SHEET_BY_ID[t.id];
+    if (!c) { c = acMakeCustomCfg(t); c.__i = 1000 + SHEET_CONFIG.length; SHEET_CONFIG.push(c); SHEET_BY_ID[c.id] = c; }
+    c.nameField = t.nameCol || (t.cols || [])[0];
+    c.completion = { field: t.assignCol, mode: "nonblank", label: (t.assignCol || "Assigned") + " is filled in" };
+    c.__base = { label: t.label, shortLabel: t.label, group: t.group || "diagnosis" };
+    ASSIGN_TABS[t.id] = t.assignCol;
+    const heads = (t.cols || []).slice();
+    c.defaultHeaders = heads; c.searchFields = heads.slice(); c.inlineFields = [t.assignCol].filter(Boolean);
+    if (RAW_SHEETS[t.id] && Array.isArray(RAW_SHEETS[t.id].headers)) heads.forEach((h) => { if (!RAW_SHEETS[t.id].headers.includes(h)) RAW_SHEETS[t.id].headers.push(h); });
+  });
+
+  // names, groups and visibility
+  SHEET_CONFIG.forEach((c, i) => {
+    if (c.__base === undefined) { c.__base = { label: c.label, shortLabel: c.shortLabel, group: c.group }; c.__i = i; }
+    const o = (a.tabs && a.tabs[c.id]) || {};
+    c.label = o.label || c.__base.label;
+    c.shortLabel = o.shortLabel || o.label || c.__base.shortLabel;
+    c.group = o.group || c.__base.group;
+    c.tabHidden = !!o.hidden;
+    if (RAW_SHEETS[c.id]) RAW_SHEETS[c.id].sheetName = c.label;
+  });
+  // order
+  const ord = a.tabOrder || [];
+  const rank = (c) => { const k = ord.indexOf(c.id); return k >= 0 ? k : 1000 + (c.__i || 0); };
+  const sorted = SHEET_CONFIG.slice().sort((x, y) => rank(x) - rank(y));
+  SHEET_CONFIG.splice(0, SHEET_CONFIG.length, ...sorted);
+
+  // Needs Attention window
+  const n = a.attnDays === null || a.attnDays === "" || a.attnDays === undefined ? NaN : +a.attnDays;
+  CL.ATTN_DAYS = Number.isFinite(n) && n >= 0 ? Math.round(n) : 7;
+
+  // option lists
+  const opt = a.options || {};
+  CALL_ACTIONS.forEach((x) => {
+    if (x.__base === undefined) x.__base = { label: x.label, tone: x.tone };
+    const o = (opt.actions || {})[x.key] || {};
+    x.label = o.label || x.__base.label; x.tone = o.tone || x.__base.tone;
+  });
+  if (!CALL_NOTES.__base) CALL_NOTES.__base = CALL_NOTES.slice();
+  const notes = Array.isArray(opt.notes) && opt.notes.length ? opt.notes : CALL_NOTES.__base;
+  CALL_NOTES.splice(0, CALL_NOTES.length, ...notes);
+  Object.keys(CL_PA_LABELS).forEach((k) => { CL_PA_LABELS[k] = ((opt.pa || {})[k]) || CL_PA_LABELS.__base[k]; });
+  invalidateCache();
+}
+
+// ---------------------------------------------------------------------------
+// Helpers other parts of the app use
+// ---------------------------------------------------------------------------
+function acColCfg(sheetId) { return ((AC().cols || {})[sheetId]) || {}; }
+function clBaseLabel(col) { return col === "__status" ? "Status" : col === "__infusion" ? "On Infusion?" : col; }
+function colLabelFor(sheetId, col) { return (acColCfg(sheetId).labels || {})[col] || clBaseLabel(col); }
+function clLabels() { return acColCfg(CALL_SHEET_ID).labels || {}; }
+function clHiddenCols() { return acColCfg(CALL_SHEET_ID).hidden || []; }
+function acAssignCol(id) { const r = ((AC().rules || {})[id]) || {}; return r.assignCol || ""; }
+// Status rule: is this value "assigned"?
+function clAssignedTest(v) {
+  const r = ((AC().rules || {})[CALL_SHEET_ID]) || {};
+  const t = String(v == null ? "" : v).trim();
+  if (r.mode === "filled") return !!t;
+  if (r.mode === "in" || r.mode === "nin") {
+    const list = String(r.list || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+    const has = list.includes(t.toLowerCase());
+    return r.mode === "in" ? has : (!!t && !has);
+  }
+  return null; // no admin rule: the tab's built-in behaviour applies
+}
+function clAssignedOr(v) { const o = clAssignedTest(v); return o !== null ? o : !!String(v == null ? "" : v).trim(); }
+function acCond(c, data) {
+  if (c.col === "__assigned") { const a = !!callInfo(data).assigned; return c.op === "no" ? !a : a; }
+  const v = String(data[c.col] == null ? "" : data[c.col]).trim();
+  const t = String(c.val == null ? "" : c.val).trim();
+  const lc = v.toLowerCase(), tl = t.toLowerCase();
+  const list = () => t.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+  switch (c.op) {
+    case "filled": return !!v;
+    case "blank": return !v;
+    case "eq": return lc === tl;
+    case "neq": return lc !== tl;
+    case "contains": return !!tl && lc.includes(tl);
+    case "ncontains": return !tl || !lc.includes(tl);
+    case "starts": return !!tl && lc.startsWith(tl);
+    case "in": return list().includes(lc);
+    case "nin": return !list().includes(lc);
+    case "dpast": { const d = parseDateLoose(v); return !!d && clDaysFromToday(d) < 0; }
+    case "dwithin": { const d = parseDateLoose(v); if (!d) return false; const n = clDaysFromToday(d); return n >= 0 && n <= (+t || 7); }
+    default: return false;
+  }
+}
+function acCards(sheetId) { const k = ((AC().kpi || {})[sheetId]) || {}; return Array.isArray(k.custom) ? k.custom : []; }
+// Empty condition list = every row.
+function acMatches(logic, conds, data) {
+  if (!(conds || []).length) return true;
+  const f = (c) => acCond(c, data);
+  return logic === "any" ? conds.some(f) : conds.every(f);
+}
+function acNum(v) {
+  const t = String(v == null ? "" : v).replace(/[$,\s]/g, "").replace(/^\((.*)\)$/, "-$1");
+  if (t === "") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+// The number a row contributes to a sum / average / date average (null = row has no usable value).
+function acRowValue(card, data) {
+  if (card.metric === "avgdays") { const d = parseDateLoose(data[card.col]); return d ? clDaysFromToday(d) : null; }
+  if (card.metric === "sum" || card.metric === "avg") return acNum(data[card.col]);
+  if (card.metric === "unique") { const t = String(data[card.col] == null ? "" : data[card.col]).trim(); return t ? t.toLowerCase() : null; }
+  return 1;
+}
+// Rows a card counts (also the rows shown when the card is clicked).
+function acCardMatch(cardId, data) {
+  const card = acCards(CALL_SHEET_ID).find((c) => c.id === cardId);
+  if (!card) return false;
+  const m = card.metric || "count";
+  if (!acMatches(card.logic, card.conds, data)) return false;
+  if (m === "percent") return acMatches(card.dlogic, card.dconds, data);
+  if (m === "count") return true;
+  return acRowValue(card, data) !== null;
+}
+// Work out what a card shows: { text, badge (% of all rows, or null), bar (0-100), sub }
+function acCardCompute(card, recs) {
+  const m = card.metric || "count";
+  const total = recs.length;
+  const dec = card.decimals === undefined || card.decimals === null || card.decimals === "" ? 1 : Math.max(0, Math.min(4, +card.decimals || 0));
+  const num = (x) => (Number.isFinite(x) ? x.toLocaleString(undefined, { maximumFractionDigits: dec }) : "—");
+  const wrap = (t) => (card.prefix || "") + t + (card.suffix || "");
+  const inScope = recs.filter((r) => acMatches(card.logic, card.conds, r.data));
+  if (m === "percent") {
+    const den = recs.filter((r) => acMatches(card.dlogic, card.dconds, r.data));
+    const n = den.filter((r) => acMatches(card.logic, card.conds, r.data)).length;
+    const p = den.length ? (n / den.length) * 100 : 0;
+    return { text: num(p) + "%", badge: null, bar: Math.round(p), sub: `${fmtNum(n)} of ${fmtNum(den.length)} rows` };
+  }
+  if (m === "count") {
+    const n = inScope.length;
+    return { text: fmtNum(n), badge: total ? Math.round((n / total) * 100) : 0, bar: total ? Math.round((n / total) * 100) : 0, sub: "" };
+  }
+  const vals = inScope.map((r) => acRowValue(card, r.data)).filter((v) => v !== null);
+  const share = total ? Math.round((vals.length / total) * 100) : 0;
+  if (m === "sum") return { text: wrap(num(vals.reduce((a, b) => a + b, 0))), badge: null, bar: share, sub: `over ${fmtNum(vals.length)} rows with a number` };
+  if (m === "avg") return { text: wrap(vals.length ? num(vals.reduce((a, b) => a + b, 0) / vals.length) : "—"), badge: null, bar: share, sub: `average over ${fmtNum(vals.length)} rows` };
+  if (m === "avgdays") return { text: wrap(vals.length ? num(vals.reduce((a, b) => a + b, 0) / vals.length) : "—") + (card.suffix ? "" : " days"), badge: null, bar: share, sub: `from today (negative = past), ${fmtNum(vals.length)} rows` };
+  if (m === "unique") return { text: fmtNum(new Set(vals).size), badge: null, bar: share, sub: `different values in ${fmtNum(vals.length)} rows` };
+  return { text: "—", badge: null, bar: 0, sub: "" };
+}
+function acTileKey(el) {
+  if (el.dataset && el.dataset.clStatus !== undefined) return el.dataset.clStatus || "_total";
+  const l = el.querySelector(".cl-stat-label");
+  return "static:" + (l ? l.textContent.trim().toLowerCase() : "");
+}
+function acKpiTiles(sheetId) {
+  const html = clWith(sheetId, () => clKpiHtmlBase());
+  const tpl = document.createElement("template"); tpl.innerHTML = html;
+  return [...tpl.content.querySelectorAll(".cl-stat")].map((el) => {
+    const l = el.querySelector(".cl-stat-label"), s = el.querySelector(".cl-stat-sub");
+    const m = /cl-tone-(\w+)/.exec(el.className);
+    return { key: acTileKey(el), label: l ? l.textContent.trim() : "", sub: s ? s.textContent.trim() : "", tone: m ? m[1] : "gray" };
+  });
+}
+function acKpiWrap(html) {
+  const k = ((AC().kpi || {})[CALL_SHEET_ID]) || null;
+  if (!k) return html;
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html;
+  const root = tpl.content;
+  const b = k.builtin || {};
+  root.querySelectorAll(".cl-stat").forEach((el) => {
+    const o = b[acTileKey(el)];
+    if (!o) return;
+    if (o.hidden) { el.remove(); return; }
+    if (o.label) {
+      const l = el.querySelector(".cl-stat-label");
+      if (l) { [...l.childNodes].forEach((n) => { if (n.nodeType === 3) n.remove(); }); l.appendChild(document.createTextNode(o.label)); }
+    }
+    if (o.sub) { const s = el.querySelector(".cl-stat-sub"); if (s) s.textContent = o.sub; el.title = o.sub; }
+    if (o.tone) el.className = el.className.replace(/cl-tone-\w+/, "cl-tone-" + o.tone);
+  });
+  const cards = acCards(CALL_SHEET_ID);
+  let extra = "";
+  if (cards.length) {
+    const recs = clDayScoped(clRecords());
+    const total = recs.length;
+    const tiles = cards.map((c) => {
+      const v = acCardCompute(c, recs);
+      const key = "cx-" + c.id;
+      const sub = c.sub || v.sub;
+      return `<button type="button" class="cl-stat cl-tone-${esc(c.tone || "gray")}" data-cl-status="${esc(key)}" aria-pressed="${clState.statusFilter === key}" title="${esc(sub || c.label)}">
+        <span class="cl-stat-count">${esc(v.text)}${v.badge === null || c.nopct ? "" : `<span class="cl-stat-pct" title="Share of all rows">${v.badge}%</span>`}</span>
+        <span class="cl-stat-label"><span class="cl-dot"></span>${esc(c.label || "Custom card")}</span>
+        <span class="cl-stat-sub">${esc(sub)}</span>
+        <span class="cl-stat-bar" role="progressbar" aria-label="${esc(c.label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${v.bar}"><span class="cl-stat-bar-fill" style="width:${Math.max(0, Math.min(100, v.bar))}%"></span></span>
+      </button>`;
+    }).join("");
+    extra = (k.heading ? `<div class="cl-kpi-heading">${esc(k.heading)}</div>` : "") + `<div class="cl-stats cl-stats-4" role="group" aria-label="Custom cards">${tiles}</div>`;
+  }
+  return tpl.innerHTML + extra;
+}
+function acStatusOptions(list) {
+  const k = ((AC().kpi || {})[CALL_SHEET_ID]) || {};
+  const b = k.builtin || {};
+  const out = list.map((o) => (b[o.key] && b[o.key].label ? { ...o, label: b[o.key].label } : o));
+  acCards(CALL_SHEET_ID).forEach((c) => out.push({ key: "cx-" + c.id, label: c.label || "Custom card" }));
+  return out;
+}
+
+// Import: match an incoming Excel header to a column by its CURRENT name, its ORIGINAL name, or a name it used to have.
+function importTargets(sheetId, fallbackHeaders) {
+  const base = (RAW_SHEETS[sheetId] && RAW_SHEETS[sheetId].headers) || fallbackHeaders || [];
+  const keys = base.slice();
+  const info = clWith(sheetId, () => ({ custom: clCustomColumns().map((c) => c.name), hidden: new Set(clHiddenCols()) }));
+  info.custom.forEach((k) => { if (!keys.includes(k)) keys.push(k); });
+  const cc = acColCfg(sheetId);
+  return keys.map((k) => {
+    const label = colLabelFor(sheetId, k);
+    return { key: k, label, aliases: (cc.aliases || {})[k] || [], custom: info.custom.includes(k), hidden: info.hidden.has(k), renamed: label !== k };
+  });
+}
+function importTargetText(t) {
+  return t.label + (t.renamed ? ` (originally "${t.key}")` : "") + (t.custom ? " (added column)" : "") + (t.hidden ? " (hidden column, data kept)" : "");
+}
+const impLoose = (x) => String(x == null ? "" : x).toLowerCase().replace(/[^a-z0-9]+/g, "");
+function importAutoMap(sheetId, incomingHeaders, fallbackHeaders) {
+  const targets = importTargets(sheetId, fallbackHeaders);
+  const cfg = SHEET_BY_ID[sheetId];
+  const mapping = {}, used = new Set();
+  const norm = (x) => String(x == null ? "" : x).toLowerCase().trim();
+  const claim = (h, t) => { mapping[h] = t.key; used.add(t.key); };
+  const names = (t) => [t.label, t.key, ...t.aliases];
+  // exact (current name, original name or an earlier name)
+  for (const h of incomingHeaders) {
+    const t = targets.find((x) => !used.has(x.key) && names(x).some((n) => norm(n) === norm(h)));
+    if (t) claim(h, t);
+  }
+  // ignoring case, spaces and punctuation ("Acc#" = "Acc #")
+  for (const h of incomingHeaders) {
+    if (mapping[h] || !impLoose(h)) continue;
+    const c = targets.filter((x) => !used.has(x.key) && names(x).some((n) => impLoose(n) === impLoose(h)));
+    if (c.length === 1) claim(h, c[0]);
+  }
+  // headers of the old DG Infusion PAs layout
+  if (sheetId === "dg_infusion_pas") {
+    const lc = Object.fromEntries(Object.entries(INF_OLD_TO_NEW).map(([o, n]) => [o.toLowerCase().trim(), n]));
+    for (const h of incomingHeaders) {
+      if (mapping[h]) continue;
+      const t = targets.find((x) => !used.has(x.key) && x.key === lc[norm(h)]);
+      if (t) claim(h, t);
+    }
+  }
+  // 0908-0911: the first column is headed with the day ("DG Tuesday patients 9/8") and holds the patient names
+  if (cfg && cfg.dayGroups && cfg.nameField && !used.has(cfg.nameField)) {
+    const h = incomingHeaders.find((x) => !mapping[x] && /^\s*(?:dg\s+)?(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?\s*(?:patients?)?\b/i.test(x));
+    if (h) { mapping[h] = cfg.nameField; used.add(cfg.nameField); }
+  }
+  incomingHeaders.forEach((h) => { if (!mapping[h]) mapping[h] = ""; });
+  return mapping;
+}
+
+// ============================================================================
+// ADMIN CONTROL CENTER — the page
+// ============================================================================
+const acUI = { section: "tabs", sheet: "", err: "" };
+
+function acGroupBase(id) { const g = GROUPS.find((x) => x.id === id); return g ? (g.__base !== undefined ? g.__base : g.label) : id; }
+function acSlug(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30) || "tab"; }
+function acToneSel(attrs, cur) { return `<select class="ac-in ac-sm" ${attrs}>${AC_TONES.map(([v, l]) => `<option value="${v}" ${cur === v ? "selected" : ""}>${l}</option>`).join("")}</select>`; }
+function acTabList() {
+  // every tab (built-in and new) in display order, with its base name/group
+  return SHEET_CONFIG.filter((c) => !c.isReference).map((c) => ({ id: c.id, cfg: c, base: c.__base || { label: c.label, shortLabel: c.shortLabel, group: c.group } }));
+}
+function acSheetOptions(cur) { return acTabList().map((t) => `<option value="${esc(t.id)}" ${cur === t.id ? "selected" : ""}>${esc(t.cfg.label)}</option>`).join(""); }
+function acEnsureSheet() {
+  const list = acTabList();
+  if (!list.some((t) => t.id === acUI.sheet)) acUI.sheet = list.length ? list[0].id : "";
+  return acUI.sheet;
+}
+// The kind of tab decides which status rules apply
+function acKind(id) {
+  if (id === "dg_osteoporosis_pas") return "osteo";
+  if (id === "dg_infusion_pas") return "infusion";
+  if (id === "call_list_upcoming") return "callup";
+  if (id === "call_list_no_upcoming") return "transition";
+  if (ASSIGN_TABS[id]) return "assign";
+  return "generic";
+}
+function acDataCols(id) {
+  // real data columns of a tab (no virtual ones), including added columns
+  return clWith(id, () => clColumns(SHEET_BY_ID[id], true)).filter((k) => !String(k).startsWith("__"));
+}
+
+// ---------- gate ----------
+function acGateHtml() {
+  const has = !!acRec().pinHash;
+  return `<div class="page-header"><div><div class="page-title">Admin</div><div class="page-subtitle">${has ? "Enter the admin PIN to open the control center." : "Set an admin PIN. Only people who know it can change how the app works."}</div></div></div>
+    <div class="card ac-gate">
+      ${has
+        ? `<div class="form-group"><label for="ac-pin">Admin PIN</label><input type="password" id="ac-pin" class="ac-in" autocomplete="off" /></div>`
+        : `<div class="form-group"><label for="ac-pin">Choose a PIN (at least 4 characters)</label><input type="password" id="ac-pin" class="ac-in" autocomplete="off" /></div>
+           <div class="form-group"><label for="ac-pin2">Repeat the PIN</label><input type="password" id="ac-pin2" class="ac-in" autocomplete="off" /></div>`}
+      <p class="form-hint" id="ac-gate-err" role="alert" style="min-height:16px">${esc(acUI.err)}</p>
+      <button class="btn primary" id="ac-unlock">${has ? "Unlock" : "Set PIN and open"}</button>
+      ${has ? "" : `<p class="form-hint" style="margin-top:14px">The PIN keeps other users out of this page. It is not bank-level security, because the app runs in each visitor's browser.</p>`}
+    </div>`;
+}
+function acWireGate() {
+  const pin = document.getElementById("ac-pin"), pin2 = document.getElementById("ac-pin2"), err = document.getElementById("ac-gate-err");
+  const go = async () => {
+    const has = !!acRec().pinHash;
+    const v = pin.value;
+    if (!has) {
+      if (v.length < 4) { err.textContent = "Use at least 4 characters."; return; }
+      if (v !== (pin2 && pin2.value)) { err.textContent = "The two PINs don't match."; return; }
+      const salt = Math.random().toString(36).slice(2, 12);
+      const hash = await acHash(v, salt);
+      acSaveRec({ pinSalt: salt, pinHash: hash });
+      acSetUnlocked(hash);
+      logChange({ action: "admin", summary: "Admin PIN created" });
+      acUI.err = ""; render();
+    } else {
+      const hash = await acHash(v, String(acRec().pinSalt || ""));
+      if (hash === acRec().pinHash) { acSetUnlocked(hash); acUI.err = ""; render(); }
+      else { err.textContent = "That PIN is not right."; pin.select(); }
+    }
+  };
+  document.getElementById("ac-unlock").addEventListener("click", go);
+  [pin, pin2].forEach((el) => el && el.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); }));
+  pin.focus();
+}
+
+// ---------- page ----------
+function renderAdmin() {
+  if (!acUnlocked()) return acGateHtml();
+  const dirty = acHasDraft();
+  const secs = [["tabs", "Tabs & groups"], ["cols", "Columns"], ["rules", "Status rules"], ["kpi", "KPI cards"], ["opts", "Options"], ["sec", "Security & versions"]];
+  const body = { tabs: acTabsHtml, cols: acColsHtml, rules: acRulesHtml, kpi: acKpiHtml, opts: acOptsHtml, sec: acSecHtml }[acUI.section]();
+  const pub = acRec().publishedAt ? new Date(acRec().publishedAt).toLocaleString() : "never";
+  return `<div class="page-header"><div><div class="page-title">Admin Control Center</div>
+      <div class="page-subtitle">Change how tabs, columns, status rules and KPI cards work. Your edits are saved as a <b>draft</b>. Nobody else sees them until you click <b>Publish for everyone</b>.</div></div>
+      <div class="page-header-actions"><button class="btn" data-ac="lock">Lock</button></div></div>
+    <div class="card ac-bar ${dirty ? "ac-dirty" : ""}">
+      <div class="ac-bar-text"><b>${dirty ? "Draft with unpublished changes" : "No unpublished changes"}</b><span>Last published: ${esc(pub)}${dirty ? " · Changed: " + esc(acDiffSections(acPublished(), acDraft()).join(", ")) : ""}</span></div>
+      <div class="ac-bar-btns">
+        <button class="btn" data-ac="preview" ${dirty ? "" : "disabled"}>Preview draft in the app</button>
+        <button class="btn" data-ac="discard" ${dirty ? "" : "disabled"}>Discard draft</button>
+        <button class="btn primary" data-ac="publish" ${dirty ? "" : "disabled"}>Publish for everyone</button>
+      </div>
+    </div>
+    <div class="ac-nav" role="tablist">${secs.map(([k, l]) => `<button class="ac-navbtn ${acUI.section === k ? "on" : ""}" data-ac="section" data-a="${k}" role="tab" aria-selected="${acUI.section === k}">${l}</button>`).join("")}</div>
+    <div id="ac-body">${body}</div>`;
+}
+function acRefresh() {
+  ensureDefaultSheets();
+  const y = $root.scrollTop;
+  $root.innerHTML = renderAdmin();
+  wireAdmin();
+  $root.scrollTop = y;
+  renderSidebar();
+}
+
+// ---------- section: tabs ----------
+function acTabsHtml() {
+  const d = acDraft();
+  const list = acTabList();
+  const groupBlocks = AC_GROUP_IDS.map((gid) => {
+    const rows = list.filter((t) => t.cfg.group === gid);
+    if (!rows.length) return "";
+    return `<div class="ac-group"><div class="ac-group-h">${esc(GROUPS.find((g) => g.id === gid).label)}</div>
+      <table class="ac-table"><thead><tr><th style="width:64px">Order</th><th>Tab name</th><th>Short name</th><th>Sidebar group</th><th style="width:70px">Show</th><th style="width:80px"></th></tr></thead><tbody>
+      ${rows.map((t, i) => {
+        const o = (d.tabs || {})[t.id] || {};
+        return `<tr>
+          <td><button class="btn sm ghost" data-ac="tabup" data-id="${esc(t.id)}" ${i === 0 ? "disabled" : ""} aria-label="Move up">▲</button><button class="btn sm ghost" data-ac="tabdown" data-id="${esc(t.id)}" ${i === rows.length - 1 ? "disabled" : ""} aria-label="Move down">▼</button></td>
+          <td><input class="ac-in" data-ac="tabname" data-id="${esc(t.id)}" value="${esc(o.label || "")}" placeholder="${esc(t.base.label)}" /></td>
+          <td><input class="ac-in" data-ac="tabshort" data-id="${esc(t.id)}" value="${esc(o.shortLabel || "")}" placeholder="${esc(t.base.shortLabel || t.base.label)}" /></td>
+          <td><select class="ac-in" data-ac="tabgroup" data-id="${esc(t.id)}">${AC_GROUP_IDS.map((g) => `<option value="${g}" ${t.cfg.group === g ? "selected" : ""}>${esc(GROUPS.find((x) => x.id === g).label)}</option>`).join("")}</select></td>
+          <td><input type="checkbox" data-ac="tabshow" data-id="${esc(t.id)}" ${o.hidden ? "" : "checked"} aria-label="Show ${esc(t.cfg.label)} in the sidebar and dashboard" /></td>
+          <td>${t.cfg.custom ? `<button class="btn sm danger" data-ac="tabdel" data-id="${esc(t.id)}">Delete</button>` : ""}</td>
+        </tr>`;
+      }).join("")}
+      </tbody></table></div>`;
+  }).join("");
+  return `<div class="card ac-card"><h3>Sidebar group names</h3>
+      <p class="form-hint">Rename the headings in the left menu.</p>
+      <div class="ac-row">${AC_GROUP_IDS.map((g) => `<div class="form-group"><label>${esc(acGroupBase(g))}</label><input class="ac-in" data-ac="groupname" data-id="${g}" value="${esc((d.groups || {})[g] || "")}" placeholder="${esc(acGroupBase(g))}" /></div>`).join("")}</div></div>
+    <div class="card ac-card"><h3>Tabs</h3>
+      <p class="form-hint">Rename tabs, move them up or down, move them to another group, or hide them. Hidden tabs disappear from the sidebar and dashboard; their data is kept. Leave a name box empty to use the original name.</p>
+      ${groupBlocks}</div>
+    <div class="card ac-card"><h3>Add a new tab</h3>
+      <p class="form-hint">Creates a tab that works like the diagnosis tabs: a patient name column, an "assigned" column, and Assigned / Unassigned status with cards.</p>
+      <button class="btn primary" data-ac="newtab">+ New tab</button></div>`;
+}
+function acOrderedIds() { return acTabList().map((t) => t.id); }
+function acMoveTab(id, dir) {
+  const list = acTabList();
+  const me = list.find((t) => t.id === id);
+  if (!me) return;
+  const same = list.filter((t) => t.cfg.group === me.cfg.group).map((t) => t.id);
+  const i = same.indexOf(id), j = i + dir;
+  if (j < 0 || j >= same.length) return;
+  const ids = list.map((t) => t.id);
+  const a = ids.indexOf(same[i]), b = ids.indexOf(same[j]);
+  [ids[a], ids[b]] = [ids[b], ids[a]];
+  acEdit((d) => { d.tabOrder = ids; });
+}
+function acOpenNewTab() {
+  const modal = openModal(`
+    <div class="modal-header"><div><h3>New tab</h3><p>Give it a name and list its columns, one per line.</p></div></div>
+    <div class="modal-body">
+      <div class="form-group"><label for="nt-name">Tab name</label><input class="ac-in" id="nt-name" maxlength="40" autocomplete="off" /></div>
+      <div class="form-group"><label for="nt-group">Sidebar group</label><select class="ac-in" id="nt-group">${AC_GROUP_IDS.map((g) => `<option value="${g}" ${g === "diagnosis" ? "selected" : ""}>${esc(GROUPS.find((x) => x.id === g).label)}</option>`).join("")}</select></div>
+      <div class="form-group"><label for="nt-cols">Columns (one per line)</label><textarea class="ac-in" id="nt-cols" rows="6" placeholder="Patient Name&#10;DOB&#10;Account #&#10;Assigned To"></textarea></div>
+      <div class="ac-row"><div class="form-group"><label for="nt-name-col">Patient name column</label><select class="ac-in" id="nt-name-col"></select></div>
+      <div class="form-group"><label for="nt-assign-col">"Assigned" column</label><select class="ac-in" id="nt-assign-col"></select></div></div>
+      <p class="form-hint" id="nt-err" role="alert" style="min-height:16px"></p>
+    </div>
+    <div class="modal-footer"><button class="btn" id="nt-cancel">Cancel</button><button class="btn primary" id="nt-save">Add tab to draft</button></div>`, { wide: true });
+  const cols = () => [...new Set(modal.querySelector("#nt-cols").value.split(/\n/).map((s) => s.trim().replace(/\s+/g, " ")).filter(Boolean))];
+  const fill = () => {
+    const c = cols();
+    const nm = modal.querySelector("#nt-name-col"), as = modal.querySelector("#nt-assign-col");
+    const pn = nm.value, pa = as.value;
+    const opts = (sel) => c.map((x) => `<option value="${esc(x)}" ${x === sel ? "selected" : ""}>${esc(x)}</option>`).join("");
+    nm.innerHTML = opts(pn || c.find((x) => /name|patient/i.test(x)) || c[0]);
+    as.innerHTML = opts(pa || c.find((x) => /assign|refer|team/i.test(x)) || c[c.length - 1]);
+  };
+  modal.querySelector("#nt-cols").addEventListener("input", fill);
+  modal.querySelector("#nt-cancel").addEventListener("click", closeModal);
+  modal.querySelector("#nt-save").addEventListener("click", () => {
+    const err = modal.querySelector("#nt-err");
+    const name = modal.querySelector("#nt-name").value.trim().replace(/\s+/g, " ");
+    const c = cols();
+    if (!name) { err.textContent = "Give the tab a name."; return; }
+    if (c.length < 2) { err.textContent = "List at least two columns."; return; }
+    if (SHEET_CONFIG.some((s) => s.label.toLowerCase() === name.toLowerCase())) { err.textContent = `A tab named "${name}" already exists.`; return; }
+    let id = "custom_" + acSlug(name), n = 2;
+    while (SHEET_BY_ID[id]) id = "custom_" + acSlug(name) + "_" + n++;
+    const nameCol = modal.querySelector("#nt-name-col").value, assignCol = modal.querySelector("#nt-assign-col").value;
+    if (nameCol === assignCol) { err.textContent = "The patient name column and the assigned column must be different."; return; }
+    acEdit((d) => { d.customTabs.push({ id, label: name, group: modal.querySelector("#nt-group").value, cols: c, nameCol, assignCol }); });
+    closeModal(); toast(`Added "${name}" to the draft`); acRefresh();
+  });
+  fill();
+  modal.querySelector("#nt-name").focus();
+}
+
+// ---------- section: columns ----------
+function acColKeys(id) { return clWith(id, () => clColumns(SHEET_BY_ID[id], true)); }
+function acColsHtml() {
+  const id = acEnsureSheet();
+  if (!id) return `<div class="card ac-card"><p>No tabs yet.</p></div>`;
+  const d = acDraft();
+  const cc = (d.cols || {})[id] || {};
+  const keys = acColKeys(id);
+  const added = new Set((cc.added || []).map((c) => c.name));
+  const hid = new Set(cc.hidden || []);
+  const rows = keys.map((k, i) => {
+    const virtual = String(k).startsWith("__");
+    const label = (cc.labels || {})[k] || "";
+    const base = clBaseLabel(k);
+    return `<tr class="${hid.has(k) ? "ac-off" : ""}">
+      <td><button class="btn sm ghost" data-ac="colup" data-k="${esc(k)}" ${i === 0 ? "disabled" : ""} aria-label="Move up">▲</button><button class="btn sm ghost" data-ac="coldown" data-k="${esc(k)}" ${i === keys.length - 1 ? "disabled" : ""} aria-label="Move down">▼</button></td>
+      <td><div class="ac-key">${esc(base)}${virtual ? ' <span class="badge neutral">calculated</span>' : ""}${added.has(k) ? ' <span class="badge neutral">added</span>' : ""}</div>${(cc.aliases || {})[k] && (cc.aliases[k] || []).length ? `<div class="form-hint">Also matches on import: ${esc(cc.aliases[k].join(", "))}</div>` : ""}</td>
+      <td><input class="ac-in" data-ac="collabel" data-k="${esc(k)}" value="${esc(label)}" placeholder="${esc(base)}" /></td>
+      <td><input type="checkbox" data-ac="colshow" data-k="${esc(k)}" ${hid.has(k) ? "" : "checked"} aria-label="Show ${esc(base)}" /></td>
+      <td>${added.has(k) ? `<button class="btn sm danger" data-ac="coldel" data-k="${esc(k)}">Delete</button>` : ""}</td>
+    </tr>`;
+  }).join("");
+  return `<div class="card ac-card"><div class="ac-pick"><label for="ac-sheet">Tab</label><select class="ac-in" id="ac-sheet" data-ac="sheet">${acSheetOptions(id)}</select></div>
+      <p class="form-hint">Rename a column, hide it, or change the order. The data is never deleted: hide a column and bring it back later with its data. Importing an Excel file recognises a renamed column by its new name, its original name, and any earlier names.</p>
+      <table class="ac-table"><thead><tr><th style="width:64px">Order</th><th>Original name</th><th>Name shown</th><th style="width:70px">Show</th><th style="width:80px"></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="card ac-card"><h3>Add a column to this tab</h3>
+      <div class="ac-row"><div class="form-group"><label for="ac-newcol">Column name</label><input class="ac-in" id="ac-newcol" maxlength="40" autocomplete="off" /></div>
+      <div class="form-group"><label for="ac-newcol-type">Type</label><select class="ac-in" id="ac-newcol-type"><option value="text">Text</option><option value="date">Date (with calendar picker)</option></select></div>
+      <div class="form-group"><label>&nbsp;</label><button class="btn primary" data-ac="coladd">Add column</button></div></div>
+      <p class="form-hint" id="ac-col-err" role="alert" style="min-height:16px">${esc(acUI.err)}</p></div>`;
+}
+function acColMove(k, dir) {
+  const id = acUI.sheet;
+  const keys = acColKeys(id);
+  const i = keys.indexOf(k), j = i + dir;
+  if (i < 0 || j < 0 || j >= keys.length) return;
+  [keys[i], keys[j]] = [keys[j], keys[i]];
+  acEdit((d) => { const c = (d.cols[id] = d.cols[id] || {}); c.order = keys; c.rev = (c.rev || 0) + 1; });
+}
+
+// ---------- section: status rules ----------
+function acRulesHtml() {
+  const id = acEnsureSheet();
+  if (!id) return `<div class="card ac-card"><p>No tabs yet.</p></div>`;
+  const d = acDraft();
+  const r = (d.rules || {})[id] || {};
+  const kind = acKind(id);
+  const cols = acDataCols(id);
+  const colOpts = (cur, allowBlank, blankLabel) => (allowBlank ? `<option value="">${esc(blankLabel)}</option>` : "") + cols.map((c) => `<option value="${esc(c)}" ${cur === c ? "selected" : ""}>${esc(colLabelFor(id, c))}</option>`).join("");
+  const builtinCol = clTeamFieldBase(id);
+  let assignCard = "";
+  if (kind !== "generic") {
+    assignCard = `<div class="card ac-card"><h3>Who counts as "assigned"</h3>
+      <p class="form-hint">Controls the Assigned / Unassigned status, the Assigned and Unassigned cards, and the tab's completion % in the sidebar${kind === "infusion" ? " (the sidebar % follows the completion rule below)" : ""}.</p>
+      <div class="ac-row">
+        <div class="form-group"><label>Column that holds the assignment</label><select class="ac-in" data-ac="rule-col">${colOpts(r.assignCol || "", true, "Built-in (" + colLabelFor(id, builtinCol) + ")")}</select></div>
+        <div class="form-group"><label>A row is assigned when this column…</label><select class="ac-in" data-ac="rule-mode" ${kind === "osteo" ? "disabled" : ""}>
+          <option value="" ${!r.mode ? "selected" : ""}>Built-in rule for this tab</option>
+          <option value="filled" ${r.mode === "filled" ? "selected" : ""}>is filled in</option>
+          <option value="in" ${r.mode === "in" ? "selected" : ""}>is one of these values</option>
+          <option value="nin" ${r.mode === "nin" ? "selected" : ""}>is filled in, but is not one of these values</option></select></div>
+        <div class="form-group"><label>Values (comma separated)</label><input class="ac-in" data-ac="rule-list" value="${esc(r.list || "")}" placeholder="e.g. JP, SU" ${r.mode === "in" || r.mode === "nin" ? "" : "disabled"} /></div>
+      </div>
+      ${kind === "osteo" ? `<p class="form-hint">This tab reads JP / SU (and Cancelled) from its assignment column with special rules. You can change which column it reads.</p>` : ""}
+      ${kind === "assign" && ASSIGN_META[id] && ASSIGN_META[id].yes ? `<p class="form-hint">Built-in rule: only a Yes counts as assigned.</p>` : ""}
+    </div>`;
+  }
+  let compCard = "";
+  if (kind === "infusion" || kind === "generic") {
+    const base = SHEET_BY_ID[id].completion || {};
+    const cp = r.completion || {};
+    const mode = cp.mode || base.mode || "manual";
+    compCard = `<div class="card ac-card"><h3>Completion (drives the % in the sidebar and dashboard)</h3>
+      <div class="ac-row">
+        <div class="form-group"><label>Column</label><select class="ac-in" data-ac="comp-field">${colOpts(cp.field || "", true, "Built-in (" + (base.field ? colLabelFor(id, base.field) : "none") + ")")}</select></div>
+        <div class="form-group"><label>A row is complete when…</label><select class="ac-in" data-ac="comp-mode">
+          <option value="" ${!cp.mode ? "selected" : ""}>Built-in rule</option>
+          <option value="nonblank" ${cp.mode === "nonblank" ? "selected" : ""}>the column is filled in</option>
+          <option value="value-not-equal" ${cp.mode === "value-not-equal" ? "selected" : ""}>the column is filled in and is not…</option>
+          <option value="flag-blank-is-complete" ${cp.mode === "flag-blank-is-complete" ? "selected" : ""}>the column is blank (filled = needs attention)</option>
+          <option value="manual" ${cp.mode === "manual" ? "selected" : ""}>tracked by hand (no rule)</option></select></div>
+        <div class="form-group"><label>…this value</label><input class="ac-in" data-ac="comp-value" value="${esc(cp.value || "")}" ${cp.mode === "value-not-equal" ? "" : "disabled"} /></div>
+      </div>
+      <p class="form-hint">The "Completion Criteria" button on a tab still works for quick one-off changes and overrides this setting on that tab.</p></div>`;
+  }
+  if (kind === "callup") assignCard += `<div class="card ac-card"><h3>Call outcome</h3><p class="form-hint">On this call list a row is complete once its Action is Called &amp; Confirmed, Called &amp; Refused or Resched. You can rename the Action buttons under Options.</p></div>`;
+  const nd = (d.attnDays === null || d.attnDays === undefined) ? "" : d.attnDays;
+  return `<div class="card ac-card"><div class="ac-pick"><label for="ac-sheet">Tab</label><select class="ac-in" id="ac-sheet" data-ac="sheet">${acSheetOptions(id)}</select></div></div>
+    ${assignCard}${compCard}
+    <div class="card ac-card"><h3>Needs Attention window (all tabs that use it)</h3>
+      <div class="ac-row"><div class="form-group"><label>Flag a row when its next appointment is within this many days</label><input type="number" min="0" max="365" class="ac-in ac-sm" data-ac="attn" value="${esc(nd)}" placeholder="7" /></div></div>
+      <p class="form-hint">Applies to the two call lists and DG Osteoporosis PAs. Empty = 7 days.</p></div>`;
+}
+
+// ---------- section: KPI cards ----------
+function acKpiHtml() {
+  const id = acEnsureSheet();
+  if (!id) return `<div class="card ac-card"><p>No tabs yet.</p></div>`;
+  const d = acDraft();
+  const k = ((d.kpi || {})[id]) || {};
+  const b = k.builtin || {};
+  const tiles = acKpiTiles(id);
+  const cols = acDataCols(id);
+  const tileRows = tiles.length ? tiles.map((t) => {
+    const o = b[t.key] || {};
+    return `<tr class="${o.hidden ? "ac-off" : ""}">
+      <td><input class="ac-in" data-ac="tile-label" data-k="${esc(t.key)}" value="${esc(o.label || "")}" placeholder="${esc(t.label)}" /></td>
+      <td><input class="ac-in" data-ac="tile-sub" data-k="${esc(t.key)}" value="${esc(o.sub || "")}" placeholder="${esc(t.sub)}" /></td>
+      <td>${acToneSel(`data-ac="tile-tone" data-k="${esc(t.key)}"`, o.tone || t.tone)}</td>
+      <td><input type="checkbox" data-ac="tile-show" data-k="${esc(t.key)}" ${o.hidden ? "" : "checked"} aria-label="Show ${esc(t.label)}" /></td></tr>`;
+  }).join("") : `<tr><td colspan="4" class="form-hint">This tab has no built-in cards to edit.</td></tr>`;
+  const METRICS = [["count", "Count rows"], ["percent", "Percentage of rows"], ["sum", "Sum of a column"], ["avg", "Average of a column"], ["unique", "Number of different values in a column"], ["avgdays", "Average days from today (date column)"]];
+  const colSel = (attrs, cur, extra) => `<select class="ac-in" ${attrs}>${extra || ""}${cols.map((x) => `<option value="${esc(x)}" ${cur === x ? "selected" : ""}>${esc(colLabelFor(id, x))}</option>`).join("")}</select>`;
+  const condRows = (c, ci, ck) => (c[ck] || []).map((cd, di) => {
+    const at = `data-ci="${ci}" data-di="${di}" data-ck="${ck}"`;
+    const assignedCond = cd.col === "__assigned";
+    return `<div class="ac-cond">
+      ${colSel(`data-ac="cd-col" ${at}`, cd.col, `<option value="__assigned" ${assignedCond ? "selected" : ""}>Assignment status (per the Status rules)</option>`)}
+      ${assignedCond
+        ? `<select class="ac-in" data-ac="cd-op" ${at}><option value="yes" ${cd.op !== "no" ? "selected" : ""}>is assigned</option><option value="no" ${cd.op === "no" ? "selected" : ""}>is not assigned</option></select><span></span>`
+        : `<select class="ac-in" data-ac="cd-op" ${at}>${AC_OPS.map(([v, l]) => `<option value="${v}" ${cd.op === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+           <input class="ac-in" data-ac="cd-val" ${at} value="${esc(cd.val || "")}" placeholder="value" ${["filled", "blank", "dpast"].includes(cd.op) ? "disabled" : ""} />`}
+      <button class="btn sm ghost" data-ac="cd-del" ${at} aria-label="Remove condition">✕</button></div>`;
+  }).join("");
+  const logicSel = (c, ci, key) => `<select class="ac-in ac-sm" data-ac="cx-logic" data-ci="${ci}" data-ck="${key}"><option value="all" ${c[key] !== "any" ? "selected" : ""}>ALL</option><option value="any" ${c[key] === "any" ? "selected" : ""}>ANY</option></select>`;
+  const cardHtml = (c, ci) => {
+    const m = c.metric || "count";
+    const needsCol = ["sum", "avg", "unique", "avgdays"].includes(m);
+    const cnt = (c.conds || []).length, dn = (c.dconds || []).length;
+    let live = "";
+    try { const v = clWith(id, () => acCardCompute(c, clRecords().filter(() => true))); live = `<span class="badge neutral">Right now: ${esc(v.text)}${v.sub ? " · " + esc(v.sub) : ""}</span>`; } catch (e) { live = ""; }
+    return `<div class="ac-cardbox" data-ci="${ci}">
+      <div class="ac-row">
+        <div class="form-group"><label>Card title</label><input class="ac-in" data-ac="cx-label" data-ci="${ci}" value="${esc(c.label || "")}" /></div>
+        <div class="form-group"><label>Small text (optional)</label><input class="ac-in" data-ac="cx-sub" data-ci="${ci}" value="${esc(c.sub || "")}" placeholder="automatic" /></div>
+        <div class="form-group"><label>Color</label>${acToneSel(`data-ac="cx-tone" data-ci="${ci}"`, c.tone || "gray")}</div>
+        <div class="form-group"><label>&nbsp;</label><button class="btn sm danger" data-ac="cx-del" data-ci="${ci}">Delete card</button></div>
+      </div>
+      <div class="ac-row">
+        <div class="form-group"><label>What to calculate</label><select class="ac-in" data-ac="cx-metric" data-ci="${ci}">${METRICS.map(([v, l]) => `<option value="${v}" ${m === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+        ${needsCol ? `<div class="form-group"><label>Column</label>${colSel(`data-ac="cx-mcol" data-ci="${ci}"`, c.col || cols[0] || "")}</div>` : ""}
+        ${m === "count" ? `<div class="form-group"><label>Show % of all rows</label><input type="checkbox" data-ac="cx-pct" data-ci="${ci}" ${c.nopct ? "" : "checked"} /></div>` : ""}
+        ${["sum", "avg", "avgdays"].includes(m) ? `<div class="form-group"><label>Before / after the number</label><div style="display:flex;gap:6px"><input class="ac-in" data-ac="cx-prefix" data-ci="${ci}" value="${esc(c.prefix || "")}" placeholder="$" /><input class="ac-in" data-ac="cx-suffix" data-ci="${ci}" value="${esc(c.suffix || "")}" placeholder="units" /></div></div>
+        <div class="form-group"><label>Decimals</label><select class="ac-in ac-sm" data-ac="cx-dec" data-ci="${ci}">${[0, 1, 2, 3].map((n) => `<option value="${n}" ${(c.decimals === undefined || c.decimals === null || c.decimals === "" ? 1 : +c.decimals) === n ? "selected" : ""}>${n}</option>`).join("")}</select></div>` : ""}
+        ${m === "percent" ? `<div class="form-group"><label>Decimals</label><select class="ac-in ac-sm" data-ac="cx-dec" data-ci="${ci}">${[0, 1, 2].map((n) => `<option value="${n}" ${(c.decimals === undefined || c.decimals === null || c.decimals === "" ? 1 : +c.decimals) === n ? "selected" : ""}>${n}</option>`).join("")}</select></div>` : ""}
+      </div>
+      <div class="ac-cond-h">${m === "percent" ? "Rows that count (the top of the fraction) when" : m === "count" ? "Count a row when" : "Only use rows where"} ${logicSel(c, ci, "logic")} of these are true${cnt ? ":" : " (no conditions = every row):"}</div>
+      ${condRows(c, ci, "conds")}
+      <button class="btn sm" data-ac="cd-add" data-ci="${ci}" data-ck="conds">+ Add condition</button>
+      ${m === "percent" ? `<div class="ac-cond-h" style="margin-top:14px">Out of the rows where ${logicSel(c, ci, "dlogic")} of these are true${dn ? ":" : " (no conditions = every row):"}</div>
+        ${condRows(c, ci, "dconds")}
+        <button class="btn sm" data-ac="cd-add" data-ci="${ci}" data-ck="dconds">+ Add condition</button>` : ""}
+      <div style="margin-top:12px">${live}</div>
+    </div>`;
+  };
+  const cards = (k.custom || []).map(cardHtml).join("");
+  return `<div class="card ac-card"><div class="ac-pick"><label for="ac-sheet">Tab</label><select class="ac-in" id="ac-sheet" data-ac="sheet">${acSheetOptions(id)}</select></div></div>
+    <div class="card ac-card"><h3>Built-in cards</h3>
+      <p class="form-hint">Rename a card, change its small text or color, or hide it. Leave a box empty to keep the original.</p>
+      <table class="ac-table"><thead><tr><th>Title</th><th>Small text</th><th style="width:110px">Color</th><th style="width:70px">Show</th></tr></thead><tbody>${tileRows}</tbody></table></div>
+    <div class="card ac-card"><h3>Your own cards</h3>
+      <p class="form-hint">Build a card that counts rows, works out a percentage (any "X out of Y"), adds up or averages a column, or counts different values. Clicking a card filters the table to the rows it uses.</p>
+      <div class="form-group" style="max-width:360px"><label>Heading above your cards (optional)</label><input class="ac-in" data-ac="kpi-heading" value="${esc(k.heading || "")}" /></div>
+      ${cards || `<p class="form-hint">No custom cards yet.</p>`}
+      <button class="btn primary" data-ac="cx-add" style="margin-top:10px">+ New card</button></div>`;
+}
+
+// ---------- section: options ----------
+function acOptsHtml() {
+  const d = acDraft();
+  const opt = d.options || {};
+  const notes = (Array.isArray(opt.notes) && opt.notes.length ? opt.notes : (CALL_NOTES.__base || CALL_NOTES));
+  return `<div class="card ac-card"><h3>Call list Action buttons</h3>
+      <p class="form-hint">The choices on the two call lists. Rename them or change their color; what each one means (Confirmed, Refused, Resched, In Progress) stays the same.</p>
+      <table class="ac-table"><thead><tr><th>Original</th><th>Name shown</th><th style="width:110px">Color</th></tr></thead><tbody>
+      ${CALL_ACTIONS.map((x) => { const o = (opt.actions || {})[x.key] || {}; const bs = x.__base || x; return `<tr><td>${esc(bs.label)}</td><td><input class="ac-in" data-ac="act-label" data-k="${x.key}" value="${esc(o.label || "")}" placeholder="${esc(bs.label)}" /></td><td>${acToneSel(`data-ac="act-tone" data-k="${x.key}"`, o.tone || bs.tone)}</td></tr>`; }).join("")}
+      </tbody></table></div>
+    <div class="card ac-card"><h3>Call note choices</h3>
+      <p class="form-hint">The notes offered when an Action is In Progress. "For Callback" is needed for reminders and can't be renamed or removed.</p>
+      ${notes.map((n, i) => `<div class="ac-cond" style="grid-template-columns:1fr auto"><input class="ac-in" data-ac="note-edit" data-i="${i}" value="${esc(n)}" ${n === "For Callback" ? "disabled" : ""} />${n === "For Callback" ? "<span></span>" : `<button class="btn sm ghost" data-ac="note-del" data-i="${i}" aria-label="Remove note">✕</button>`}</div>`).join("")}
+      <button class="btn sm" data-ac="note-add">+ Add a note choice</button></div>
+    <div class="card ac-card"><h3>Prior Auth labels (DG Infusion PAs)</h3>
+      <p class="form-hint">Names shown for the four Prior Auth groups. What lands in each group is still decided by the words typed in PA Initiated / Done (sent, resubmit, approved, anything else).</p>
+      <div class="ac-row">${Object.keys(CL_PA_LABELS).map((k) => `<div class="form-group"><label>${esc(CL_PA_LABELS.__base[k])}</label><input class="ac-in" data-ac="pa-label" data-k="${k}" value="${esc(((opt.pa || {})[k]) || "")}" placeholder="${esc(CL_PA_LABELS.__base[k])}" /></div>`).join("")}</div></div>`;
+}
+
+// ---------- section: security ----------
+function acSecHtml() {
+  const has = !!acRec().prev;
+  return `<div class="card ac-card"><h3>Admin PIN</h3>
+      <div class="ac-row"><div class="form-group"><label for="ac-newpin">New PIN (at least 4 characters)</label><input type="password" class="ac-in" id="ac-newpin" autocomplete="off" /></div>
+      <div class="form-group"><label>&nbsp;</label><button class="btn" data-ac="changepin">Change PIN</button></div></div>
+      <p class="form-hint" id="ac-pin-msg" role="status" style="min-height:16px"></p></div>
+    <div class="card ac-card"><h3>Versions</h3>
+      <p class="form-hint">Every publish keeps the version before it, so you can go back if a change causes trouble.</p>
+      <button class="btn" data-ac="restore" ${has ? "" : "disabled"}>Load the previous published version into the draft</button>
+      <button class="btn danger" data-ac="reset" style="margin-left:8px">Reset the draft to the original app settings</button></div>`;
+}
+
+// ---------- wiring ----------
+function wireAdmin() {
+  if (!acUnlocked()) { acWireGate(); return; }
+  const root = document.getElementById("main-content");
+  if (root.__acWired) return;
+  root.__acWired = true;
+  root.addEventListener("click", (e) => { if (parseHash().view === "admin") acOnEvent(e, "click"); });
+  root.addEventListener("change", (e) => { if (parseHash().view === "admin") acOnEvent(e, "change"); });
+}
+function acSetTab(d, id, k, v) { const o = (d.tabs[id] = d.tabs[id] || {}); if (v === "" || v === false || v === undefined) delete o[k]; else o[k] = v; if (!Object.keys(o).length) delete d.tabs[id]; }
+function acOnEvent(e, type) {
+  const el = e.target.closest("[data-ac]");
+  if (!el) return;
+  const act = el.dataset.ac;
+  const isBtn = el.tagName === "BUTTON";
+  if (type === "click" && !isBtn) return;
+  if (type === "change" && isBtn) return;
+  const id = acUI.sheet;
+  const v = el.type === "checkbox" ? el.checked : el.value;
+  const ci = el.dataset.ci !== undefined ? +el.dataset.ci : -1, di = el.dataset.di !== undefined ? +el.dataset.di : -1;
+  const k = el.dataset.k;
+  const cardOf = (d) => (((d.kpi[id] = d.kpi[id] || {}).custom = d.kpi[id].custom || [])[ci]);
+  let redo = true;
+  switch (act) {
+    case "lock": acLock(); render(); return;
+    case "section": acUI.section = el.dataset.a; acUI.err = ""; break;
+    case "sheet": acUI.sheet = v; acUI.err = ""; break;
+    case "preview":
+      AC_PREVIEW = true; acApply(true); invalidateCache(); location.hash = "#/dashboard"; return;
+    case "discard":
+      confirmDialog("Discard the draft?", "All unpublished changes will be thrown away. What everyone sees now does not change.", () => { acSaveRec({ draft: "" }); acApply(true); toast("Draft discarded"); acRefresh(); }, { okLabel: "Discard draft" });
+      return;
+    case "publish": {
+      const parts = acDiffSections(acPublished(), acDraft());
+      confirmDialog("Publish for everyone?", `Everyone using the app will see these changes: ${parts.join(", ")}.`, () => { acPublish(); toast("Published. Everyone now sees the new settings."); acRefresh(); }, { okClass: "primary", okLabel: "Publish for everyone" });
+      return;
+    }
+    // tabs
+    case "groupname": acEdit((d) => { const s = String(v).trim(); if (s) d.groups[el.dataset.id] = s; else delete d.groups[el.dataset.id]; }); break;
+    case "tabname": acEdit((d) => acSetTab(d, el.dataset.id, "label", String(v).trim())); break;
+    case "tabshort": acEdit((d) => acSetTab(d, el.dataset.id, "shortLabel", String(v).trim())); break;
+    case "tabgroup": acEdit((d) => { const c = SHEET_BY_ID[el.dataset.id]; acSetTab(d, el.dataset.id, "group", c && c.__base && c.__base.group === v ? "" : v); }); break;
+    case "tabshow": acEdit((d) => acSetTab(d, el.dataset.id, "hidden", !v)); break;
+    case "tabup": acMoveTab(el.dataset.id, -1); break;
+    case "tabdown": acMoveTab(el.dataset.id, 1); break;
+    case "tabdel": {
+      const c = SHEET_BY_ID[el.dataset.id];
+      confirmDialog("Delete this tab?", `"${c ? c.label : ""}" will be removed from the draft. Rows already added to it are kept in the data but won't be shown.`, () => { acEdit((d) => { d.customTabs = d.customTabs.filter((t) => t.id !== el.dataset.id); delete d.tabs[el.dataset.id]; d.tabOrder = (d.tabOrder || []).filter((x) => x !== el.dataset.id); delete d.cols[el.dataset.id]; delete d.rules[el.dataset.id]; delete d.kpi[el.dataset.id]; }); acRefresh(); }, { okLabel: "Delete tab" });
+      return;
+    }
+    case "newtab": acOpenNewTab(); return;
+    // columns
+    case "collabel": acEdit((d) => {
+      const c = (d.cols[id] = d.cols[id] || {});
+      const labels = (c.labels = c.labels || {});
+      const prev = labels[k] || clBaseLabel(k);
+      const nv = String(v).trim().replace(/\s+/g, " ");
+      if (!nv || nv === clBaseLabel(k)) delete labels[k]; else labels[k] = nv;
+      if (prev !== clBaseLabel(k) && prev !== nv) { const al = (c.aliases = c.aliases || {}); al[k] = [...new Set([...(al[k] || []), prev])].filter((x) => x !== nv && x !== k); }
+    }); break;
+    case "colshow": acEdit((d) => { const c = (d.cols[id] = d.cols[id] || {}); const h = new Set(c.hidden || []); if (v) h.delete(k); else h.add(k); c.hidden = [...h]; }); break;
+    case "colup": acColMove(k, -1); break;
+    case "coldown": acColMove(k, 1); break;
+    case "coldel": acEdit((d) => { const c = (d.cols[id] = d.cols[id] || {}); c.added = (c.added || []).filter((x) => x.name !== k); if (c.labels) delete c.labels[k]; c.order = (c.order || []).filter((x) => x !== k); }); break;
+    case "coladd": {
+      const name = (document.getElementById("ac-newcol").value || "").trim().replace(/\s+/g, " ");
+      const existing = [...acColKeys(id).map((x) => colLabelFor(id, x)), ...acColKeys(id), "Actions", "Status", CL.ATTEMPT, CL.NOTE, CL.RESCHED, CL.REMIND].map((s) => String(s).toLowerCase());
+      let msg = "";
+      if (!name) msg = "Give the column a name.";
+      else if (name.startsWith("__")) msg = "Column names can't start with two underscores.";
+      else if (existing.includes(name.toLowerCase())) msg = `A column named "${name}" already exists on this tab (it may just be hidden).`;
+      const lowerName = name.toLowerCase();
+      const back = name ? acColKeys(id).find((x) => ((acColCfg(id).hidden || []).includes(x)) && (String(x).toLowerCase() === lowerName || colLabelFor(id, x).toLowerCase() === lowerName)) : null;
+      if (back) { acEdit((d) => { const c = (d.cols[id] = d.cols[id] || {}); c.hidden = (c.hidden || []).filter((x) => x !== back); }); toast(`Brought back "${colLabelFor(id, back)}" with its data and rules`); break; }
+      acUI.err = msg;
+      if (msg) { document.getElementById("ac-col-err").textContent = msg; return; }
+      acEdit((d) => { const c = (d.cols[id] = d.cols[id] || {}); c.added = [...(c.added || []), { name, type: document.getElementById("ac-newcol-type").value }]; });
+      break;
+    }
+    // status rules
+    case "rule-col": acEdit((d) => { const r = (d.rules[id] = d.rules[id] || {}); if (v) r.assignCol = v; else delete r.assignCol; }); break;
+    case "rule-mode": acEdit((d) => { const r = (d.rules[id] = d.rules[id] || {}); if (v) r.mode = v; else { delete r.mode; delete r.list; } }); break;
+    case "rule-list": acEdit((d) => { const r = (d.rules[id] = d.rules[id] || {}); r.list = String(v).trim(); }); break;
+    case "comp-field": acEdit((d) => { const r = (d.rules[id] = d.rules[id] || {}); const c = (r.completion = r.completion || {}); if (v) c.field = v; else delete c.field; }); break;
+    case "comp-mode": acEdit((d) => { const r = (d.rules[id] = d.rules[id] || {}); const c = (r.completion = r.completion || {}); if (v) c.mode = v; else { delete c.mode; delete c.value; } }); break;
+    case "comp-value": acEdit((d) => { const r = (d.rules[id] = d.rules[id] || {}); const c = (r.completion = r.completion || {}); c.value = String(v).trim(); }); break;
+    case "attn": acEdit((d) => { const n = String(v).trim(); d.attnDays = n === "" ? null : Math.max(0, Math.min(365, Math.round(+n) || 0)); }); break;
+    // kpi
+    case "tile-label": case "tile-sub": case "tile-tone": case "tile-show": acEdit((d) => {
+      const kp = (d.kpi[id] = d.kpi[id] || {}); const bt = (kp.builtin = kp.builtin || {}); const o = (bt[k] = bt[k] || {});
+      const tile = acKpiTiles(id).find((t) => t.key === k) || {};
+      if (act === "tile-label") { const s = String(v).trim(); if (s && s !== tile.label) o.label = s; else delete o.label; }
+      if (act === "tile-sub") { const s = String(v).trim(); if (s && s !== tile.sub) o.sub = s; else delete o.sub; }
+      if (act === "tile-tone") { if (v !== tile.tone) o.tone = v; else delete o.tone; }
+      if (act === "tile-show") { if (!v) o.hidden = true; else delete o.hidden; }
+      if (!Object.keys(o).length) delete bt[k];
+    }); break;
+    case "kpi-heading": acEdit((d) => { const kp = (d.kpi[id] = d.kpi[id] || {}); kp.heading = String(v).trim(); }); break;
+    case "cx-add": acEdit((d) => { const kp = (d.kpi[id] = d.kpi[id] || {}); kp.custom = kp.custom || []; kp.custom.push({ id: "c" + Date.now().toString(36), label: "New card", sub: "", tone: "blue", metric: "count", logic: "all", conds: [{ col: acDataCols(id)[0] || "", op: "filled", val: "" }], dlogic: "all", dconds: [] }); }); break;
+    case "cx-del": confirmDialog("Delete this card?", "It will be removed from the draft.", () => { acEdit((d) => { d.kpi[id].custom.splice(ci, 1); }); acRefresh(); }, { okLabel: "Delete card" }); return;
+    case "cx-label": acEdit((d) => { cardOf(d).label = String(v).trim(); }); break;
+    case "cx-sub": acEdit((d) => { cardOf(d).sub = String(v).trim(); }); break;
+    case "cx-tone": acEdit((d) => { cardOf(d).tone = v; }); break;
+    case "cx-pct": acEdit((d) => { if (v) delete cardOf(d).nopct; else cardOf(d).nopct = true; }); break;
+    case "cx-logic": acEdit((d) => { cardOf(d)[el.dataset.ck === "dconds" || el.dataset.ck === "dlogic" ? "dlogic" : "logic"] = v; }); break;
+    case "cx-metric": acEdit((d) => { const c = cardOf(d); c.metric = v; if (["sum", "avg", "unique", "avgdays"].includes(v) && !c.col) c.col = acDataCols(id)[0] || ""; }); break;
+    case "cx-mcol": acEdit((d) => { cardOf(d).col = v; }); break;
+    case "cx-prefix": acEdit((d) => { cardOf(d).prefix = String(v); }); break;
+    case "cx-suffix": acEdit((d) => { cardOf(d).suffix = String(v); }); break;
+    case "cx-dec": acEdit((d) => { cardOf(d).decimals = +v; }); break;
+    case "cd-add": acEdit((d) => { const c = cardOf(d), ck = el.dataset.ck || "conds"; c[ck] = c[ck] || []; c[ck].push({ col: acDataCols(id)[0] || "", op: "filled", val: "" }); }); break;
+    case "cd-del": acEdit((d) => { cardOf(d)[el.dataset.ck || "conds"].splice(di, 1); }); break;
+    case "cd-col": acEdit((d) => { const cd = cardOf(d)[el.dataset.ck || "conds"][di]; cd.col = v; if (v === "__assigned") { cd.op = "yes"; cd.val = ""; } else if (cd.op === "yes" || cd.op === "no") cd.op = "filled"; }); break;
+    case "cd-op": acEdit((d) => { cardOf(d)[el.dataset.ck || "conds"][di].op = v; }); break;
+    case "cd-val": acEdit((d) => { cardOf(d)[el.dataset.ck || "conds"][di].val = String(v); }); break;
+    // options
+    case "act-label": case "act-tone": acEdit((d) => {
+      const o = ((d.options.actions = d.options.actions || {})[k] = d.options.actions[k] || {}); const x = CALL_ACTIONS.find((a) => a.key === k); const bs = x.__base || x;
+      if (act === "act-label") { const s = String(v).trim(); if (s && s !== bs.label) o.label = s; else delete o.label; }
+      else { if (v !== bs.tone) o.tone = v; else delete o.tone; }
+      if (!Object.keys(o).length) delete d.options.actions[k];
+    }); break;
+    case "note-edit": case "note-del": case "note-add": acEdit((d) => {
+      let n = Array.isArray(d.options.notes) && d.options.notes.length ? d.options.notes.slice() : (CALL_NOTES.__base || CALL_NOTES).slice();
+      const i = +el.dataset.i;
+      if (act === "note-edit") { const s = String(v).trim(); if (s) n[i] = s; else n.splice(i, 1); }
+      if (act === "note-del") n.splice(i, 1);
+      if (act === "note-add") n.push("New note");
+      if (!n.includes("For Callback")) n.push("For Callback");
+      d.options.notes = JSON.stringify(n) === JSON.stringify(CALL_NOTES.__base) ? [] : n;
+    }); break;
+    case "pa-label": acEdit((d) => { const pa = (d.options.pa = d.options.pa || {}); const s = String(v).trim(); if (s && s !== CL_PA_LABELS.__base[k]) pa[k] = s; else delete pa[k]; }); break;
+    // security
+    case "changepin": {
+      const inp = document.getElementById("ac-newpin"), msg = document.getElementById("ac-pin-msg");
+      if (inp.value.length < 4) { msg.textContent = "Use at least 4 characters."; return; }
+      const salt = Math.random().toString(36).slice(2, 12);
+      acHash(inp.value, salt).then((hash) => { acSaveRec({ pinSalt: salt, pinHash: hash }); acSetUnlocked(hash); logChange({ action: "admin", summary: "Admin PIN changed" }); inp.value = ""; msg.textContent = "PIN changed."; });
+      return;
+    }
+    case "restore": confirmDialog("Load the previous version?", "The version published before the current one becomes your draft. Nothing changes for other users until you publish it.", () => { acSaveRec({ draft: String(acRec().prev || "") }); acApply(true); toast("Previous version loaded into the draft"); acRefresh(); }, { okClass: "primary", okLabel: "Load into draft" }); return;
+    case "reset": confirmDialog("Reset the draft?", "The draft goes back to the original app settings (no renamed tabs or columns, no custom cards). Publish it to apply that for everyone.", () => { acSaveRec({ draft: JSON.stringify(acBlank()) }); acApply(true); toast("Draft reset"); acRefresh(); }, { okLabel: "Reset draft" }); return;
+    default: redo = false;
+  }
+  if (redo) acRefresh();
+}
+
+// Banner shown while the admin previews the draft in the whole app
+function acPreviewBanner() {
+  let bar = document.getElementById("ac-preview-bar");
+  if (!AC_PREVIEW) { if (bar) bar.remove(); return; }
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "ac-preview-bar";
+    bar.innerHTML = `<span><b>Previewing your draft.</b> Only you see this. Other users still see the published version.</span><button class="btn sm" id="ac-prev-back">Back to Admin</button><button class="btn sm" id="ac-prev-exit">Exit preview</button>`;
+    document.body.appendChild(bar);
+    bar.querySelector("#ac-prev-back").addEventListener("click", () => { location.hash = "#/admin"; });
+    bar.querySelector("#ac-prev-exit").addEventListener("click", () => { AC_PREVIEW = false; acApply(true); invalidateCache(); render(); });
+  }
+}
+
+// ============================================================================
 // BOOT
 // ============================================================================
 window.navigate = navigate;
@@ -6407,6 +7388,7 @@ window.closeModal = closeModal;
 (async function boot() {
   $root.innerHTML = `<div class="empty-state" style="margin-top:120px"><div class="spinner" style="width:28px;height:28px;border-width:3px;margin:0 auto 16px"></div><div class="title">Loading…</div></div>`;
   await bootStore();
+  acApply(true);
   render();
   startWixSync();
 })();
