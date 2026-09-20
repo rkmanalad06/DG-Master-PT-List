@@ -1732,9 +1732,11 @@ const WixBridge = {
     if (!this.enabled) return;
     try {
       await this._call("wixapp:" + type, payload);
+      return true;
     } catch (e) {
       console.error("WixBridge save failed:", type, e);
       if (typeof toast === "function") toast(`Couldn't sync "${type}" to the shared site yet — saved locally only.`, "error");
+      return false;
     }
   },
 
@@ -2655,7 +2657,20 @@ function commitImport(sheetId, rows, options) {
   saveImportLog();
   invalidateCache();
   invalidateDupCache();
-  if (toAdd.length) WixBridge.save("importedRows", { sheetId, rows: toAdd });
+  if (toAdd.length) {
+    // Small batches, one after another (the shared collection numbers rows as they arrive and a
+    // single huge request can be refused); stops and warns if any batch fails.
+    (async () => {
+      const BATCH = 150;
+      for (let i = 0; i < toAdd.length; i += BATCH) {
+        const ok = await WixBridge.save("importedRows", { sheetId, rows: toAdd.slice(i, i + BATCH) });
+        if (ok === false) {
+          if (typeof toast === "function") toast("Import saved on this device, but the shared collection did not accept all rows. Please tell the admin before importing again.", "error");
+          return;
+        }
+      }
+    })();
+  }
   WixBridge.save("importLogEntry", logEntry);
   logChange({
     sheetId, action: "import",
@@ -6884,8 +6899,8 @@ function acDefaultAlerts(id) {
   if (AC_ALERT_DEF[id]) return AC_ALERT_DEF[id];
   const rule = (n, label, tone, style, conds) => ({ id: "hl" + n, on: true, label, tone, style, logic: "all", conds });
   if (id === "psa_and_psoriasis") return (AC_ALERT_DEF[id] = { auto: [], hl: [
-    rule(1, "High priority and still unassigned", "red", "row", [{ col: "__assigned", op: "no", val: "" }, { col: "__high", op: "yes", val: "" }]),
-    rule(2, "Unassigned", "yellow", "row", [{ col: "__assigned", op: "no", val: "" }]),
+    rule(1, "High priority", "yellow", "row", [{ col: "__high", op: "yes", val: "" }]),
+    rule(2, "Not yet assigned", "yellow", "row", [{ col: "__assigned", op: "no", val: "" }]),
   ] });
   if (id === "call_list_upcoming") return (AC_ALERT_DEF[id] = { auto: [], hl: [
     rule(1, "Needs Attention", "orange", "bar", [{ col: "__attn", op: "yes", val: "" }]),
