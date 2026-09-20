@@ -986,6 +986,16 @@ table.cl-table tbody tr.cl-row-hi td:first-child { box-shadow: inset 4px 0 0 #d9
 table.cl-table tbody tr.cl-row-y.cl-row-sel td, table.cl-table tbody tr.cl-row-hi.cl-row-sel td { background: var(--accent-soft, #f3dde0); }
 .cl-note { display: block; width: 100%; box-sizing: border-box; margin: 0 0 14px; padding: 9px 12px; font: inherit; font-size: 13px; line-height: 1.4; color: #5c4300; background: #fff8d6; border: 1px solid #efd766; border-radius: 8px; resize: vertical; min-height: 38px; }
 .cl-note:focus { outline: 2px solid #efd766; outline-offset: 1px; background: #fffbe8; }
+.cl-days { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.cl-day { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-secondary); background: var(--bg-surface, #fff); border: 1px solid var(--border-subtle, #d9dce4); border-radius: 999px; cursor: pointer; }
+.cl-day b { font-size: 11.5px; padding: 1px 7px; border-radius: 999px; background: var(--ink-100, #eef0f4); color: var(--text-secondary); }
+.cl-day:hover { border-color: var(--accent); }
+.cl-day[aria-pressed="true"] { color: var(--text-on-accent, #fff); background: var(--accent); border-color: var(--accent); }
+.cl-day[aria-pressed="true"] b { background: rgba(255,255,255,.22); color: inherit; }
+table.cl-table tbody tr.cl-group-row td { position: sticky; background: var(--ink-100, #eef0f4); padding: 8px 14px; font-size: 13px; }
+table.cl-table tbody tr.cl-group-row td span { margin-left: 10px; color: var(--text-secondary); font-weight: 500; font-size: 12px; }
+table.cl-table td.cl-dexa-yes { background: #fff3d6; }
+.cl-dexa { flex: none; margin-left: 6px; padding: 2px 8px; font-size: 11px; font-weight: 700; color: #8a4b00; background: #ffe0a3; border: 1px solid #f1bd60; border-radius: 999px; white-space: nowrap; }
 .cl-stats.cl-stats-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 900px) { .cl-stats.cl-stats-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .cl-inf { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 999px; font-size: 15px; font-weight: 800; line-height: 1; }
@@ -1537,11 +1547,15 @@ const SHEET_CONFIG = [
     shortLabel: "0908–0911",
     group: "diagnosis",
     diagnosisLabel: "0908–0911 Patients",
-    nameField: "DG Tuesday patients 9/8",
+    nameField: "Patient Name",
     dobField: "dob",
     dateFields: ["dob", "next appt"],
-    completion: { field: null, mode: "manual", label: "Working list with no status field — tracked manually" },
-    searchFields: ["DG Tuesday patients 9/8", "diagnosis", "next appt"],
+    completion: { field: "Assigned to", mode: "nonblank", label: "Assigned to is filled in" },
+    searchFields: ["Patient Name", "diagnosis", "Clinic Day", "Assigned to", "DEXA >1year"],
+    inlineFields: ["Assigned to"],
+    defaultHeaders: ["Patient Name", "dob", "diagnosis", "Clinic Day", "Assigned to", "DEXA >1year"],
+    orderColumns: true,
+    dayGroups: true,
   },
   {
     id: "all_other_dx",
@@ -1860,6 +1874,24 @@ function titleCase(s) {
     .replace(/\b([a-z])/g, (m) => m.toUpperCase());
 }
 
+// ---- Clinic days (0908-0911 tab): "Tuesday 9/8", "DG Wednesday patients 9/9" ...
+const DAY_FIELD = "Clinic Day";
+function dayInfo(text) {
+  const t = String(text || "").trim();
+  if (!t) return null;
+  const m = t.match(/(\d{1,2})\/(\d{1,2})/);
+  const w = t.match(/\b(mon|tue|wed|thu|fri|sat|sun)/i);
+  if (m) {
+    const mo = +m[1], d = +m[2];
+    const wd = w ? w[1][0].toUpperCase() + w[1].slice(1).toLowerCase() : "";
+    return { key: mo + "/" + d, label: (wd ? wd + " " : "") + mo + "/" + d, sort: mo * 100 + d };
+  }
+  return { key: t.toLowerCase(), label: t, sort: 99999 };
+}
+// A section-heading row such as "DG Wednesday patients 9/9" (name cell only) starts a new clinic day.
+function dayMarker(name) {
+  return /^\s*(?:dg\s+)?(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?\s*(?:patients?\s*)?[-–:,]?\s*\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\s*$/i.test(name) ? dayInfo(name) : null;
+}
 function normalizeDob(raw) {
   if (!raw) return "";
   const m = String(raw).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
@@ -1925,12 +1957,22 @@ function getAllRecords(forceRefresh) {
     const base = (RAW_SHEETS[cfg.id]?.rows || []).map((r, i) => ({ row: r, uid: `${cfg.id}#${i}` }));
     const imported = (Store.imported[cfg.id] || []).map((r, i) => ({ row: r, uid: `${cfg.id}#imp${i}` }));
     const all = base.concat(imported);
+    let curDay = null, wasImp = false;
 
     for (const { row, uid } of all) {
       if (Store.deletedRows[uid]) continue;
       const edited = Store.editedRows[uid];
       const merged = edited ? { ...row, ...edited } : row;
       const data = fixDateSerialsInRow(merged, cfg.dateFields);
+      let recDay = null;
+      if (cfg.dayGroups) {
+        if (!wasImp && uid.includes("#imp")) { wasImp = true; curDay = null; }
+        const nm = String(data[cfg.nameField] || "").trim();
+        const mk = nm && !Object.keys(data).some((k) => k !== cfg.nameField && k !== DAY_FIELD && String(data[k] || "").trim()) ? dayMarker(nm) : null;
+        if (mk) { curDay = mk; continue; }
+        const ex = String(data[DAY_FIELD] || "").trim();
+        recDay = ex ? dayInfo(ex) : curDay;
+      }
 
       const nameRaw = cfg.nameField ? data[cfg.nameField] : "";
       const acctRaw = cfg.acctField
@@ -1961,6 +2003,7 @@ function getAllRecords(forceRefresh) {
         rawDob,
         identityKey,
         weakKey,
+        day: recDay,
         status: computeStatus(cfg, data, uid),
       });
     }
@@ -4251,13 +4294,15 @@ let CALL_SHEET_ID = "call_list_upcoming";
 let clLastSheet = "call_list_upcoming";
 function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming" || id === "dg_infusion_pas" || !!ASSIGN_TABS[id] || id === "dg_osteoporosis_pas"; }
 // Tabs whose Status is simply Assigned (data in the column) / Unassigned (blank). Value = the assignment column.
-const ASSIGN_TABS = { dg_pharmacy: "Assigned To", ra: "Assigned to", seronegative_ra: "Assigned to", psoriatic_arthritis: "Assigned to", psoriasis: "Assigned to", pmr: "Assigned to", gca: "Assigned to", pseudogout: "REFER TO USMANI AND APPS", polymyositis: "REFER TO USMANI", psa_and_psoriasis: "Assigned To", osteoporosis: "Assigned to", gout: "REFER TO AFD AND APPS", all_other_dx: "Refer To" };
+const ASSIGN_TABS = { dg_pharmacy: "Assigned To", ra: "Assigned to", seronegative_ra: "Assigned to", psoriatic_arthritis: "Assigned to", psoriasis: "Assigned to", pmr: "Assigned to", gca: "Assigned to", pseudogout: "REFER TO USMANI AND APPS", polymyositis: "REFER TO USMANI", psa_and_psoriasis: "Assigned To", osteoporosis: "Assigned to", gout: "REFER TO AFD AND APPS", all_other_dx: "Refer To", pts_0908_0911: "Assigned to" };
 // Tabs whose "assigned" state is a referral column. yes = only a Yes counts (blank/No = Unassigned).
 const ASSIGN_META = {
   pseudogout: { yes: true, label: "Referred to Usmani and Apps", short: "referred", suggest: ["Yes", "No"],
     desc: "Enter Yes in REFER TO USMANI AND APPS for each patient referred. Status: Assigned when Yes; Unassigned when blank or No." },
   psa_and_psoriasis: { yes: false, label: "Assigned", short: "assigned", suggest: ["AFD", "APPS"],
     desc: "Enter AFD or APPS in Assigned To; use Split unassigned to divide the blank ones between AFD and APPS. Highlights: light yellow = unassigned, red = High priority and still unassigned (once assigned, the highlight goes away)." },
+  pts_0908_0911: { yes: false, label: "Assigned", short: "assigned", suggest: [],
+    desc: "Use the day buttons to split the list by clinic day (Tuesday 9/8, Wednesday 9/9 ...). Enter a name in Assigned to; status follows it. If DEXA >1year is Yes, add a DEXA to the appointment." },
   all_other_dx: { yes: false, label: "Assigned", short: "assigned", suggest: [], noun: "Diagnoses",
     desc: "Enter who to refer to for each diagnosis in Refer To. Status: Assigned once Refer To has data; Unassigned while blank." },
   gout: { yes: false, label: "Assigned", short: "assigned", suggest: [],
@@ -4267,6 +4312,82 @@ const ASSIGN_META = {
 };
 function clAssignMeta() { return ASSIGN_META[CALL_SHEET_ID] || null; }
 function clIsPsa() { return CALL_SHEET_ID === "psa_and_psoriasis"; }
+function clIsDays() { return !!(SHEET_BY_ID[CALL_SHEET_ID] && SHEET_BY_ID[CALL_SHEET_ID].dayGroups); }
+function clIsDexaCol(c) { return clIsDays() && /^dexa/i.test(String(c)); }
+function clDexaYes(v) { return /^\s*y(es)?\b/i.test(String(v || "")); }
+function clDayScoped(rows) {
+  if (!clIsDays() || !clState.day) return rows;
+  if (clState.day === "none") return rows.filter((r) => !r.day);
+  return rows.filter((r) => r.day && r.day.key === clState.day);
+}
+function clDayList() {
+  const map = new Map();
+  let none = 0;
+  const recs = clRecords();
+  recs.forEach((r) => {
+    if (!r.day) { none++; return; }
+    const cur = map.get(r.day.key);
+    if (!cur) map.set(r.day.key, { key: r.day.key, label: r.day.label, sort: r.day.sort, n: 1 });
+    else { cur.n++; if (r.day.label.length > cur.label.length) cur.label = r.day.label; }
+  });
+  return { days: [...map.values()].sort((a, b) => a.sort - b.sort || a.label.localeCompare(b.label)), none, total: recs.length };
+}
+function clDayLabel(key) {
+  if (!key) return "";
+  if (key === "none") return "No day set";
+  const d = clDayList().days.find((x) => x.key === key);
+  return d ? d.label : key;
+}
+function clDaysHtml() {
+  if (!clIsDays()) return "";
+  const { days, none, total } = clDayList();
+  const btn = (key, label, n) => `<button type="button" class="cl-day" data-day="${esc(key)}" aria-pressed="${clState.day === key}"><span>${esc(label)}</span><b>${fmtNum(n)}</b></button>`;
+  return btn("", "All days", total) + days.map((d) => btn(d.key, d.label, d.n)).join("") + (none ? btn("none", "No day set", none) : "");
+}
+function clSetDayModal(cfg) {
+  const uids = [...clSel];
+  if (!uids.length) { toast("Tick the patients first, then choose Set Clinic Day"); return; }
+  const { days } = clDayList();
+  const modal = openModal(`
+    <div class="modal-header"><div><h3>Set clinic day</h3><p>Move ${uids.length} selected patient${uids.length === 1 ? "" : "s"} to a clinic day, for example Tuesday 9/8.</p></div></div>
+    <div class="modal-body">
+      <div class="form-group"><label for="cl-day-input">Clinic day</label><input type="text" id="cl-day-input" list="cl-day-list2" maxlength="40" autocomplete="off" placeholder="Tuesday 9/8" /></div>
+      <datalist id="cl-day-list2">${days.map((d) => `<option value="${esc(d.label)}"></option>`).join("")}</datalist>
+      <p class="form-hint">Leave it empty to clear the day.</p>
+    </div>
+    <div class="modal-footer"><button class="btn" id="cl-day-cancel">Cancel</button><button class="btn primary" id="cl-day-save">Save</button></div>`);
+  modal.querySelector("#cl-day-cancel").addEventListener("click", closeModal);
+  modal.querySelector("#cl-day-save").addEventListener("click", () => {
+    const v = modal.querySelector("#cl-day-input").value.trim();
+    uids.forEach((uid) => { Store.editedRows[uid] = { ...(Store.editedRows[uid] || {}), [DAY_FIELD]: v }; });
+    saveEditedRows();
+    invalidateCache();
+    invalidateDupCache();
+    uids.forEach((uid) => WixBridge.save("editedRow", { uid, patch: Store.editedRows[uid] }));
+    logChange({ sheetId: CALL_SHEET_ID, action: "edit", summary: `Set clinic day "${v || "(cleared)"}" for ${uids.length} patient(s) (${cfg.label})` });
+    closeModal();
+    toast(v ? `Moved ${uids.length} to ${v}` : "Clinic day cleared");
+    clRenderTable(cfg);
+    clRefreshKpi();
+  });
+  setTimeout(() => { const i = modal.querySelector("#cl-day-input"); if (i) i.focus(); }, 60);
+}
+function clRowsHtml(cfg, pageRows, cols, allRows) {
+  if (!clIsDays() || clState.day || clState.sort) return pageRows.map((r) => clRowHtml(cfg, r, cols)).join("");
+  const counts = new Map();
+  allRows.forEach((r) => { const k = r.day ? r.day.key : "none"; counts.set(k, (counts.get(k) || 0) + 1); });
+  let prev = null, out = "";
+  pageRows.forEach((r) => {
+    const k = r.day ? r.day.key : "none";
+    if (k !== prev) {
+      prev = k;
+      const n = counts.get(k) || 0;
+      out += `<tr class="cl-group-row"><td colspan="${cols.length + 2}"><b>${esc(r.day ? r.day.label : "No day set")}</b><span>${fmtNum(n)} patient${n === 1 ? "" : "s"}</span></td></tr>`;
+    }
+    out += clRowHtml(cfg, r, cols);
+  });
+  return out;
+}
 // Aetna: the current insurance field mentions Aetna.
 function psaAetna(data) {
   return Object.keys(data || {}).some((k) => /insurance/i.test(k) && String(data[k] || "").toLowerCase().includes("aetna"));
@@ -4327,7 +4448,7 @@ function clWith(id, fn) { const prev = CALL_SHEET_ID, prevTeam = CL.TEAM; CALL_S
 function clUse(id) {
   CALL_SHEET_ID = id;
   CL.TEAM = clTeamField(id);
-  if (clLastSheet !== id) { clLastSheet = id; clSel.clear(); Object.assign(clState, { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1 }); }
+  if (clLastSheet !== id) { clLastSheet = id; clSel.clear(); Object.assign(clState, { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1, day: "" }); }
   CL.LAYOUT_UID = "__layout#" + id;
   CL.LS_LAYOUT = id === "call_list_upcoming" ? "dg_call_layout_v1" : "dg_call_layout_v1_" + id;
 }
@@ -4348,6 +4469,7 @@ function clAssignSt(data) {
 function clStatusOptions() {
   if (clIsOsteo()) return [{ key: "pending", label: "Unassigned" }, { key: "jp", label: "Assigned to JP" }, { key: "su", label: "Assigned to SU" }, { key: "pa", label: "Pending PA" }, { key: "attention", label: "Needs Attention" }, { key: "cancelled", label: "Cancelled" }];
   if (clIsGeneric()) return Object.keys(STATUS_META).map((k) => ({ key: k, label: STATUS_META[k].label }));
+  if (clIsDays()) return [{ key: "pending", label: "Unassigned" }, { key: "assigned", label: "Assigned" }, { key: "dexa", label: "DEXA due: add to appt" }];
   if (clIsPsa()) return [{ key: "pending", label: "Unassigned" }, { key: "assigned", label: "Assigned" }, { key: "afd", label: "Assigned to AFD" }, { key: "apps", label: "Assigned to APPS" }, { key: "priority", label: "High priority (unassigned)" }, { key: "aetna", label: "Aetna insurance" }];
   if (clIsAssignTab()) return [{ key: "pending", label: "Unassigned" }, { key: "assigned", label: "Assigned" }];
   if (clIsInfusion()) return [
@@ -4407,6 +4529,7 @@ function clStatusMatch(data, key) {
     if (key === "pending") return !i.assigned;
     if (key === "assigned") return i.assigned;
     if (key === "aetna") return !!i.aetna;
+    if (key === "dexa") return !!i.dexa;
     if (key === "priority") return !!i.high;
     if (key === "afd") return !!(i.who && i.who.afd);
     if (key === "apps") return !!(i.who && i.who.apps);
@@ -4654,7 +4777,7 @@ function clInfusionKpiHtml() {
     <div class="cl-kpi-heading">Prior Auth Status</div>
     <div class="cl-stats cl-stats-4" role="group" aria-label="Prior auth status summary">${row2.map(tile).join("")}</div>`;
 }
-const clState = { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1, pageSize: 50 };
+const clState = { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1, pageSize: 50, day: "" };
 
 // ---------------------------------------------------------------------------
 // Rules
@@ -4699,7 +4822,7 @@ function callInfo(data) {
   }
   if (clIsAssignTab()) {
     const assigned = clIsAssignedVal(data[CL.TEAM]);
-    return { key: "none", done: assigned, days: null, flagged: false, assigned, scheduled: false, aetna: clIsPsa() && psaAetna(data), high: clIsPsa() && !assigned && psaHigh(data), who: clIsPsa() ? psaWho(data[CL.TEAM]) : null, status: assigned ? "t-assigned" : "t-unassigned" };
+    return { key: "none", done: assigned, days: null, flagged: false, assigned, scheduled: false, aetna: clIsPsa() && psaAetna(data), dexa: clIsDays() && Object.keys(data || {}).some((k) => clIsDexaCol(k) && clDexaYes(data[k])), high: clIsPsa() && !assigned && psaHigh(data), who: clIsPsa() ? psaWho(data[CL.TEAM]) : null, status: assigned ? "t-assigned" : "t-unassigned" };
   }
   if (clIsInfusion()) {
     const assigned = !!String(data[CL.TEAM] || "").trim();
@@ -4845,6 +4968,16 @@ function clColumns(cfg) {
 function clColLabel(col) { return col === "__status" ? "Status" : col === "__infusion" ? "On Infusion?" : col; }
 function clDefaultWidth(cfg, col) {
   if (col === "__infusion") return 125;
+  if (clIsDays()) {
+    if (col === "__status") return 140;
+    if (col === cfg.nameField) return 210;
+    if (col === cfg.dobField) return 130;
+    if (col === DAY_FIELD) return 150;
+    if (col === CL.TEAM) return 170;
+    if (clIsDexaCol(col)) return 290;
+    if (/diagnosis/i.test(col)) return 220;
+    if (/next appt/i.test(col)) return 140;
+  }
   if (CALL_SHEET_ID === "gout") {
     if (col === "__status") return 140;
     if (col === cfg.nameField) return 190;
@@ -4953,7 +5086,7 @@ function clTransitionKpiHtml() {
   return `<div class="cl-stats cl-stats-4" role="group" aria-label="Patient summary">${tiles.map(tile).join("")}</div>`;
 }
 function clAssignKpiHtml() {
-  const recs = clRecords();
+  const recs = clDayScoped(clRecords());
   const total = recs.length;
   const assigned = recs.filter((r) => callInfo(r.data).assigned).length;
   const pending = total - assigned;
@@ -4972,7 +5105,7 @@ function clAssignKpiHtml() {
   const M = clAssignMeta();
   const completion = { tone: "violet", label: "Completion", big: comp + "%", sub: `${fmtNum(assigned)} of ${fmtNum(total)} ${M ? M.short : "assigned"}` };
   return `<div class="cl-stats cl-stats-4" role="group" aria-label="Patient summary">
-    ${filterTile({ key: "", tone: "gray", label: "Total " + (M && M.noun || "Patients"), n: total, sub: "All " + (M && M.noun || "patients").toLowerCase() + " in " + SHEET_BY_ID[CALL_SHEET_ID].label, nopct: true })}
+    ${filterTile({ key: "", tone: "gray", label: "Total " + (M && M.noun || "Patients"), n: total, sub: clIsDays() && clState.day ? "Patients on " + clDayLabel(clState.day) : "All " + (M && M.noun || "patients").toLowerCase() + " in " + SHEET_BY_ID[CALL_SHEET_ID].label, nopct: true })}
     ${filterTile({ key: "assigned", tone: "green", label: M ? M.label : "Assigned", n: assigned, sub: M && M.yes ? CL.TEAM + " is Yes" : "Has data in " + CL.TEAM })}
     ${filterTile({ key: "pending", tone: "red", label: "Unassigned", n: pending, sub: M && M.unSub ? M.unSub : M && M.yes ? CL.TEAM + " is blank or No" : CL.TEAM + " is blank" })}
     <div class="cl-stat cl-stat-static cl-tone-${completion.tone}" role="group" aria-label="Completion" title="Completion = ${M ? esc(M.label) : "Assigned"} ÷ (${M ? esc(M.label) : "Assigned"} + Unassigned)">${inner(completion, comp)}</div>
@@ -5106,6 +5239,8 @@ function clKpiHtml() {
 function clRefreshKpi() {
   const el = document.getElementById("cl-kpi");
   if (el) el.innerHTML = clKpiHtml();
+  const dz = document.getElementById("cl-days");
+  if (dz) dz.innerHTML = clDaysHtml();
 }
 
 function renderCallListPage(cfg) {
@@ -5124,6 +5259,7 @@ function renderCallListPage(cfg) {
         ${clIsGeneric() && cfg.isReference ? "" : `<a class="btn primary" href="#/import-export?target=${cfg.id}">${uploadIconSvg()} Import Records</a>`}
       </div>
     </div>
+    ${clIsDays() ? `<div class="cl-days" id="cl-days" role="group" aria-label="Filter by clinic day">${clDaysHtml()}</div>` : ""}
     ${clIsPsa() ? `<textarea class="cl-note" id="cl-note" rows="2" aria-label="General note" placeholder="Add a general note for this tab...">${esc(psaNote())}</textarea>` : ""}
 
     ${dupGroups.length ? `<div class="card" style="padding:12px 16px;margin-bottom:20px;border-color:var(--status-attention-bg);background:var(--status-attention-bg)">
@@ -5150,6 +5286,7 @@ function renderCallListPage(cfg) {
       <button class="btn sm" id="cl-add-col" title="Add an editable column">${plusIconSvg()} Add Column</button>
  <label class="cl-selall" title="Select every record that matches the current filters"><input type="checkbox" id="cl-selall" /> Select all</label>
  <button class="btn sm danger" id="cl-del-sel" disabled title="Delete the selected records">${trashIconSvg()} Delete selected<span class="cl-del-n"></span></button>
+      ${clIsDays() ? `<button class="btn sm" id="cl-setday" title="Move the ticked patients to a clinic day">Set Clinic Day</button>` : ""}
       ${clIsPsa() ? `<button class="btn sm" id="cl-split" title="Divide every unassigned patient between AFD and APPS">Split unassigned (AFD / APPS)</button>` : ""}
       <div class="cl-toolbar-right">
         <span class="cl-rv-label" id="cl-rv-label">Record view</span>
@@ -5172,7 +5309,7 @@ function clSortValue(r, col) {
   return r.data[col] || "";
 }
 function clFilteredRows(cfg) {
-  let rows = clRecords();
+  let rows = clDayScoped(clRecords());
   if (clState.search) {
     const q = clState.search.toLowerCase();
     const fields = [...(cfg.searchFields || []), ...clCustomColumns().map((c) => c.name)];
@@ -5184,6 +5321,7 @@ function clFilteredRows(cfg) {
   }
   if (clState.statusFilter) rows = rows.filter((r) => (clIsGeneric() ? r.status === clState.statusFilter : clStatusMatch(r.data, clState.statusFilter)));
   if (clState.remindFilter) rows = rows.filter((r) => callReminder(r.data)?.state === clState.remindFilter);
+  if (clIsDays() && !clState.sort && !clState.day) rows = rows.map((r, i) => [r, i]).sort((a, b) => (a[0].day ? a[0].day.sort : 100000) - (b[0].day ? b[0].day.sort : 100000) || a[1] - b[1]).map((x) => x[0]);
   if (clState.sort) {
     const { field, dir } = clState.sort;
     rows = [...rows].sort((a, b) => {
@@ -5233,9 +5371,11 @@ function clRowHtml(cfg, r, cols) {
  if (clIsInfusion() && clIsWrapCol(c) && !clIsDateCol(cfg, c)) return clWrapCellHtml(cfg, r, c);
     const val = r.data[c] || "";
     const isDate = clIsDateCol(cfg, c);
-    return `<td class="inline-cell${c === cfg.nameField ? " name-col" : ""}" data-col="${esc(c)}">
+    const dexa = clIsDexaCol(c) && clDexaYes(val);
+    return `<td class="inline-cell${c === cfg.nameField ? " name-col" : ""}${dexa ? " cl-dexa-yes" : ""}" data-col="${esc(c)}">
       <div class="inline-cell-wrap">
-        <input type="text" class="inline-edit-input${clIsGca() && c === CL.TEAM && !gcaOnInfusion(r) ? " cl-refer" : ""}" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="${clIsGca() && c === CL.TEAM && !gcaOnInfusion(r) ? "Refer to PUTZ" : "—"}" title="${esc(val)}" ${c === CL.TEAM ? 'list="cl-team-list"' : ""} />
+        <input type="text" class="inline-edit-input${clIsGca() && c === CL.TEAM && !gcaOnInfusion(r) ? " cl-refer" : ""}" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="${clIsGca() && c === CL.TEAM && !gcaOnInfusion(r) ? "Refer to PUTZ" : "—"}" title="${esc(val)}" ${c === CL.TEAM ? 'list="cl-team-list"' : clIsDays() && c === DAY_FIELD ? 'list="cl-day-list"' : ""} />
+        ${dexa ? '<span class="cl-dexa">Add DEXA to appt</span>' : ""}
         ${isDate ? `<button type="button" class="cal-btn" data-uid="${r.uid}" data-field="${esc(c)}" title="Pick a date" aria-label="Pick a date for ${esc(c)}">${calendarIconSvg()}</button>` : ""}
       </div>
     </td>`;
@@ -5269,6 +5409,16 @@ function clRefreshRow(uid) {
   if (st) st.innerHTML = clStatusBadge(r.data, r);
   const ac = [...tr.children].find((td) => td.dataset.col === CL.ACTION);
   if (ac) ac.innerHTML = clActionCellHtml(r);
+  if (clIsDays()) {
+    [...tr.children].filter((td) => clIsDexaCol(td.dataset.col)).forEach((td) => {
+      const on = clDexaYes(r.data[td.dataset.col]);
+      td.classList.toggle("cl-dexa-yes", on);
+      const wrap = td.querySelector(".inline-cell-wrap");
+      const chip = td.querySelector(".cl-dexa");
+      if (on && !chip && wrap) { const sp = document.createElement("span"); sp.className = "cl-dexa"; sp.textContent = "Add DEXA to appt"; wrap.insertBefore(sp, wrap.querySelector(".cal-btn")); }
+      if (!on && chip) chip.remove();
+    });
+  }
   if (clIsGca()) {
     const ic = [...tr.children].find((td) => td.dataset.col === "__infusion");
     if (ic) ic.innerHTML = clInfusionCellHtml(r);
@@ -5309,13 +5459,14 @@ function clRenderTable(cfg) {
     : `<div class="empty-state">${emptyIcon()}<div class="title">${clIsGeneric() || clIsOsteo() || clIsAssignTab() ? "No records in this tab yet" : "No patients on this call list yet"}</div><div class="desc">${clIsGeneric() ? (cfg.isReference ? "This reference table has no rows yet." : "Use Import Records or Add Row to add records to this tab.") : clIsOsteo() ? "Use Import Records or Add Row to add osteoporosis prior authorizations." : clIsAssignTab() ? `Use Import Records or Add Row to add patients to ${cfg.label}.` : clIsInfusion() ? "Use Import Records or Add Row to add infusion prior authorizations." : clIsTransition() ? "Use Import Records or Add Row to bring in the patients who need a transition." : "Use Import Records to bring in the upcoming-appointment call list."}</div></div>`;
 
   region.innerHTML = `
+    ${clIsDays() ? `<datalist id="cl-day-list">${clDayList().days.map((d) => `<option value="${esc(d.label)}"></option>`).join("")}</datalist>` : ""}
     <datalist id="cl-team-list">${teams.map((t) => `<option value="${esc(t)}"></option>`).join("")}</datalist>
     <div class="data-table-wrap cl-table-wrap">
       <table class="data-table cl-table${clIsInfusion() ? " cl-wrapmode" : ""}" style="width:${tableW}px">
         <colgroup><col style="width:${CL_SEL_COL_W}px">${cols.map((c, i) => `<col data-col="${esc(c)}" style="width:${widths[i]}px">`).join("")}<col style="width:${CL_ACTIONS_COL_W}px"></colgroup>
         <thead><tr><th class="cl-sel-th" style="cursor:default"><input type="checkbox" class="cl-sel-all" aria-label="Select all" title="Select all" /></th>${cols.map(th).join("")}<th style="cursor:default">Actions</th></tr></thead>
         <tbody>
-          ${pageRows.length ? pageRows.map((r) => clRowHtml(cfg, r, cols)).join("") : `<tr><td colspan="${cols.length + 2}">${emptyMsg}</td></tr>`}
+          ${pageRows.length ? clRowsHtml(cfg, pageRows, cols, rows) : `<tr><td colspan="${cols.length + 2}">${emptyMsg}</td></tr>`}
         </tbody>
       </table>
     </div>
@@ -5367,7 +5518,7 @@ function wireCallListPage(cfg) {
   document.getElementById("cl-filter-status").addEventListener("change", (e) => { clState.statusFilter = e.target.value; clSyncFilters(cfg); });
   document.getElementById("cl-filter-remind").addEventListener("change", (e) => { clState.remindFilter = e.target.value; clSyncFilters(cfg); });
   document.getElementById("cl-reset").addEventListener("click", () => {
-    Object.assign(clState, { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1 });
+    Object.assign(clState, { search: "", statusFilter: "", remindFilter: "", sort: null, page: 1, day: "" });
     document.getElementById("cl-search").value = "";
     clSyncFilters(cfg);
     toast("Filters and sorting reset");
@@ -5377,6 +5528,14 @@ function wireCallListPage(cfg) {
  document.getElementById("cl-selall").addEventListener("change", (e) => clSelectAll(cfg, e.target.checked));
  document.getElementById("cl-del-sel").addEventListener("click", () => clDeleteSelected(cfg));
  document.getElementById("cl-split")?.addEventListener("click", () => clSplitUnassigned(cfg));
+ document.getElementById("cl-setday")?.addEventListener("click", () => clSetDayModal(cfg));
+ document.getElementById("cl-days")?.addEventListener("click", (e) => {
+   const b = e.target.closest("[data-day]");
+   if (!b) return;
+   clState.day = b.dataset.day;
+   clSel.clear();
+   clSyncFilters(cfg);
+ });
  document.getElementById("cl-note")?.addEventListener("blur", (e) => { if (e.target.value !== psaNote()) { psaSaveNote(e.target.value); toast("Note saved"); } });
  region.addEventListener("input", (e) => { if (e.target.classList && e.target.classList.contains("cl-wrap-input")) clGrow(e.target); });
  region.addEventListener("change", (e) => {
