@@ -1028,12 +1028,7 @@ table.cl-table td.inline-cell .inline-edit-input, .cl-table .inline-cell-wrap .i
 .cl-resize { position: absolute; top: 0; right: 0; bottom: 0; width: 8px; cursor: col-resize; touch-action: none; }
 .cl-resize::after { content: ""; position: absolute; top: 25%; bottom: 25%; right: 3px; width: 2px; border-radius: 2px; background: var(--ink-200); transition: background 120ms var(--ease-out); }
 .cl-resize:hover::after, .cl-resize.active::after { background: var(--accent); }
-.cl-th-tools { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); display: none; align-items: center; gap: 1px; background: var(--bg-sunken); border-radius: 6px; padding: 1px 2px; box-shadow: -8px 0 8px var(--bg-sunken); }
-table.cl-table th:hover .cl-th-tools, table.cl-table th:focus-within .cl-th-tools { display: inline-flex; }
-@media (hover: none) { .cl-th-tools { display: inline-flex; } }
-.cl-col-edit { border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; padding: 1px 4px; font-size: 14px; line-height: 1; border-radius: 4px; }
-.cl-col-edit:hover { color: var(--accent); background: var(--accent-soft); }
-.cl-col-remove { border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; padding: 0 4px; margin-left: 2px; font-size: 16px; line-height: 1; border-radius: 4px; }
+.cl-col-remove { border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; padding: 0 2px; margin-left: 4px; font-size: 13px; line-height: 1; border-radius: 4px; }
 .cl-col-remove:hover { color: var(--status-attention); background: var(--status-attention-bg); }
 body.cl-resizing, body.cl-resizing * { cursor: col-resize !important; user-select: none !important; }
 table.cl-table tbody tr.cl-row-progress { background: #fffbe8; }
@@ -1254,7 +1249,7 @@ function openAddRowModal(cfg) {
     const id = "addrow-f" + i;
     const kind = dateSet.has(h) ? (/time/i.test(h) ? "datetime-local" : "date") : h === cfg.phoneField ? "tel" : "text";
     const span = wideRe.test(h) ? ' style="grid-column:1 / -1;margin:0"' : ' style="margin:0"';
-    return `<div class="form-group"${span}><label for="${id}">${esc(colLabelFor(cfg.id, h))}</label><input type="${kind}" id="${id}" data-h="${esc(h)}" data-kind="${kind}" autocomplete="off" /></div>`;
+    return `<div class="form-group"${span}><label for="${id}">${esc(h)}</label><input type="${kind}" id="${id}" data-h="${esc(h)}" data-kind="${kind}" autocomplete="off" /></div>`;
   };
   const modal = openModal(`
     <div class="modal-header"><div><h3>Add row</h3><p>Add a record to ${esc(cfg.label)} by hand.</p></div></div>
@@ -1365,13 +1360,13 @@ const SHEET_CONFIG = [
     label: "DG Infusion PAs",
     shortLabel: "Infusion PAs",
     group: "work-queues",
-    nameField: "Guarantor Acct No + Name",
-    nameFormat: "acct-colon-name",
-    dateFields: ["next infusion appt", "FUTURE IV APPT AFTER 10/02/2026", "next fu appt"],
-    completion: { field: "PRIOR AUTH INITIATED/DONE:", mode: "nonblank", label: "Prior auth initiated/done is filled in" },
-    searchFields: ["Guarantor Acct No + Name", "CPT Code / Description", "ASSIGNED TO:", "PRIOR AUTH INITIATED/DONE:", "FU Provider", "Team Member", "CORRECTIONS"],
-    inlineFields: ["PRIOR AUTH INITIATED/DONE:", "ASSIGNED TO:", "Team Member", "CORRECTIONS"],
-    defaultHeaders: ["Guarantor Acct No + Name", "CPT Code / Description", "next infusion appt", "FUTURE IV APPT AFTER 10/02/2026", "ASSIGNED TO:", "PRIOR AUTH INITIATED/DONE:", "next fu appt", "FU Provider", "Team Member", "CORRECTIONS"],
+    nameField: "MEDICARE - Patient Name",
+    acctField: "Account #",
+    dateFields: ["Future IV Appt", "Next Infusion Appt", "Next FU Appt"],
+    completion: { field: "PA Initiated / Done", mode: "nonblank", label: "PA initiated/done is filled in" },
+    searchFields: ["Account #", "MEDICARE - Patient Name", "Current Provider", "CPT / Drug", "Assigned To", "PA Initiated / Done", "FU Provider", "Team member", "Status Corrections / Notes"],
+    inlineFields: ["PA Initiated / Done", "Assigned To", "Team member", "Status Corrections / Notes"],
+    defaultHeaders: ["Account #", "MEDICARE - Patient Name", "Current Provider", "CPT / Drug", "Future IV Appt", "Next Infusion Appt", "Assigned To", "PA Initiated / Done", "Next FU Appt", "FU Provider", "Team member", "Status Corrections / Notes"],
   },
   {
     id: "dg_osteoporosis_pas",
@@ -2069,6 +2064,36 @@ function fixDateSerialsInRow(row, dateFields) {
 
 let RECORD_CACHE = null;
 
+// DG Infusion PAs columns were renamed. Rows saved under the old names keep their data:
+// old name -> new name (and the old combined "12345: NAME" cell is split into Account # and Patient Name).
+const INF_OLD_TO_NEW = {
+  "CPT Code / Description": "CPT / Drug",
+  "next infusion appt": "Next Infusion Appt",
+  "FUTURE IV APPT AFTER 10/02/2026": "Future IV Appt",
+  "ASSIGNED TO:": "Assigned To",
+  "PRIOR AUTH INITIATED/DONE:": "PA Initiated / Done",
+  "next fu appt": "Next FU Appt",
+  "Team Member": "Team member",
+  "CORRECTIONS": "Status Corrections / Notes",
+  "Corrections / Notes": "Status Corrections / Notes",
+  "Guarantor Acct No + Name": "MEDICARE - Patient Name",
+};
+function migrateInfusionRow(d) {
+  let out = null;
+  for (const [o, n] of Object.entries(INF_OLD_TO_NEW)) {
+    if (!(o in d)) continue;
+    out = out || { ...d };
+    if (o === "Guarantor Acct No + Name") {
+      const g = String(d[o] == null ? "" : d[o]).trim();
+      const m = g.match(/^\s*(\d+)\s*:\s*([\s\S]*)$/);
+      if (!("Account #" in out)) out["Account #"] = m ? m[1] : "";
+      if (!(n in out)) out[n] = m ? m[2].trim() : g;
+    } else if (!(n in out)) out[n] = d[o];
+    delete out[o];
+  }
+  return out || d;
+}
+
 function getAllRecords(forceRefresh) {
   if (RECORD_CACHE && !forceRefresh) return RECORD_CACHE;
 
@@ -2083,7 +2108,7 @@ function getAllRecords(forceRefresh) {
       if (Store.deletedRows[uid]) continue;
       const edited = Store.editedRows[uid];
       const merged = edited ? { ...row, ...edited } : row;
-      const data = fixDateSerialsInRow(merged, cfg.dateFields);
+      const data = fixDateSerialsInRow(cfg.id === "dg_infusion_pas" ? migrateInfusionRow(merged) : merged, cfg.dateFields);
       let recDay = null;
       if (cfg.dayGroups) {
         if (!wasImp && uid.includes("#imp")) { wasImp = true; curDay = null; }
@@ -2518,7 +2543,12 @@ function commitImport(sheetId, rows, options) {
   const toAdd = [];
   let skipped = 0;
 
-  for (const row of rows) {
+  for (let row of rows) {
+    // a patient cell like "12345: SMITH, JOHN" with an empty Account # column: split it
+    if (cfg.nameField && cfg.acctField && row[cfg.nameField] && !String(row[cfg.acctField] || "").trim()) {
+      const m = String(row[cfg.nameField]).match(/^\s*(\d+)\s*:\s*([\s\S]*)$/);
+      if (m) row = { ...row, [cfg.acctField]: m[1], [cfg.nameField]: m[2].trim() };
+    }
     const identity = computeImportRowIdentity(cfg, row);
     if (options.skipDuplicates && identity && existing.has(identity)) {
       skipped++;
@@ -3615,7 +3645,7 @@ function openRecordModal(uid) {
     </div>
     <div class="modal-body">
       <div class="src-field-grid">
-        ${fields.map((f) => `<div class="src-field"><div class="k">${esc(colLabelFor(r.sheetId, f))}</div><div class="v">${esc(r.data[f])}</div></div>`).join("")}
+        ${fields.map((f) => `<div class="src-field"><div class="k">${esc(f)}</div><div class="v">${esc(r.data[f])}</div></div>`).join("")}
       </div>
       <div class="mt-4 flex gap-3" style="flex-wrap:wrap">
         ${r.identityKey ? `<a class="link-inline" href="#/patient/${encodeURIComponent(r.identityKey)}" onclick="closeModal()">View full patient profile across all tabs →</a>` : ""}
@@ -3642,7 +3672,7 @@ function openEditModal(uid, onSaved) {
       <form id="edit-form">
         ${columns.map((c) => `
           <div class="form-group">
-            <label>${esc(colLabelFor(r.sheetId, c))}</label>
+            <label>${esc(c)}</label>
             <input type="text" name="${esc(c)}" value="${esc(r.data[c] || "")}" />
           </div>
         `).join("")}
@@ -3977,7 +4007,7 @@ function dupCompareTable(g) {
   const shown = all.filter((c) => window.__dupAllCols || cls[c] !== "empty" || idCols.has(c));
   const uids = g.records.map((r) => r.uid);
   return `<div class="dup-wrap"><table class="dup-cmp" data-sheet="${esc(g.sheetId)}">
-    <thead><tr><th class="dup-act">Row</th>${shown.map((c) => `<th class="dup-${cls[c]}" data-col="${esc(c)}">${esc(colLabelFor(g.sheetId, c))}</th>`).join("")}</tr></thead>
+    <thead><tr><th class="dup-act">Row</th>${shown.map((c) => `<th class="dup-${cls[c]}" data-col="${esc(c)}">${esc(clColLabel(c))}</th>`).join("")}</tr></thead>
     <tbody>${g.records.map((r, i) => `<tr data-uid="${esc(r.uid)}">
       <td class="dup-act"><span class="dup-rowtag">#${i + 1}${r.isImported ? " · imported" : ""}</span>
         <button class="btn sm primary" data-action="keep-row" data-uid="${esc(r.uid)}" data-group="${esc(uids.join(","))}" title="Keep this row and archive the others">Keep</button>
@@ -4159,7 +4189,7 @@ function sourceRecordCard(r) {
       ${statusBadge(r.status)}
     </div>
     <div class="src-field-grid">
-      ${fields.map((f) => `<div class="src-field"><div class="k">${esc(colLabelFor(r.sheetId, f))}</div><div class="v">${esc(r.data[f])}</div></div>`).join("")}
+      ${fields.map((f) => `<div class="src-field"><div class="k">${esc(f)}</div><div class="v">${esc(r.data[f])}</div></div>`).join("")}
     </div>
   </div>`;
 }
@@ -4518,9 +4548,19 @@ function renderWizardStep() {
       // roster seed has run) — 1:1 column mapping instead of a hard crash.
       const targetHeaders = (RAW_SHEETS[importWizard.targetId] && RAW_SHEETS[importWizard.targetId].headers) || importWizard.incomingHeaders;
       importWizard.mapping = {};
+      const oldNew = importWizard.targetId === "dg_infusion_pas" ? INF_OLD_TO_NEW : {};
+      const oldNewLc = Object.fromEntries(Object.entries(oldNew).map(([o, n]) => [o.toLowerCase().trim(), n]));
+      const taken = new Set();
       for (const h of importWizard.incomingHeaders) {
         const exact = targetHeaders.find((t) => t.toLowerCase().trim() === h.toLowerCase().trim());
-        importWizard.mapping[h] = exact || "";
+        if (exact) { importWizard.mapping[h] = exact; taken.add(exact); }
+      }
+      for (const h of importWizard.incomingHeaders) {
+        if (importWizard.mapping[h]) continue;
+        const via = oldNewLc[h.toLowerCase().trim()];
+        const t = via && !taken.has(via) ? targetHeaders.find((x) => x === via) : "";
+        importWizard.mapping[h] = t || "";
+        if (t) taken.add(t);
       }
       importWizard.step = 3;
       renderWizardStep();
@@ -4804,7 +4844,6 @@ function clWith(id, fn) {
   CL.LS_LAYOUT = id === "call_list_upcoming" ? "dg_call_layout_v1" : "dg_call_layout_v1_" + id;
   try { return fn(); } finally { CALL_SHEET_ID = prev; CL.TEAM = prevTeam; CL.LAYOUT_UID = prevUid; CL.LS_LAYOUT = prevLs; }
 }
-function colLabelFor(sheetId, col) { return clWith(sheetId, () => clColLabel(col)); }
 function clUse(id) {
   CALL_SHEET_ID = id;
   CL.TEAM = clTeamField(id);
@@ -5004,9 +5043,9 @@ function clDeleteSelected(cfg) {
       renderSidebar();
     });
 }
-const CL_CORR_FIELD = "CORRECTIONS";
+const CL_CORR_FIELD = "Status Corrections / Notes";
 const CL_CORR_STATUS = "CORRECTION STATUS";
-const CL_PA_FIELD = "PRIOR AUTH INITIATED/DONE:";
+const CL_PA_FIELD = "PA Initiated / Done";
 function clIsInfusion() { return CALL_SHEET_ID === "dg_infusion_pas"; }
 function clIsGca() { return CALL_SHEET_ID === "gca"; }
 // GCA "On Infusion?" — a patient is on infusion when they appear in DG Infusion PAs.
@@ -5044,6 +5083,7 @@ function clInfusionCellHtml(r) {
 }
 function clTeamField(id) {
   const want = ASSIGN_TABS[id] || (id === "dg_osteoporosis_pas" ? "50/50 TO JP AND SU" : null);
+  if (id === "dg_infusion_pas") return "Team member";
   if (!want) return "Team Member";
   const h = ((RAW_SHEETS[id] && RAW_SHEETS[id].headers) || []).find((x) => String(x).trim().toLowerCase() === want.toLowerCase());
   return h || want;
@@ -5056,7 +5096,7 @@ function clPaKey(v) {
   if (/\bsent\b|submitted/.test(s)) return "sent";
   return "others";
 }
-function clIsWrapCol(c) { return c !== CL_CORR_STATUS && /correction|note|description|prior auth/i.test(c); }
+function clIsWrapCol(c) { return c !== CL_CORR_STATUS && /correction|note|description|drug|prior auth|pa initiated/i.test(c); }
 function clCorrBtnHtml(r) {
   const i = callInfo(r.data);
   if (!i.corr) return "";
@@ -5293,24 +5333,24 @@ function clApply(uid, patch, opts = {}) {
 // ---------------------------------------------------------------------------
 // Column layout: shared custom columns + per-browser order/width
 // ---------------------------------------------------------------------------
-function clLayoutLoad() { const l = lsGet(CL.LS_LAYOUT, {}); return { order: l.order || [], widths: l.widths || {} }; }
+function clLayoutLoad() {
+  const l = lsGet(CL.LS_LAYOUT, {});
+  let order = l.order || [], widths = l.widths || {};
+  if (CL.LAYOUT_UID === "__layout#dg_infusion_pas") {
+    // old column names -> new ones; an order saved under the old names is dropped so the new column order shows
+    if (order.some((k) => k in INF_OLD_TO_NEW)) order = [];
+    const w2 = {};
+    Object.keys(widths).forEach((k) => { w2[INF_OLD_TO_NEW[k] || k] = widths[k]; });
+    widths = w2;
+  }
+  return { order, widths };
+}
 function clLayoutSave(l) { lsSet(CL.LS_LAYOUT, l); }
 function clCustomColumns() {
   try { const c = JSON.parse(Store.editedRows[CL.LAYOUT_UID]?.columns || "[]"); return Array.isArray(c) ? c : []; } catch (e) { return []; }
 }
 function clSaveCustomColumns(cols) {
   Store.editedRows[CL.LAYOUT_UID] = { ...(Store.editedRows[CL.LAYOUT_UID] || {}), columns: JSON.stringify(cols) };
-  saveEditedRows();
-  WixBridge.save("editedRow", { uid: CL.LAYOUT_UID, patch: Store.editedRows[CL.LAYOUT_UID] });
-}
-// Renamed and deleted (hidden) columns are shared for everyone, stored with the tab's other layout settings.
-function clLayoutExtra(k, fallback) {
-  try { const v = JSON.parse(Store.editedRows[CL.LAYOUT_UID]?.[k] || ""); return v == null ? fallback : v; } catch (e) { return fallback; }
-}
-function clLabels() { const v = clLayoutExtra("labels", {}); return v && typeof v === "object" && !Array.isArray(v) ? v : {}; }
-function clHiddenCols() { const v = clLayoutExtra("hidden", []); return Array.isArray(v) ? v : []; }
-function clSaveLayoutExtra(k, val) {
-  Store.editedRows[CL.LAYOUT_UID] = { ...(Store.editedRows[CL.LAYOUT_UID] || {}), [k]: JSON.stringify(val) };
   saveEditedRows();
   WixBridge.save("editedRow", { uid: CL.LAYOUT_UID, patch: Store.editedRows[CL.LAYOUT_UID] });
 }
@@ -5329,16 +5369,14 @@ function clColumns(cfg) {
   if (clIsGca()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti, 0, "__infusion"); else all.push("__infusion"); }
   if (clIsCallList() && !all.includes(CL.ACTION)) all.push(CL.ACTION);
   clCustomColumns().forEach((c) => { if (!all.includes(c.name)) all.push(c.name); });
-  if (clIsInfusion() || clIsAssignTab() || clIsOsteo()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else if (!(clIsGeneric() && cfg.isReference)) all.push("__status");
+  if (clIsInfusion()) { /* DG Infusion PAs shows exactly its own columns; Assigned/Unassigned is tracked by the cards and the status filter */ } else if (clIsAssignTab() || clIsOsteo()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else if (!(clIsGeneric() && cfg.isReference)) all.push("__status");
   if (cfg.leadTeam) { const lead = [CL.TEAM, "__status"].filter((k) => all.includes(k)); all = lead.concat(all.filter((k) => !lead.includes(k))); }
-  { const hid = new Set(clHiddenCols()); if (hid.size) all = all.filter((k) => !hid.has(k)); }
   const out = [];
   clLayoutLoad().order.forEach((k) => { if (all.includes(k) && !out.includes(k)) out.push(k); });
   all.forEach((k) => { if (!out.includes(k)) out.push(k); });
   return out;
 }
-function clBaseLabel(col) { return col === "__status" ? "Status" : col === "__infusion" ? "On Infusion?" : col; }
-function clColLabel(col) { return clLabels()[col] || clBaseLabel(col); }
+function clColLabel(col) { return col === "__status" ? "Status" : col === "__infusion" ? "On Infusion?" : col; }
 function clDefaultWidth(cfg, col) {
   if (col === "__infusion") return 125;
   if (clIsDays()) {
@@ -5401,9 +5439,12 @@ function clDefaultWidth(cfg, col) {
   if (clIsInfusion()) {
     if (col === "__status") return 130;
     if (/correction/i.test(col)) return 340;
-    if (/cpt|description/i.test(col)) return 240;
-    if (/prior auth/i.test(col)) return 220;
-    if (/appt/i.test(col)) return 170;
+    if (/cpt|description|drug/i.test(col)) return 240;
+    if (/prior auth|pa initiated/i.test(col)) return 220;
+    if (col === cfg.acctField) return 110;
+    if (col === cfg.nameField) return 220;
+    if (/provider/i.test(col)) return 150;
+    if (/appt/i.test(col)) return 175;
     if (col === CL.TEAM) return 150;
   }
   if (col === "__status") return 175;
@@ -5657,7 +5698,6 @@ function renderCallListPage(cfg) {
       </select>
       <button class="btn sm ghost" id="cl-reset" title="Clear search, filters and sorting">${resetIconSvg()} Reset</button>
       <button class="btn sm" id="cl-add-col" title="Add an editable column">${plusIconSvg()} Add Column</button>
-      <button class="btn sm" id="cl-hidden-cols" style="display:none" title="Bring back columns you deleted"></button>
  <label class="cl-selall" title="Select every record that matches the current filters"><input type="checkbox" id="cl-selall" /> Select all</label>
  <button class="btn sm danger" id="cl-del-sel" disabled title="Delete the selected records">${trashIconSvg()} Delete selected<span class="cl-del-n"></span></button>
       ${clIsDays() ? `<button class="btn sm" id="cl-setday" title="Move the ticked patients to a clinic day">Set Clinic Day</button>` : ""}
@@ -5802,17 +5842,9 @@ function clRefreshRow(uid) {
  if (clIsInfusion()) { clRefreshCorr(tr, r); tr.querySelectorAll("textarea.cl-wrap-input").forEach(clGrow); }
 }
 
-function clRefreshHiddenBtn() {
-  const hb = document.getElementById("cl-hidden-cols");
-  if (!hb) return;
-  const n = clHiddenCols().length;
-  hb.style.display = n ? "" : "none";
-  hb.textContent = `Hidden columns (${n})`;
-}
 function clRenderTable(cfg) {
   const region = document.getElementById("cl-table-region");
   if (!region) return;
-  clRefreshHiddenBtn();
   const cols = clColumns(cfg);
   const customNames = new Set(clCustomColumns().map((c) => c.name));
   const everything = clRecords();
@@ -5832,7 +5864,7 @@ function clRenderTable(cfg) {
   const teams = [...new Set([...(clIsOsteo() ? ["JP", "SU", "Cancelled"] : []), ...(clAssignMeta() ? clAssignMeta().suggest : []), ...everything.map((r) => String(r.data[CL.TEAM] || "").trim()).filter(Boolean)])].sort();
 
   const th = (c) => `<th data-col="${esc(c)}" draggable="true" title="Drag to reorder · drag the edge to resize · click to sort">
-      <span class="cl-th-label">${esc(clColLabel(c))}</span>${clIsGca() && c === CL.TEAM ? '<span class="cl-th-note">If not on Infusion, refer to PUTZ</span>' : ""}${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}<span class="cl-th-tools"><button type="button" class="cl-col-edit" data-rename-col="${esc(c)}" title="Rename this column" aria-label="Rename column ${esc(clColLabel(c))}">&#9998;</button><button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Delete this column" aria-label="Delete column ${esc(clColLabel(c))}">×</button></span>
+      <span class="cl-th-label">${esc(clColLabel(c))}</span>${clIsGca() && c === CL.TEAM ? '<span class="cl-th-note">If not on Infusion, refer to PUTZ</span>' : ""}${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}${customNames.has(c) ? `<button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Remove this column" aria-label="Remove column ${esc(c)}">×</button>` : ""}
       <span class="cl-resize" data-col="${esc(c)}" role="separator" aria-orientation="vertical" aria-label="Resize ${esc(clColLabel(c))} column"></span>
     </th>`;
 
@@ -5906,7 +5938,6 @@ function wireCallListPage(cfg) {
     toast("Filters and sorting reset");
   });
   document.getElementById("cl-add-col").addEventListener("click", () => clOpenAddColumnModal(cfg));
-  document.getElementById("cl-hidden-cols").addEventListener("click", () => clOpenHiddenColumnsModal(cfg));
   document.getElementById("btn-completion-criteria")?.addEventListener("click", () => openCompletionCriteriaModal(cfg));
  document.getElementById("cl-selall").addEventListener("change", (e) => clSelectAll(cfg, e.target.checked));
  document.getElementById("cl-del-sel").addEventListener("click", () => clDeleteSelected(cfg));
@@ -5948,28 +5979,15 @@ function wireCallListPage(cfg) {
     const t = e.target;
     const pager = t.closest(".pager-btns button[data-page]");
     if (pager) { clState.page = +pager.dataset.page; clRenderTable(cfg); return; }
-    const rn = t.closest("[data-rename-col]");
-    if (rn) { clOpenRenameColumnModal(cfg, rn.dataset.renameCol); return; }
     const rm = t.closest("[data-remove-col]");
     if (rm) {
       const name = rm.dataset.removeCol;
-      const label = clColLabel(name);
-      if (clCustomColumns().some((c) => c.name === name)) {
-        confirmDialog("Delete this column?", `"${label}" will be removed for everyone. Values already typed into it stay saved in the records.`, () => {
-          clSaveCustomColumns(clCustomColumns().filter((c) => c.name !== name));
-          if (clLabels()[name]) { const l = clLabels(); delete l[name]; clSaveLayoutExtra("labels", l); }
-          logChange({ sheetId: cfg.id, action: "column", summary: `Deleted column "${label}" from ${cfg.label}` });
-          toast("Column deleted");
-          clRenderTable(cfg);
-        }, { okLabel: "Delete column" });
-      } else {
-        confirmDialog("Delete this column?", `"${label}" will be removed from this tab for everyone. The data is not lost, and you can bring the column back any time from "Hidden columns".`, () => {
-          clSaveLayoutExtra("hidden", [...new Set([...clHiddenCols(), name])]);
-          logChange({ sheetId: cfg.id, action: "column", summary: `Deleted column "${label}" from ${cfg.label}` });
-          toast("Column deleted");
-          clRenderTable(cfg);
-        }, { okLabel: "Delete column" });
-      }
+      confirmDialog("Remove this column?", `"${name}" will be hidden for everyone. Values already typed into it stay saved in the records.`, () => {
+        clSaveCustomColumns(clCustomColumns().filter((c) => c.name !== name));
+        logChange({ sheetId: cfg.id, action: "column", summary: `Removed column "${name}" from ${cfg.label}` });
+        toast("Column removed");
+        clRenderTable(cfg);
+      });
       return;
     }
     if (t.closest(".cl-resize")) return;
@@ -6118,7 +6136,7 @@ function clExport(cfg) {
   const cols = clColumns(cfg).filter((c) => c !== "__status");
   const rows = clFilteredRows(cfg).map((r) => {
     const o = {};
-    cols.forEach((c) => { if (c === "__infusion") o[clColLabel(c)] = gcaOnInfusion(r) ? "Yes" : "No"; else o[clColLabel(c)] = c === CL.ACTION ? callPill(r.data).label : r.data[c] || ""; });
+    cols.forEach((c) => { if (c === "__infusion") o["On Infusion?"] = gcaOnInfusion(r) ? "Yes" : "No"; else o[c] = c === CL.ACTION ? callPill(r.data).label : r.data[c] || ""; });
     o["Status"] = clIsGeneric() ? ((STATUS_META[r.status] || {}).label || "") : clAssignSt(r.data).label;
     const rm = callReminder(r.data);
     if (clIsInfusion()) o["Correction Status"] = clCorrLabel(r.data);
@@ -6130,77 +6148,6 @@ function clExport(cfg) {
   XLSX.utils.book_append_sheet(wb, ws, cfg.label.slice(0, 31));
   XLSX.writeFile(wb, `${cfg.label.replace(/[^\w\- ]/g, "")}.xlsx`);
   toast(`Exported ${fmtNum(rows.length)} record${rows.length === 1 ? "" : "s"} (current filters and column order)`);
-}
-
-// ---------------------------------------------------------------------------
-// Rename / restore columns
-// ---------------------------------------------------------------------------
-function clOpenRenameColumnModal(cfg, col) {
-  const cur = clColLabel(col), base = clBaseLabel(col);
-  const modal = openModal(`
-    <div class="modal-header"><div><h3>Rename column</h3><p>Changes the name shown for everyone in ${esc(cfg.label)}. The data in the column is not touched.</p></div></div>
-    <div class="modal-body">
-      <div class="form-group"><label for="cl-rn-name">Column name</label><input type="text" id="cl-rn-name" maxlength="40" autocomplete="off" value="${esc(cur)}" /></div>
-      ${cur !== base ? `<p class="form-hint">Original name: <strong>${esc(base)}</strong></p>` : ""}
-      <p class="form-hint" id="cl-rn-err" role="alert"></p>
-    </div>
-    <div class="modal-footer">
-      <button class="btn" id="cl-rn-cancel">Cancel</button>
-      ${cur !== base ? `<button class="btn" id="cl-rn-reset">Use original name</button>` : ""}
-      <button class="btn primary" id="cl-rn-save">Save name</button>
-    </div>`);
-  const nameEl = modal.querySelector("#cl-rn-name");
-  const err = modal.querySelector("#cl-rn-err");
-  nameEl.focus(); nameEl.select();
-  const apply = (name) => {
-    const l = clLabels();
-    if (!name || name === base) delete l[col]; else l[col] = name;
-    clSaveLayoutExtra("labels", l);
-    logChange({ sheetId: cfg.id, action: "column", summary: `Renamed column "${cur}" to "${name || base}" in ${cfg.label}` });
-    toast(`Column renamed to "${name || base}"`);
-    closeModal();
-    clRenderTable(cfg);
-  };
-  const save = () => {
-    const name = nameEl.value.trim().replace(/\s+/g, " ");
-    let msg = "";
-    const others = clColumns(cfg).filter((c) => c !== col).map((c) => clColLabel(c).toLowerCase());
-    if (!name) msg = "Give the column a name.";
-    else if (name.startsWith("__")) msg = "Column names can't start with two underscores.";
-    else if (others.includes(name.toLowerCase()) || name.toLowerCase() === "actions") msg = `Another column is already called "${name}".`;
-    if (msg) { err.textContent = msg; err.classList.add("cl-err"); nameEl.focus(); return; }
-    if (name === cur) { closeModal(); return; }
-    apply(name);
-  };
-  modal.querySelector("#cl-rn-cancel").addEventListener("click", closeModal);
-  modal.querySelector("#cl-rn-reset")?.addEventListener("click", () => apply(""));
-  modal.querySelector("#cl-rn-save").addEventListener("click", save);
-  nameEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); save(); } });
-}
-function clOpenHiddenColumnsModal(cfg) {
-  const hidden = clHiddenCols();
-  if (!hidden.length) return;
-  const modal = openModal(`
-    <div class="modal-header"><div><h3>Hidden columns</h3><p>Columns you deleted from ${esc(cfg.label)}. Their data is still saved.</p></div></div>
-    <div class="modal-body">
-      ${hidden.map((h) => `<div class="flex justify-between items-center" style="padding:6px 0;border-bottom:1px solid var(--border-subtle)"><span>${esc(clColLabel(h))}</span><button class="btn sm" data-restore-col="${esc(h)}">Bring back</button></div>`).join("")}
-    </div>
-    <div class="modal-footer"><button class="btn" id="cl-hc-close">Close</button>${hidden.length > 1 ? `<button class="btn primary" id="cl-hc-all">Bring back all</button>` : ""}</div>`);
-  const done = () => { closeModal(); clRenderTable(cfg); if (clHiddenCols().length) clOpenHiddenColumnsModal(cfg); };
-  modal.querySelectorAll("[data-restore-col]").forEach((b) => b.addEventListener("click", () => {
-    const k = b.dataset.restoreCol;
-    clSaveLayoutExtra("hidden", clHiddenCols().filter((x) => x !== k));
-    logChange({ sheetId: cfg.id, action: "column", summary: `Brought back column "${clColLabel(k)}" in ${cfg.label}` });
-    toast(`Brought back "${clColLabel(k)}"`);
-    done();
-  }));
-  modal.querySelector("#cl-hc-close").addEventListener("click", closeModal);
-  modal.querySelector("#cl-hc-all")?.addEventListener("click", () => {
-    clSaveLayoutExtra("hidden", []);
-    logChange({ sheetId: cfg.id, action: "column", summary: `Brought back all hidden columns in ${cfg.label}` });
-    toast("All columns are back");
-    closeModal(); clRenderTable(cfg);
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -6223,7 +6170,7 @@ function clOpenAddColumnModal(cfg) {
   modal.querySelector("#cl-newcol-cancel").addEventListener("click", closeModal);
   const save = () => {
     const name = nameEl.value.trim().replace(/\s+/g, " ");
-    const existing = [...clColumns(cfg).map(clColLabel), ...(RAW_SHEETS[cfg.id]?.headers || []), ...clHiddenCols().map(clColLabel), "Actions", "Status", CL.ATTEMPT, CL.NOTE, CL.RESCHED, CL.REMIND].map((s) => s.toLowerCase());
+    const existing = [...clColumns(cfg).map(clColLabel), ...(RAW_SHEETS[cfg.id]?.headers || []), "Actions", "Status", CL.ATTEMPT, CL.NOTE, CL.RESCHED, CL.REMIND].map((s) => s.toLowerCase());
     let msg = "";
     if (!name) msg = "Give the column a name.";
     else if (existing.includes(name.toLowerCase())) msg = `A column named "${name}" already exists.`;
