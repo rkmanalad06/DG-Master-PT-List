@@ -1364,9 +1364,9 @@ const SHEET_CONFIG = [
     acctField: "Account #",
     dateFields: ["Future IV Appt", "Next Infusion Appt", "Next FU Appt"],
     completion: { field: "PA Initiated / Done", mode: "nonblank", label: "PA initiated/done is filled in" },
-    searchFields: ["Account #", "MEDICARE - Patient Name", "Current Provider", "CPT / Drug", "Assigned To", "PA Initiated / Done", "FU Provider", "Team member", "Status Corrections / Notes"],
-    inlineFields: ["PA Initiated / Done", "Assigned To", "Team member", "Status Corrections / Notes"],
-    defaultHeaders: ["Account #", "MEDICARE - Patient Name", "Current Provider", "CPT / Drug", "Future IV Appt", "Next Infusion Appt", "Assigned To", "PA Initiated / Done", "Next FU Appt", "FU Provider", "Team member", "Status Corrections / Notes"],
+    searchFields: ["Account #", "MEDICARE - Patient Name", "Current Provider", "CPT / Drug", "Assigned To", "PA Initiated / Done", "FU Provider", "Team member", "Corrections / Notes"],
+    inlineFields: ["PA Initiated / Done", "Assigned To", "Team member", "Corrections / Notes"],
+    defaultHeaders: ["Account #", "MEDICARE - Patient Name", "Current Provider", "CPT / Drug", "Future IV Appt", "Next Infusion Appt", "Assigned To", "PA Initiated / Done", "Next FU Appt", "FU Provider", "Team member", "Corrections / Notes"],
   },
   {
     id: "dg_osteoporosis_pas",
@@ -2074,8 +2074,8 @@ const INF_OLD_TO_NEW = {
   "PRIOR AUTH INITIATED/DONE:": "PA Initiated / Done",
   "next fu appt": "Next FU Appt",
   "Team Member": "Team member",
-  "CORRECTIONS": "Status Corrections / Notes",
-  "Corrections / Notes": "Status Corrections / Notes",
+  "CORRECTIONS": "Corrections / Notes",
+  "Status Corrections / Notes": "Corrections / Notes",
   "Guarantor Acct No + Name": "MEDICARE - Patient Name",
 };
 function migrateInfusionRow(d) {
@@ -5043,7 +5043,7 @@ function clDeleteSelected(cfg) {
       renderSidebar();
     });
 }
-const CL_CORR_FIELD = "Status Corrections / Notes";
+const CL_CORR_FIELD = "Corrections / Notes";
 const CL_CORR_STATUS = "CORRECTION STATUS";
 const CL_PA_FIELD = "PA Initiated / Done";
 function clIsInfusion() { return CALL_SHEET_ID === "dg_infusion_pas"; }
@@ -5369,7 +5369,7 @@ function clColumns(cfg) {
   if (clIsGca()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti, 0, "__infusion"); else all.push("__infusion"); }
   if (clIsCallList() && !all.includes(CL.ACTION)) all.push(CL.ACTION);
   clCustomColumns().forEach((c) => { if (!all.includes(c.name)) all.push(c.name); });
-  if (clIsInfusion()) { /* DG Infusion PAs shows exactly its own columns; Assigned/Unassigned is tracked by the cards and the status filter */ } else if (clIsAssignTab() || clIsOsteo()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else if (!(clIsGeneric() && cfg.isReference)) all.push("__status");
+  if (clIsAssignTab() || clIsOsteo() || clIsInfusion()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else if (!(clIsGeneric() && cfg.isReference)) all.push("__status");
   if (cfg.leadTeam) { const lead = [CL.TEAM, "__status"].filter((k) => all.includes(k)); all = lead.concat(all.filter((k) => !lead.includes(k))); }
   const out = [];
   clLayoutLoad().order.forEach((k) => { if (all.includes(k) && !out.includes(k)) out.push(k); });
