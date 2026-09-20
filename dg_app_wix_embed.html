@@ -1480,9 +1480,10 @@ const SHEET_CONFIG = [
     dobField: "DOB",
     phoneField: "Home Phone",
     dateFields: ["DOB"],
-    completion: { field: "REFER TO USMANI AND APPS", mode: "flag-blank-is-complete", label: "No open referral flag" },
-    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+    completion: { field: "REFER TO USMANI AND APPS", mode: "nonblank", label: "REFER TO USMANI AND APPS is Yes" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone", "REFER TO USMANI AND APPS"],
     inlineFields: ["REFER TO USMANI AND APPS"],
+    defaultHeaders: ["Patient Name", "DOB", "Sex", "Age", "Home Phone", "Acc #", "REFER TO USMANI AND APPS"],
   },
   {
     id: "polymyositis",
@@ -1495,9 +1496,10 @@ const SHEET_CONFIG = [
     dobField: "DOB",
     phoneField: "Home Phone",
     dateFields: ["DOB"],
-    completion: { field: "REFER TO USMANI", mode: "flag-blank-is-complete", label: "No open referral flag" },
-    searchFields: ["Patient Name", "Acc #", "Home Phone"],
+    completion: { field: "REFER TO USMANI", mode: "nonblank", label: "REFER TO USMANI is filled in" },
+    searchFields: ["Patient Name", "Acc #", "Home Phone", "REFER TO USMANI"],
     inlineFields: ["REFER TO USMANI"],
+    defaultHeaders: ["Patient Name", "DOB", "Sex", "Age", "Home Phone", "Acc #", "REFER TO USMANI"],
   },
   {
     id: "osteoporosis",
@@ -4230,7 +4232,20 @@ let CALL_SHEET_ID = "call_list_upcoming";
 let clLastSheet = "call_list_upcoming";
 function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming" || id === "dg_infusion_pas" || !!ASSIGN_TABS[id] || id === "dg_osteoporosis_pas"; }
 // Tabs whose Status is simply Assigned (data in the column) / Unassigned (blank). Value = the assignment column.
-const ASSIGN_TABS = { dg_pharmacy: "Assigned To", ra: "Assigned to", seronegative_ra: "Assigned to", psoriatic_arthritis: "Assigned to", psoriasis: "Assigned to", pmr: "Assigned to", gca: "Assigned to" };
+const ASSIGN_TABS = { dg_pharmacy: "Assigned To", ra: "Assigned to", seronegative_ra: "Assigned to", psoriatic_arthritis: "Assigned to", psoriasis: "Assigned to", pmr: "Assigned to", gca: "Assigned to", pseudogout: "REFER TO USMANI AND APPS", polymyositis: "REFER TO USMANI" };
+// Tabs whose "assigned" state is a referral column. yes = only a Yes counts (blank/No = Unassigned).
+const ASSIGN_META = {
+  pseudogout: { yes: true, label: "Referred to Usmani and Apps", short: "referred", suggest: ["Yes", "No"],
+    desc: "Enter Yes in REFER TO USMANI AND APPS for each patient referred. Status: Assigned when Yes; Unassigned when blank or No." },
+  polymyositis: { yes: false, label: "Referred to Usmani", short: "referred", suggest: [],
+    desc: "Enter data in REFER TO USMANI for each patient referred. Status: Assigned once it has data; Unassigned while blank." },
+};
+function clAssignMeta() { return ASSIGN_META[CALL_SHEET_ID] || null; }
+function clIsAssignedVal(v) {
+  const t = String(v || "").trim();
+  const M = clAssignMeta();
+  return M && M.yes ? /^y(es)?\b/i.test(t) : !!t;
+}
 function clIsAssignTab() { return !!ASSIGN_TABS[CALL_SHEET_ID]; }
 function clIsOsteo() { return CALL_SHEET_ID === "dg_osteoporosis_pas"; }
 // ---- DG Osteoporosis PAs: status comes from the "50/50 TO JP AND SU" column ----
@@ -4598,7 +4613,7 @@ function callInfo(data) {
     return { key: a.key, label: a.label, done: cancelled || assigned, days, flagged, assigned, cancelled, paPending, scheduled: false, status };
   }
   if (clIsAssignTab()) {
-    const assigned = !!String(data[CL.TEAM] || "").trim();
+    const assigned = clIsAssignedVal(data[CL.TEAM]);
     return { key: "none", done: assigned, days: null, flagged: false, assigned, scheduled: false, status: assigned ? "t-assigned" : "t-unassigned" };
   }
   if (clIsInfusion()) {
@@ -4741,6 +4756,7 @@ function clColLabel(col) { return col === "__status" ? "Status" : col === "__inf
 function clDefaultWidth(cfg, col) {
   if (col === "__infusion") return 125;
   if (clIsGca() && col === CL.TEAM) return 230;
+  if (clAssignMeta() && col === CL.TEAM) return clAssignMeta().yes ? 220 : 170;
   if (clIsOsteo()) {
     if (col === "__status") return 180;
     if (col === cfg.nameField) return 180;
@@ -4842,12 +4858,13 @@ function clAssignKpiHtml() {
     return `<button type="button" class="cl-stat cl-tone-${t.tone}" data-cl-status="${t.key}" aria-pressed="${t.key !== "" && clState.statusFilter === t.key}" title="${esc(t.sub)}">${inner(t, p)}</button>`;
   };
   const comp = pctOf(assigned);
-  const completion = { tone: "violet", label: "Completion", big: comp + "%", sub: `${fmtNum(assigned)} of ${fmtNum(total)} assigned` };
+  const M = clAssignMeta();
+  const completion = { tone: "violet", label: "Completion", big: comp + "%", sub: `${fmtNum(assigned)} of ${fmtNum(total)} ${M ? M.short : "assigned"}` };
   return `<div class="cl-stats cl-stats-4" role="group" aria-label="Patient summary">
     ${filterTile({ key: "", tone: "gray", label: "Total Patients", n: total, sub: "All patients in " + SHEET_BY_ID[CALL_SHEET_ID].label, nopct: true })}
-    ${filterTile({ key: "assigned", tone: "green", label: "Assigned", n: assigned, sub: "Has data in " + CL.TEAM })}
-    ${filterTile({ key: "pending", tone: "red", label: "Unassigned", n: pending, sub: CL.TEAM + " is blank" })}
-    <div class="cl-stat cl-stat-static cl-tone-${completion.tone}" role="group" aria-label="Completion" title="Completion = Assigned ÷ (Assigned + Unassigned)">${inner(completion, comp)}</div>
+    ${filterTile({ key: "assigned", tone: "green", label: M ? M.label : "Assigned", n: assigned, sub: M && M.yes ? CL.TEAM + " is Yes" : "Has data in " + CL.TEAM })}
+    ${filterTile({ key: "pending", tone: "red", label: "Unassigned", n: pending, sub: M && M.yes ? CL.TEAM + " is blank or No" : CL.TEAM + " is blank" })}
+    <div class="cl-stat cl-stat-static cl-tone-${completion.tone}" role="group" aria-label="Completion" title="Completion = ${M ? esc(M.label) : "Assigned"} ÷ (${M ? esc(M.label) : "Assigned"} + Unassigned)">${inner(completion, comp)}</div>
   </div>`;
 }
 function clGenericKpiHtml() {
@@ -4955,7 +4972,7 @@ function renderCallListPage(cfg) {
     <div class="page-header">
       <div>
         <div class="page-title">${esc(cfg.label)}</div>
-        <div class="page-subtitle">${clIsGeneric() ? esc(sheetDescription(cfg)) : clIsOsteo() ? "Type JP or SU (or Justin / Putz, Sabahat / Usmani) in 50/50 TO JP AND SU to assign, or Cancelled to cancel. Unassigned patients with an appointment within 7 days are flagged Needs Attention." : clIsAssignTab() ? `Enter a name in ${CL.TEAM} for each patient. Status follows ${CL.TEAM}: Assigned once someone is entered, Unassigned while it is blank.` : clIsInfusion() ? "Assign each authorization to a Team Member. Status follows Team Member (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
+        <div class="page-subtitle">${clIsGeneric() ? esc(sheetDescription(cfg)) : clIsOsteo() ? "Type JP or SU (or Justin / Putz, Sabahat / Usmani) in 50/50 TO JP AND SU to assign, or Cancelled to cancel. Unassigned patients with an appointment within 7 days are flagged Needs Attention." : clIsAssignTab() ? (clAssignMeta() ? clAssignMeta().desc : `Enter a name in ${CL.TEAM} for each patient. Status follows ${CL.TEAM}: Assigned once someone is entered, Unassigned while it is blank.`) : clIsInfusion() ? "Assign each authorization to a Team Member. Status follows Team Member (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
       </div>
       <div class="page-header-actions">
         ${clIsGeneric() && !cfg.isReference ? `<button class="btn" id="btn-completion-criteria">${gearIconSvg()} Completion Criteria</button>` : ""}
@@ -5134,7 +5151,7 @@ function clRenderTable(cfg) {
 
   const widths = cols.map((c) => clWidth(cfg, c));
   const tableW = widths.reduce((a, b) => a + b, 0) + CL_ACTIONS_COL_W + CL_SEL_COL_W;
-  const teams = [...new Set([...(clIsOsteo() ? ["JP", "SU", "Cancelled"] : []), ...everything.map((r) => String(r.data[CL.TEAM] || "").trim()).filter(Boolean)])].sort();
+  const teams = [...new Set([...(clIsOsteo() ? ["JP", "SU", "Cancelled"] : []), ...(clAssignMeta() ? clAssignMeta().suggest : []), ...everything.map((r) => String(r.data[CL.TEAM] || "").trim()).filter(Boolean)])].sort();
 
   const th = (c) => `<th data-col="${esc(c)}" draggable="true" title="Drag to reorder · drag the edge to resize · click to sort">
       <span class="cl-th-label">${esc(clColLabel(c))}</span>${clIsGca() && c === CL.TEAM ? '<span class="cl-th-note">If not on Infusion, refer to PUTZ</span>' : ""}${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}${customNames.has(c) ? `<button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Remove this column" aria-label="Remove column ${esc(c)}">×</button>` : ""}
