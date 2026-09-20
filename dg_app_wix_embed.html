@@ -1015,6 +1015,14 @@ table.cl-table tbody tr.cl-hl td input.inline-edit-input, table.cl-table tbody t
 table.cl-table tbody tr.cl-hl td:first-child { box-shadow: inset 4px 0 0 var(--hl-bar); }
 table.cl-table tbody tr.cl-hl:hover td { filter: brightness(.96); }
 table.cl-table tbody tr.cl-hl.cl-row-sel td { background: var(--accent-soft, #f3dde0); }
+table.cl-table tbody tr.cl-hlbar { --hlb: #d9480f; }
+table.cl-table tbody tr.cl-hlbar-red { --hlb: #d92d20; }
+table.cl-table tbody tr.cl-hlbar-yellow { --hlb: #c79a00; }
+table.cl-table tbody tr.cl-hlbar-green { --hlb: #1a8f4c; }
+table.cl-table tbody tr.cl-hlbar-blue { --hlb: #2a62d6; }
+table.cl-table tbody tr.cl-hlbar-violet { --hlb: #7a4bd6; }
+table.cl-table tbody tr.cl-hlbar-gray { --hlb: #667085; }
+table.cl-table tbody tr.cl-hlbar td:first-child { box-shadow: inset 4px 0 0 var(--hlb); }
 .cl-auto-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: #ffe7a8; color: #7a4b00; }
 .cl-month-chip { display: inline-block; font-size: 12.5px; font-weight: 600; padding: 2px 10px; border-radius: 999px; background: var(--ink-100, #eef0f4); color: var(--text-secondary); white-space: nowrap; }
 .cl-note { display: block; width: 100%; box-sizing: border-box; margin: 0 0 14px; padding: 9px 12px; font: inherit; font-size: 13px; line-height: 1.4; color: #5c4300; background: #fff8d6; border: 1px solid #efd766; border-radius: 8px; resize: vertical; min-height: 38px; }
@@ -4796,8 +4804,8 @@ const ASSIGN_META = {
 function clAssignMeta() { return ASSIGN_META[CALL_SHEET_ID] || null; }
 function clIsPsa() { return CALL_SHEET_ID === "psa_and_psoriasis"; }
 function clIsDays() { return !!(SHEET_BY_ID[CALL_SHEET_ID] && SHEET_BY_ID[CALL_SHEET_ID].dayGroups); }
-function clIsDexaCol(c) { return clIsDays() && /^dexa/i.test(String(c)); }
-function clDexaYes(v) { return /^\s*y(es)?\b/i.test(String(v || "")); }
+function clIsDexaCol(c) { const t = String(c).trim().toLowerCase(); return clIsDays() && biList("dexa", "col").some((w) => t.startsWith(w)); }
+function clDexaYes(v) { return biMatch("dexa", "yes", "lead", v); }
 // Clinic month & year (e.g. "October 2026"), worked out from a date column. Built in for DG Osteoporosis PAs (NEXT APPT);
 // the Admin page can point any tab at any date column, or switch it off.
 const CL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -4913,7 +4921,7 @@ function clRowsHtml(cfg, pageRows, cols, allRows) {
 }
 // Aetna: the current insurance field mentions Aetna.
 function psaAetna(data) {
-  return Object.keys(data || {}).some((k) => /insurance/i.test(k) && String(data[k] || "").toLowerCase().includes("aetna"));
+  return Object.keys(data || {}).some((k) => /insurance/i.test(k) && biMatch("psa", "aetna", "has", data[k]));
 }
 const PSA_NOTE_DEFAULT = "Note: also have them Stelara and Aetna in yellow sticky in the chart.";
 function psaNote() {
@@ -4933,7 +4941,7 @@ function psaWho(v) {
 // High priority: the Priority column says High (or Urgent / ASAP).
 function psaHigh(data) {
   const k = Object.keys(data || {}).find((x) => /priority/i.test(x));
-  return !!k && /high|urgent|asap/i.test(String(data[k] || ""));
+  return !!k && biMatch("psa", "priority", "has", data[k]);
 }
 function cfgHides(cfg, h) {
   const k = String(h).trim().toLowerCase();
@@ -4955,8 +4963,8 @@ function opAssign(raw) {
   const s = String(raw || "").trim();
   if (!s) return { key: "none", label: "" };
   const l = s.toLowerCase();
-  if (/cancel/.test(l)) return { key: "cancelled", label: "Cancelled" };
-  const jp = /\b(jp|justin|putz)\b/.test(l), su = /\b(su|sabahat|usmani)\b/.test(l);
+  if (biMatch("osteo", "cancel", "has", l)) return { key: "cancelled", label: "Cancelled" };
+  const jp = biMatch("osteo", "jp", "word", l), su = biMatch("osteo", "su", "word", l);
   if (jp && su) return { key: "both", label: "JP & SU" };
   if (jp) return { key: "jp", label: "JP" };
   if (su) return { key: "su", label: "SU" };
@@ -5185,10 +5193,12 @@ function clIsGca() { return CALL_SHEET_ID === "gca"; }
 let INF_IDX = { cache: null, byAcct: new Set(), byName: new Map() };
 function infusionIndex() {
   const recs = getAllRecords();
-  if (INF_IDX.cache === recs) return INF_IDX;
+  const tabs = gcaTabs();
+  const sig = tabs.join(",");
+  if (INF_IDX.cache === recs && INF_IDX.sig === sig) return INF_IDX;
   const byAcct = new Set(), byName = new Map();
   recs.forEach((r) => {
-    if (!isInfusionId(r.sheetId)) return;
+    if (!tabs.includes(r.sheetId)) return;
     if (r.acct) byAcct.add(r.acct);
     const nm = r.weakKey ? r.weakKey.slice(2) : "";
     if (!nm) return;
@@ -5197,7 +5207,7 @@ function infusionIndex() {
     if (!byName.has(nm)) byName.set(nm, []);
     byName.get(nm).push(entry);
   });
-  INF_IDX = { cache: recs, byAcct, byName };
+  INF_IDX = { cache: recs, sig, byAcct, byName };
   return INF_IDX;
 }
 function gcaOnInfusion(r) {
@@ -5226,11 +5236,11 @@ function clTeamField(id) {
   return clTeamFieldBase(id);
 }
 function clPaKey(v) {
-  const s = String(v || "").trim().toLowerCase();
+  const s = String(v || "").trim();
   if (!s) return "";
-  if (/re-?submit/.test(s)) return "resubmit";
-  if (/approv/.test(s)) return "approved";
-  if (/\bsent\b|submitted/.test(s)) return "sent";
+  if (biMatch("pa", "resubmit", "start", s)) return "resubmit";
+  if (biMatch("pa", "approved", "start", s)) return "approved";
+  if (biMatch("pa", "sent", "start", s)) return "sent";
   return "others";
 }
 function clIsWrapCol(c) { return c !== CL_CORR_STATUS && /correction|note|description|drug|prior auth|pa initiated/i.test(c); }
@@ -5323,10 +5333,10 @@ const clState = { search: "", statusFilter: "", remindFilter: "", sort: null, pa
 function callActionKey(raw) {
   const v = String(raw || "").trim().toLowerCase();
   if (!v) return "call";
-  if (v.includes("confirm")) return "confirmed";
-  if (v.includes("refus")) return "refused";
-  if (v.includes("resched")) return "resched";
-  if (v.includes("progress")) return "progress";
+  if (biMatch("call", "confirmed", "has", v)) return "confirmed";
+  if (biMatch("call", "refused", "has", v)) return "refused";
+  if (biMatch("call", "resched", "has", v)) return "resched";
+  if (biMatch("call", "progress", "has", v)) return "progress";
   return "call";
 }
 function clToday() { const t = new Date(); t.setHours(0, 0, 0, 0); return t; }
@@ -5368,7 +5378,7 @@ function callInfo(data) {
     const auto = own ? "" : acAutoText(data);
     const corrText = own || auto;
     const cst = String(data[CL_CORR_STATUS] || "").trim().toLowerCase();
-    const corr = corrText ? (/not.?resolved|unresolved/.test(cst) ? "notresolved" : cst.includes("resolved") ? "resolved" : cst.includes("progress") ? "progress" : "pending") : "";
+    const corr = corrText ? (biMatch("corr", "notresolved", "has", cst) ? "notresolved" : biMatch("corr", "resolved", "has", cst) ? "resolved" : biMatch("corr", "progress", "has", cst) ? "progress" : "pending") : "";
     return { key: clPaKey(data[CL_PA_FIELD]) || "none", done: false, days: null, flagged: false, assigned, scheduled: false, corr, auto, status: assigned ? "t-assigned" : "t-unassigned" };
   }
   if (clIsTransition()) {
@@ -5937,9 +5947,8 @@ function clActionCellHtml(r) {
   </div>`;
 }
 function clRowClass(r) {
-  const info = callInfo(r.data);
-  const hl = acRowHl(r.data);
-  return (hl ? "cl-hl cl-hl-" + (hl.tone || "red") + " " : "") + (info.key === "progress" ? "cl-row-progress " : "") + (info.status === "attention" ? "cl-row-attn" : "") + (clIsPsa() ? (!info.assigned ? " cl-row-y" : "") + (info.high ? " cl-row-hi" : "") : "") + (clSel.has(r.uid) ? " cl-row-sel" : "");
+  const h = acRowHl(r.data);
+  return (h.row ? "cl-hl cl-hl-" + (h.row.tone || "red") + " " : "") + (h.bar ? "cl-hlbar cl-hlbar-" + (h.bar.tone || "orange") + " " : "") + (clSel.has(r.uid) ? "cl-row-sel" : "");
 }
 function clRowHtml(cfg, r, cols) {
   const isExpanded = expandedRows.has(r.uid);
@@ -5954,8 +5963,8 @@ function clRowHtml(cfg, r, cols) {
     const dexa = clIsDexaCol(c) && clDexaYes(val);
     return `<td class="inline-cell${c === cfg.nameField ? " name-col" : ""}${dexa ? " cl-dexa-yes" : ""}" data-col="${esc(c)}">
       <div class="inline-cell-wrap">
-        <input type="text" class="inline-edit-input${clIsGca() && c === CL.TEAM && !gcaOnInfusion(r) ? " cl-refer" : ""}" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="${clIsGca() && c === CL.TEAM && !gcaOnInfusion(r) ? "Refer to PUTZ" : "—"}" title="${esc(val)}" ${c === CL.TEAM ? 'list="cl-team-list"' : clIsDays() && c === DAY_FIELD ? 'list="cl-day-list"' : ""} />
-        ${dexa ? '<span class="cl-dexa">Add DEXA to appt</span>' : ""}
+        <input type="text" class="inline-edit-input${clIsGca() && c === CL.TEAM && !gcaOnInfusion(r) ? " cl-refer" : ""}" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="${clIsGca() && c === CL.TEAM && !gcaOnInfusion(r) ? "Refer to " + biText("gca", "refer") : "—"}" title="${esc(val)}" ${c === CL.TEAM ? 'list="cl-team-list"' : clIsDays() && c === DAY_FIELD ? 'list="cl-day-list"' : ""} />
+        ${dexa ? '<span class="cl-dexa">' + esc(biText("dexa", "chip")) + '</span>' : ""}
         ${isDate ? `<button type="button" class="cal-btn" data-uid="${r.uid}" data-field="${esc(c)}" title="Pick a date" aria-label="Pick a date for ${esc(c)}">${calendarIconSvg()}</button>` : ""}
       </div>
     </td>`;
@@ -5995,7 +6004,7 @@ function clRefreshRow(uid) {
       td.classList.toggle("cl-dexa-yes", on);
       const wrap = td.querySelector(".inline-cell-wrap");
       const chip = td.querySelector(".cl-dexa");
-      if (on && !chip && wrap) { const sp = document.createElement("span"); sp.className = "cl-dexa"; sp.textContent = "Add DEXA to appt"; wrap.insertBefore(sp, wrap.querySelector(".cal-btn")); }
+      if (on && !chip && wrap) { const sp = document.createElement("span"); sp.className = "cl-dexa"; sp.textContent = biText("dexa", "chip"); wrap.insertBefore(sp, wrap.querySelector(".cal-btn")); }
       if (!on && chip) chip.remove();
     });
   }
@@ -6003,7 +6012,7 @@ function clRefreshRow(uid) {
     const ic = [...tr.children].find((td) => td.dataset.col === "__infusion");
     if (ic) ic.innerHTML = clInfusionCellHtml(r);
     const ti = [...tr.querySelectorAll("input.inline-edit-input")].find((i) => i.dataset.field === CL.TEAM);
-    if (ti) { const on = gcaOnInfusion(r); ti.classList.toggle("cl-refer", !on); ti.placeholder = on ? "\u2014" : "Refer to PUTZ"; }
+    if (ti) { const on = gcaOnInfusion(r); ti.classList.toggle("cl-refer", !on); ti.placeholder = on ? "\u2014" : "Refer to " + biText("gca", "refer"); }
   }
  if (clIsInfusion()) { clRefreshCorr(tr, r); tr.querySelectorAll("textarea.cl-wrap-input").forEach(clGrow); }
 }
@@ -6030,7 +6039,7 @@ function clRenderTable(cfg) {
   const teams = [...new Set([...(clIsOsteo() ? ["JP", "SU", "Cancelled"] : []), ...(clAssignMeta() ? clAssignMeta().suggest : []), ...everything.map((r) => String(r.data[CL.TEAM] || "").trim()).filter(Boolean)])].sort();
 
   const th = (c) => `<th data-col="${esc(c)}" draggable="true" title="Drag to reorder · drag the edge to resize · click to sort">
-      <span class="cl-th-label">${esc(clColLabel(c))}</span>${clIsGca() && c === CL.TEAM ? '<span class="cl-th-note">If not on Infusion, refer to PUTZ</span>' : ""}${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}${customNames.has(c) ? `<button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Remove this column" aria-label="Remove column ${esc(c)}">×</button>` : ""}
+      <span class="cl-th-label">${esc(clColLabel(c))}</span>${clIsGca() && c === CL.TEAM ? '<span class="cl-th-note">If not on Infusion, refer to ' + esc(biText("gca", "refer")) + '</span>' : ""}${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}${customNames.has(c) ? `<button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Remove this column" aria-label="Remove column ${esc(c)}">×</button>` : ""}
       <span class="cl-resize" data-col="${esc(c)}" role="separator" aria-orientation="vertical" aria-label="Resize ${esc(clColLabel(c))} column"></span>
     </th>`;
 
@@ -6600,7 +6609,7 @@ let AC_EDITING = false;   // admin page is open: this browser shows the draft wh
 let AC_SIG = "";
 let acMemOk = "";
 
-function acBlank() { return { v: 1, groups: {}, tabs: {}, tabOrder: [], customTabs: [], cols: {}, rules: {}, kpi: {}, options: {}, attnDays: null, alerts: {} }; }
+function acBlank() { return { v: 1, groups: {}, tabs: {}, tabOrder: [], customTabs: [], cols: {}, rules: {}, kpi: {}, options: {}, attnDays: null, alerts: {}, builtin: {} }; }
 function acParse(raw) {
   try { const o = JSON.parse(raw || ""); if (o && typeof o === "object" && !Array.isArray(o)) return { ...acBlank(), ...o }; } catch (e) { /* fall through */ }
   return acBlank();
@@ -6635,7 +6644,7 @@ function acEdit(fn) {
   acApply(true);
 }
 function acDiffSections(pub, dr) {
-  const names = { groups: "Group names", tabs: "Tab names and visibility", tabOrder: "Tab order", customTabs: "New tabs", cols: "Columns", rules: "Status rules", kpi: "KPI cards", options: "Options", attnDays: "Needs Attention days", alerts: "Row highlights & auto-corrections" };
+  const names = { groups: "Group names", tabs: "Tab names and visibility", tabOrder: "Tab order", customTabs: "New tabs", cols: "Columns", rules: "Status rules", kpi: "KPI cards", options: "Options", attnDays: "Needs Attention days", alerts: "Row highlights & auto-corrections", builtin: "Built-in rules" };
   return Object.keys(names).filter((k) => JSON.stringify(pub[k]) !== JSON.stringify(dr[k])).map((k) => names[k]);
 }
 function acPublish() {
@@ -6777,6 +6786,14 @@ function acCond(c, data) {
   if (c.col === "__assigned") { if (AC_AUTO_BUSY) return false; const a = !!callInfo(data).assigned; return c.op === "no" ? !a : a; }
   if (c.col === "__corr") { if (AC_AUTO_BUSY) return false; return acCorrOp(c.op, callInfo(data).corr); }
   if (c.col === "__pa") return c.op === "pa_" + (clPaKey(data[CL_PA_FIELD]) || "none");
+  if (c.col === "__attn" || c.col === "__progress" || c.col === "__high" || c.col === "__aetna") {
+    let v;
+    if (c.col === "__high") v = psaHigh(data);
+    else if (c.col === "__aetna") v = psaAetna(data);
+    else if (AC_AUTO_BUSY) v = false;
+    else { const i = callInfo(data); v = c.col === "__attn" ? i.status === "attention" : i.key === "progress"; }
+    return c.op === "no" ? !v : v;
+  }
   const v = String(data[c.col] == null ? "" : data[c.col]).trim();
   const t = String(c.val == null ? "" : c.val).trim();
   const lc = v.toLowerCase(), tl = t.toLowerCase();
@@ -6807,6 +6824,42 @@ function acCond(c, data) {
 // Row alerts: (1) rules that color the WHOLE row, (2) rules that add an automatic correction
 // such as "Wrong dates". Both are edited on the Admin page (Row highlights).
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Built-in rules that used to be fixed in the code. Each has an original value; the admin can change it
+// (Admin > Built-in rules). An empty box means "use the original". Lists are comma separated.
+// ---------------------------------------------------------------------------
+const BI_DEF = {
+  pa: { resubmit: "resubmit, re-submit", approved: "approv", sent: "sent, submitted" },
+  corr: { notresolved: "not resolved, not-resolved, not_resolved, notresolved, unresolved", resolved: "resolved", progress: "progress" },
+  osteo: { jp: "jp, justin, putz", su: "su, sabahat, usmani", cancel: "cancel" },
+  psa: { aetna: "aetna", priority: "high, urgent, asap" },
+  dexa: { col: "dexa", yes: "y, yes", chip: "Add DEXA to appt" },
+  gca: { refer: "PUTZ" },
+  call: { confirmed: "confirm", refused: "refus", resched: "resched", progress: "progress" },
+};
+function biText(g, k) { const o = (((AC().builtin || {})[g]) || {})[k]; return typeof o === "string" && o.trim() ? o.trim() : BI_DEF[g][k]; }
+function biList(g, k) { return biText(g, k).split(",").map((x) => x.trim().toLowerCase()).filter(Boolean); }
+const BI_RE = new Map();
+// mode: has = anywhere in the text, start = at the start of a word, word = a whole word, lead = at the very start
+function biRe(words, mode) {
+  const key = mode + "|" + words.join("\u0001");
+  let re = BI_RE.get(key);
+  if (re) return re;
+  const alt = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  if (!alt) re = /(?!)/;
+  else if (mode === "word") re = new RegExp("(?:^|[^a-z0-9])(?:" + alt + ")(?![a-z0-9])", "i");
+  else if (mode === "start") re = new RegExp("(?:^|[^a-z0-9])(?:" + alt + ")", "i");
+  else if (mode === "lead") re = new RegExp("^\\s*(?:" + alt + ")(?![a-z0-9])", "i");
+  else re = new RegExp(alt, "i");
+  BI_RE.set(key, re);
+  return re;
+}
+function biMatch(g, k, mode, text) { return biRe(biList(g, k), mode).test(String(text == null ? "" : text)); }
+// GCA "On Infusion?": which infusion views count
+function gcaTabs() {
+  const t = (((AC().builtin || {}).gca) || {}).tabs;
+  return Array.isArray(t) ? t : ["dg_infusion_pas", "dg_infusion_other"];
+}
 let AC_AUTO_BUSY = false;
 const AC_CORR_OPS = [
   ["corr_open", "has an open correction (Pending or In progress)"], ["corr_pending", "is Pending"], ["corr_progress", "is In progress"],
@@ -6828,10 +6881,20 @@ function acCorrOp(op, st) {
 const AC_ALERT_DEF = {};
 // What a tab does before the admin changes anything.
 function acDefaultAlerts(id) {
-  if (!isInfusionId(id)) return { hl: [], auto: [] };
   if (AC_ALERT_DEF[id]) return AC_ALERT_DEF[id];
+  const rule = (n, label, tone, style, conds) => ({ id: "hl" + n, on: true, label, tone, style, logic: "all", conds });
+  if (id === "psa_and_psoriasis") return (AC_ALERT_DEF[id] = { auto: [], hl: [
+    rule(1, "High priority and still unassigned", "red", "row", [{ col: "__assigned", op: "no", val: "" }, { col: "__high", op: "yes", val: "" }]),
+    rule(2, "Unassigned", "yellow", "row", [{ col: "__assigned", op: "no", val: "" }]),
+  ] });
+  if (id === "call_list_upcoming") return (AC_ALERT_DEF[id] = { auto: [], hl: [
+    rule(1, "Needs Attention", "orange", "bar", [{ col: "__attn", op: "yes", val: "" }]),
+    rule(2, "Call in progress", "yellow", "row", [{ col: "__progress", op: "yes", val: "" }]),
+  ] });
+  if (id === "dg_osteoporosis_pas") return (AC_ALERT_DEF[id] = { auto: [], hl: [rule(1, "Needs Attention", "orange", "bar", [{ col: "__attn", op: "yes", val: "" }])] });
+  if (!isInfusionId(id)) return { hl: [], auto: [] };
   const auto = [{ id: "wd1", on: true, text: "Wrong dates", logic: "all", conds: [{ col: CL_PA_FIELD, op: "cany", val: "wrong date, incorrect date, date wrong, dates wrong, date incorrect, dates incorrect, dates are wrong, dates are incorrect" }] }];
-  const hl = [{ id: "hl1", on: true, label: "Open correction or note", tone: "red", logic: "all", conds: [{ col: "__corr", op: "corr_open", val: "" }] }];
+  const hl = [{ id: "hl1", on: true, label: "Open correction or note", tone: "red", style: "row", logic: "all", conds: [{ col: "__corr", op: "corr_open", val: "" }] }];
   return (AC_ALERT_DEF[id] = { hl, auto });
 }
 function acAlertsOf(settings, id) {
@@ -6840,15 +6903,18 @@ function acAlertsOf(settings, id) {
   return { hl: Array.isArray(a.hl) ? a.hl : d.hl, auto: Array.isArray(a.auto) ? a.auto : d.auto };
 }
 function acAlerts(id) { return acAlertsOf(AC(), id); }
-// The first highlight rule that matches this row (or null).
+// The first matching "whole row" rule and the first matching "left bar" rule for this row.
 function acRowHl(data) {
   const list = acAlerts(CALL_SHEET_ID).hl;
+  const out = { row: null, bar: null };
   for (let i = 0; i < list.length; i++) {
     const r = list[i];
     if (r.on === false || !(r.conds || []).length) continue;
-    if (acMatches(r.logic, r.conds, data)) return r;
+    const k = r.style === "bar" ? "bar" : "row";
+    if (out[k]) continue;
+    if (acMatches(r.logic, r.conds, data)) { out[k] = r; if (out.row && out.bar) break; }
   }
-  return null;
+  return out;
 }
 // Automatic correction text for a row whose Corrections / Notes cell is empty ("" = none).
 function acAutoText(data) {
@@ -7118,8 +7184,8 @@ function acWireGate() {
 function renderAdmin() {
   if (!acUnlocked()) return acGateHtml();
   const dirty = acHasDraft();
-  const secs = [["tabs", "Tabs & groups"], ["cols", "Columns"], ["rules", "Status rules"], ["kpi", "KPI cards"], ["alerts", "Row highlights"], ["opts", "Options"], ["sec", "Security & versions"]];
-  const body = { tabs: acTabsHtml, cols: acColsHtml, rules: acRulesHtml, kpi: acKpiHtml, alerts: acAlertsHtml, opts: acOptsHtml, sec: acSecHtml }[acUI.section]();
+  const secs = [["tabs", "Tabs & groups"], ["cols", "Columns"], ["rules", "Status rules"], ["kpi", "KPI cards"], ["alerts", "Row highlights"], ["builtin", "Built-in rules"], ["opts", "Options"], ["sec", "Security & versions"]];
+  const body = { tabs: acTabsHtml, cols: acColsHtml, rules: acRulesHtml, kpi: acKpiHtml, alerts: acAlertsHtml, builtin: acBuiltinHtml, opts: acOptsHtml, sec: acSecHtml }[acUI.section]();
   const pub = acRec().publishedAt ? new Date(acRec().publishedAt).toLocaleString() : "never";
   return `<div class="page-header"><div><div class="page-title">Admin Control Center</div>
       <div class="page-subtitle">Change how tabs, columns, status rules and KPI cards work. Your edits are saved as a <b>draft</b>. Nobody else sees them until you click <b>Publish for everyone</b>.</div></div>
@@ -7407,6 +7473,27 @@ function acKpiHtml() {
 }
 
 // ---------- section: row highlights & automatic corrections ----------
+// Calculated conditions a row rule can use: [label, operators]
+function acVirtDefs(id) {
+  return {
+    __assigned: ["Assignment status (per the Status rules)", [["yes", "is assigned"], ["no", "is not assigned"]]],
+    __corr: ["Correction status", AC_CORR_OPS],
+    __pa: ["Prior Auth status (" + colLabelFor(id, CL_PA_FIELD) + ")", acPaOps()],
+    __attn: ["Needs Attention (per the Status rules)", [["yes", "is flagged"], ["no", "is not flagged"]]],
+    __progress: ["Call in progress", [["yes", "is in progress"], ["no", "is not in progress"]]],
+    __high: ["High priority (Built-in rules)", [["yes", "is high priority"], ["no", "is not high priority"]]],
+    __aetna: ["Aetna insurance (Built-in rules)", [["yes", "is Aetna"], ["no", "is not Aetna"]]],
+  };
+}
+function acVirtKeys(id, ak) {
+  const kind = acKind(id);
+  if (kind === "infusion") return ak === "hl" ? ["__pa", "__corr", "__assigned"] : ["__pa"];
+  if (ak !== "hl") return [];
+  if (id === "psa_and_psoriasis") return ["__assigned", "__high", "__aetna"];
+  if (id === "call_list_upcoming") return ["__assigned", "__attn", "__progress"];
+  if (id === "dg_osteoporosis_pas") return ["__assigned", "__attn"];
+  return kind !== "generic" ? ["__assigned"] : [];
+}
 function acAlList(d, id, ak) {
   d.alerts = d.alerts || {};
   const o = (d.alerts[id] = d.alerts[id] || {});
@@ -7432,11 +7519,9 @@ function acAlertsHtml() {
   };
   const condRows = (ak, ri, conds) => (conds || []).map((cd, di) => {
     const at = `data-ak="${ak}" data-ri="${ri}" data-di="${di}"`;
-    const virt = [];
-    if (infusion) virt.push(["__pa", "Prior Auth status (" + colLabelFor(id, CL_PA_FIELD) + ")"]);
-    if (infusion && ak === "hl") virt.push(["__corr", "Correction status"]);
-    if (ak === "hl" && kind !== "generic") virt.push(["__assigned", "Assignment status (per the Status rules)"]);
-    const ops = cd.col === "__corr" ? AC_CORR_OPS : cd.col === "__pa" ? acPaOps() : cd.col === "__assigned" ? [["yes", "is assigned"], ["no", "is not assigned"]] : AC_OPS;
+    const V = acVirtDefs(id);
+    const virt = acVirtKeys(id, ak).map((k) => [k, V[k][0]]);
+    const ops = V[cd.col] ? V[cd.col][1] : AC_OPS;
     return `<div class="ac-cond">
       <select class="ac-in" data-ac="alc-col" ${at}>${virt.map(([v, l]) => `<option value="${v}" ${cd.col === v ? "selected" : ""}>${esc(l)}</option>`).join("")}${colOptions(cd.col)}</select>
       <select class="ac-in" data-ac="alc-op" ${at}>${ops.map(([v, l]) => `<option value="${v}" ${cd.op === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
@@ -7456,7 +7541,8 @@ function acAlertsHtml() {
         <div class="form-group"><label>On</label><input type="checkbox" data-ac="al-on" ${at} ${r.on === false ? "" : "checked"} aria-label="Rule is on" /></div>
         ${ak === "hl"
           ? `<div class="form-group"><label>Rule name</label><input class="ac-in" data-ac="al-name" ${at} value="${esc(r.label || "")}" /></div>
-             <div class="form-group"><label>Row color</label>${acToneSel(`data-ac="al-tone" ${at}`, r.tone || "red")}</div>`
+             <div class="form-group"><label>Color</label>${acToneSel(`data-ac="al-tone" ${at}`, r.tone || "red")}</div>
+             <div class="form-group"><label>Show as</label><select class="ac-in" data-ac="al-style" ${at}><option value="row" ${r.style === "bar" ? "" : "selected"}>Whole row</option><option value="bar" ${r.style === "bar" ? "selected" : ""}>Colored bar on the left</option></select></div>`
           : `<div class="form-group"><label>Correction to set</label><input class="ac-in" data-ac="al-name" ${at} value="${esc(r.text || "")}" placeholder="Wrong dates" /></div>`}
         <div class="form-group"><label>&nbsp;</label><div style="display:flex;gap:6px">
           <button class="btn sm ghost" data-ac="al-up" ${at} ${ri === 0 ? "disabled" : ""} aria-label="Move up">\u2191</button>
@@ -7474,13 +7560,66 @@ function acAlertsHtml() {
   return `<div class="card ac-card"><div class="ac-pick"><label for="ac-sheet">Tab</label><select class="ac-in" id="ac-sheet" data-ac="sheet">${acSheetOptions(id)}</select>
       ${custom ? `<button class="btn sm" data-ac="al-reset" style="margin-left:12px">Restore this tab's built-in rules</button>` : ""}</div></div>
     <div class="card ac-card"><h3>Row highlight rules</h3>
-      <p class="form-hint">When a row matches a rule, the <b>whole row</b> takes that color. Rules are checked from the top; the first one that matches wins.${infusion ? " The built-in rule colors a row red while it has a correction or note that is still open. Once you click Resolved or Not resolved the color goes away." : ""}</p>
+      <p class="form-hint">When a row matches a rule it takes that color, either across the <b>whole row</b> or as a <b>bar on the left</b>. Rules are checked from the top; the first whole-row rule that matches and the first bar rule that matches both apply. The colors this tab already had (for example Needs Attention or unassigned) are listed here as rules you can change.${infusion ? " The built-in rule colors a row red while it has a correction or note that is still open. Once you click Resolved or Not resolved the color goes away." : ""}</p>
       ${hlCards || `<p class="form-hint">No highlight rules on this tab.</p>`}
       <button class="btn primary" data-ac="al-add" data-ak="hl" style="margin-top:10px">+ New highlight rule</button></div>
     ${infusion ? `<div class="card ac-card"><h3>Automatic corrections</h3>
       <p class="form-hint">When a row matches and its <b>${esc(colLabelFor(id, CL_CORR_FIELD))}</b> cell is empty, the row gets this correction automatically (shown as a yellow badge; nothing is typed into your data). It then works like any correction: Pending, In progress, Resolved, Not resolved, counts in the Corrections card, and is highlighted by the rules above. Built in: when the PA column says something like "approved but wrong dates" or "approved but incorrect dates", the correction is Wrong dates.</p>
       ${autoCards || `<p class="form-hint">No automatic corrections on this tab.</p>`}
       <button class="btn primary" data-ac="al-add" data-ak="auto" style="margin-top:10px">+ New automatic correction</button></div>` : ""}`;
+}
+
+// ---------- section: built-in rules ----------
+function acBuiltinHtml() {
+  const d = acDraft();
+  const b = d.builtin || {};
+  const cur = (g, k) => ((b[g] || {})[k]) || "";
+  const field = (g, k, label, wide) => `<div class="form-group" ${wide ? 'style="flex:2 1 320px"' : ""}><label>${esc(label)}</label><input class="ac-in" data-ac="bi-set" data-g="${g}" data-k="${k}" value="${esc(cur(g, k))}" placeholder="${esc(BI_DEF[g][k])}" /></div>`;
+  const changed = (g) => Object.keys(b[g] || {}).length > 0;
+  const head = (g, title, tab) => `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h3 style="margin:0">${esc(title)} <span class="badge neutral">${esc(tab)}</span></h3>${changed(g) ? `<button class="btn sm" data-ac="bi-reset" data-g="${g}">Restore original</button>` : `<span class="form-hint" style="margin:0">Original settings</span>`}</div>`;
+  const live = (fn) => { try { return `<div style="margin-top:10px"><span class="badge neutral">Right now: ${esc(fn())}</span></div>`; } catch (e) { return ""; } };
+  const recsOf = (pred) => getAllRecords().filter((r) => pred(r.sheetId));
+  const tally = (list, keyFn, names) => { const c = {}; list.forEach((r) => { const k = keyFn(r); c[k] = (c[k] || 0) + 1; }); return names.map(([k, l]) => `${l} ${fmtNum(c[k] || 0)}`).join(" · "); };
+  const paLive = live(() => tally(recsOf(isInfusionId), (r) => clPaKey(r.data[CL_PA_FIELD]) || "none", [["sent", CL_PA_LABELS.sent], ["resubmit", CL_PA_LABELS.resubmit], ["approved", CL_PA_LABELS.approved], ["others", CL_PA_LABELS.others], ["none", "Blank"]]));
+  const corrLive = live(() => tally(recsOf(isInfusionId), (r) => clWith(r.sheetId, () => callInfo(r.data).corr) || "none", [["pending", "Pending"], ["progress", "In progress"], ["resolved", "Resolved"], ["notresolved", "Not resolved"], ["none", "No correction"]]));
+  const osteoLive = live(() => tally(recsOf((s) => s === "dg_osteoporosis_pas"), (r) => clWith(r.sheetId, () => callInfo(r.data).key), [["jp", "JP"], ["su", "SU"], ["both", "JP & SU"], ["cancelled", "Cancelled"], ["other", "Other names"], ["none", "Unassigned"]]));
+  const psaLive = live(() => { const l = recsOf((s) => s === "psa_and_psoriasis"); return `High priority ${fmtNum(l.filter((r) => psaHigh(r.data)).length)} · Aetna ${fmtNum(l.filter((r) => psaAetna(r.data)).length)}`; });
+  const dexaLive = live(() => { const l = recsOf((s) => s === "pts_0908_0911"); return `DEXA due on ${fmtNum(l.filter((r) => clWith(r.sheetId, () => callInfo(r.data).dexa)).length)} of ${fmtNum(l.length)} patients`; });
+  const gcaLive = live(() => { const l = recsOf((s) => s === "gca"); return `On infusion ${fmtNum(l.filter((r) => clWith(r.sheetId, () => gcaOnInfusion(r))).length)} of ${fmtNum(l.length)} GCA patients`; });
+  const callLive = live(() => tally(recsOf((s) => s === "call_list_upcoming"), (r) => callActionKey(r.data[CL.ACTION]), [["call", "Call"], ["confirmed", "Confirmed"], ["refused", "Refused"], ["resched", "Resched"], ["progress", "In progress"]]));
+  const gTabs = ((b.gca || {}).tabs) || ["dg_infusion_pas", "dg_infusion_other"];
+  const gcaBoxes = ["dg_infusion_pas", "dg_infusion_other"].map((sid) => `<label style="display:inline-flex;gap:6px;align-items:center;margin-right:16px"><input type="checkbox" data-ac="bi-gca-tab" data-k="${sid}" ${gTabs.includes(sid) ? "checked" : ""} /> ${esc(SHEET_BY_ID[sid].adminLabel || SHEET_BY_ID[sid].label)}</label>`).join("");
+  return `<div class="card ac-card"><p style="margin:0">Every rule below used to be fixed in the app. Each shows its original setting in grey; type your own to change it, or leave it empty to keep the original. Lists are comma separated, and capital letters do not matter. Changes go to your draft like everything else in Admin.</p></div>
+    <div class="card ac-card">${head("pa", "Prior Auth words", "DG Infusion PAs")}
+      <p class="form-hint">Which words in the <b>PA Initiated / Done</b> column count as Sent, Resubmit or Approved. Anything else that is filled in counts as Others. Checked from Resubmit down, so "Resubmitted" is never counted as Sent.</p>
+      <div class="ac-row">${field("pa", "sent", "Counts as " + CL_PA_LABELS.sent)}${field("pa", "resubmit", "Counts as " + CL_PA_LABELS.resubmit)}${field("pa", "approved", "Counts as " + CL_PA_LABELS.approved)}</div>${paLive}</div>
+    <div class="card ac-card">${head("corr", "Correction status words", "DG Infusion PAs")}
+      <p class="form-hint">Which words in the correction status decide Not resolved, Resolved and In progress. Anything else is Pending. The buttons on each row write "Resolved", "Not Resolved" and "In Progress".</p>
+      <div class="ac-row">${field("corr", "notresolved", "Counts as Not resolved", true)}${field("corr", "resolved", "Counts as Resolved")}${field("corr", "progress", "Counts as In progress")}</div>${corrLive}</div>
+    <div class="card ac-card">${head("osteo", "Who is assigned", "DG Osteoporosis PAs")}
+      <p class="form-hint">Words typed in the assignment column that mean JP, SU, or Cancelled. Whole words only for the names, so "SU" does not match "Susan".</p>
+      <div class="ac-row">${field("osteo", "jp", "Counts as JP", true)}${field("osteo", "su", "Counts as SU", true)}${field("osteo", "cancel", "Counts as Cancelled")}</div>${osteoLive}</div>
+    <div class="card ac-card">${head("psa", "High priority and Aetna", "PSA & Psoriasis")}
+      <p class="form-hint">Words in the <b>Priority</b> column that make a patient High priority, and the word in the insurance column that flags Aetna. They drive the High Priority and Aetna cards. The row colors are under Row highlights.</p>
+      <div class="ac-row">${field("psa", "priority", "High priority when the Priority column has", true)}${field("psa", "aetna", "Aetna when the insurance column has")}</div>${psaLive}</div>
+    <div class="card ac-card">${head("dexa", "DEXA flag", "0908–0911 Patients")}
+      <p class="form-hint">Any column that starts with this word is a DEXA column. When it starts with one of the "yes" words, the row gets the reminder chip.</p>
+      <div class="ac-row">${field("dexa", "col", "DEXA columns start with")}${field("dexa", "yes", "Counts as yes when it starts with")}${field("dexa", "chip", "Reminder chip text")}</div>${dexaLive}</div>
+    <div class="card ac-card">${head("gca", "On Infusion? and referral", "GCA")}
+      <p class="form-hint">A GCA patient is "on infusion" when they are found (by account # or by name and date of birth) in the infusion views ticked below. If not, the Assigned To box says who to refer to.</p>
+      <div class="form-group"><label>Found in</label><div>${gcaBoxes}</div></div>
+      <div class="ac-row">${field("gca", "refer", "Refer to")}</div>${gcaLive}</div>
+    <div class="card ac-card">${head("call", "Call outcomes", "Call List – Upcoming Appointment")}
+      <p class="form-hint">Words typed in the Action column for each outcome. Anything else stays "Call". The names of the Action buttons are under Options.</p>
+      <div class="ac-row">${field("call", "confirmed", "Called & Confirmed")}${field("call", "refused", "Called & Refused")}${field("call", "resched", "Resched")}${field("call", "progress", "In Progress")}</div>${callLive}</div>
+    <div class="card ac-card"><h3>Other built-in rules</h3>
+      <p class="form-hint">These are edited on their own pages.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn" data-ac="bi-goto" data-s="alerts">Row colors and Wrong dates (Row highlights)</button>
+        <button class="btn" data-ac="bi-goto" data-s="rules">Who counts as assigned, completion, Needs Attention days (Status rules)</button>
+        <button class="btn" data-ac="bi-goto" data-s="kpi">Card names and colors (KPI cards)</button>
+        <button class="btn" data-ac="bi-goto" data-s="opts">Action button names, call notes, Prior Auth names (Options)</button>
+      </div></div>`;
 }
 
 // ---------- section: options ----------
@@ -7658,11 +7797,24 @@ function acOnEvent(e, type) {
     case "restore": confirmDialog("Load the previous version?", "The version published before the current one becomes your draft. Nothing changes for other users until you publish it.", () => { acSaveRec({ draft: String(acRec().prev || "") }); acApply(true); toast("Previous version loaded into the draft"); acRefresh(); }, { okClass: "primary", okLabel: "Load into draft" }); return;
     case "reset": confirmDialog("Reset the draft?", "The draft goes back to the original app settings (no renamed tabs or columns, no custom cards). Publish it to apply that for everyone.", () => { acSaveRec({ draft: JSON.stringify(acBlank()) }); acApply(true); toast("Draft reset"); acRefresh(); }, { okLabel: "Reset draft" }); return;
     // row highlights & automatic corrections
+    case "bi-set": { const g = el.dataset.g; acEdit((d) => { d.builtin = d.builtin || {}; const o = (d.builtin[g] = d.builtin[g] || {}); const t = String(v).trim(); if (t && t !== BI_DEF[g][k]) o[k] = t; else delete o[k]; if (!Object.keys(o).length) delete d.builtin[g]; }); break; }
+    case "bi-reset": { const g = el.dataset.g; acEdit((d) => { if (d.builtin) delete d.builtin[g]; }); toast("Original settings restored in the draft"); break; }
+    case "bi-gca-tab": acEdit((d) => {
+      d.builtin = d.builtin || {}; const o = (d.builtin.gca = d.builtin.gca || {});
+      const all = ["dg_infusion_pas", "dg_infusion_other"];
+      const set = new Set(Array.isArray(o.tabs) ? o.tabs : all);
+      if (v) set.add(k); else set.delete(k);
+      const list = all.filter((x) => set.has(x));
+      if (list.length === all.length) delete o.tabs; else o.tabs = list;
+      if (!Object.keys(o).length) delete d.builtin.gca;
+    }); break;
+    case "bi-goto": acUI.section = el.dataset.s; acUI.err = ""; break;
     case "al-add": { const ak = el.dataset.ak; acEdit((d) => { acAlList(d, id, ak).push(ak === "hl" ? { id: "h" + Date.now().toString(36), on: true, label: "New highlight rule", tone: "red", logic: "all", conds: [] } : { id: "a" + Date.now().toString(36), on: true, text: "Wrong dates", logic: "all", conds: [] }); }); break; }
     case "al-del": { const ak = el.dataset.ak, ri = +el.dataset.ri; confirmDialog("Delete this rule?", "It will be removed from the draft.", () => { acEdit((d) => { acAlList(d, id, ak).splice(ri, 1); }); acRefresh(); }, { okLabel: "Delete rule" }); return; }
     case "al-up": case "al-down": { const ak = el.dataset.ak, ri = +el.dataset.ri, j = ri + (act === "al-up" ? -1 : 1); acEdit((d) => { const L = acAlList(d, id, ak); if (j < 0 || j >= L.length) return; const t = L[ri]; L[ri] = L[j]; L[j] = t; }); break; }
     case "al-on": { const ak = el.dataset.ak, ri = +el.dataset.ri; acEdit((d) => { acAlList(d, id, ak)[ri].on = !!v; }); break; }
     case "al-name": { const ak = el.dataset.ak, ri = +el.dataset.ri; acEdit((d) => { const r = acAlList(d, id, ak)[ri]; if (ak === "hl") r.label = String(v).trim(); else r.text = String(v).trim(); }); break; }
+    case "al-style": { const ak = el.dataset.ak, ri = +el.dataset.ri; acEdit((d) => { acAlList(d, id, ak)[ri].style = v; }); break; }
     case "al-tone": { const ak = el.dataset.ak, ri = +el.dataset.ri; acEdit((d) => { acAlList(d, id, ak)[ri].tone = v; }); break; }
     case "al-logic": { const ak = el.dataset.ak, ri = +el.dataset.ri; acEdit((d) => { acAlList(d, id, ak)[ri].logic = v; }); break; }
     case "al-reset": acEdit((d) => { if (d.alerts) delete d.alerts[id]; }); break;
@@ -7671,7 +7823,8 @@ function acOnEvent(e, type) {
     case "alc-col": { const ak = el.dataset.ak, ri = +el.dataset.ri; acEdit((d) => {
       const cd = acAlList(d, id, ak)[ri].conds[di];
       cd.col = v; cd.val = "";
-      if (v === "__corr") cd.op = "corr_open"; else if (v === "__pa") cd.op = "pa_approved"; else if (v === "__assigned") cd.op = "yes";
+      const VD = acVirtDefs(id);
+      if (VD[v]) cd.op = VD[v][1][0][0];
       else if (/^(corr_|pa_)/.test(cd.op) || cd.op === "yes" || cd.op === "no") cd.op = "filled";
       else if ((cd.op === "dbefore" || cd.op === "dafter")) cd.val = acDataCols(id).find((x) => x !== v) || "";
     }); break; }
