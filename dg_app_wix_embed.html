@@ -1228,9 +1228,64 @@ textarea.ac-in { resize: vertical; }
 .ac-cond { display: grid; grid-template-columns: minmax(140px, 1.3fr) minmax(130px, 1fr) minmax(110px, 1fr) auto; gap: 8px; margin-bottom: 6px; align-items: center; }
 #ac-preview-bar { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 90; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--ink-900); color: #fff; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.28); font-size: 13px; max-width: calc(100vw - 24px); flex-wrap: wrap; }
 #ac-preview-bar .btn { background: #fff; color: var(--ink-900); }
+
+/* ==========================================================================
+   TEAM PIN ACCESS GATE
+   ========================================================================== */
+#dg-pin-gate {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  background: rgba(26, 29, 35, 0.72);
+  backdrop-filter: blur(8px);
+}
+#dg-pin-gate.hidden { display: none; }
+.dg-pin-card {
+  width: min(420px, 100%);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  box-shadow: var(--shadow-lg);
+  padding: 32px;
+  text-align: center;
+}
+.dg-pin-mark {
+  width: 54px; height: 54px; border-radius: 14px;
+  margin: 0 auto 16px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--burgundy-500), var(--burgundy-700));
+  color: white; font-weight: 800; font-size: 18px;
+}
+.dg-pin-card h1 { font-size: 21px; margin-bottom: 5px; }
+.dg-pin-card p { color: var(--text-secondary); font-size: 13px; margin-bottom: 20px; }
+#dg-team-pin {
+  width: 100%; box-sizing: border-box;
+  padding: 12px 14px; border-radius: 9px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-sunken); color: var(--text-primary);
+  font: inherit; font-size: 18px; letter-spacing: .25em; text-align: center;
+}
+#dg-team-pin:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: var(--bg-surface); }
+#dg-pin-submit { width: 100%; margin-top: 12px; justify-content: center; padding: 11px 14px; }
+#dg-pin-message { min-height: 20px; margin-top: 10px; font-size: 12.5px; color: var(--status-attention); }
+#dg-pin-gate.loading #dg-pin-submit { opacity: .7; pointer-events: none; }
+
 </style>
 </head>
 <body>
+  <div id="dg-pin-gate">
+    <div class="dg-pin-card">
+      <div class="dg-pin-mark">DG</div>
+      <h1>DG Master Pt List</h1>
+      <p>Enter your team PIN to access the Operations Console.</p>
+      <form id="dg-pin-form" autocomplete="off">
+        <input id="dg-team-pin" type="password" inputmode="numeric" autocomplete="off" maxlength="32" placeholder="Enter PIN" aria-label="Team PIN" />
+        <button id="dg-pin-submit" class="btn primary" type="submit">Access Dashboard</button>
+        <div id="dg-pin-message" role="alert" aria-live="polite"></div>
+      </form>
+    </div>
+  </div>
+
   <div id="app-shell">
     <aside class="sidebar">
       <div class="sidebar-brand">
@@ -1699,6 +1754,7 @@ function getDateFields(sheetId) {
 
 const WixBridge = {
   enabled: false,
+  accessToken: null,
   _reqId: 0,
   _pending: new Map(),
   _pollHandle: null,
@@ -1709,12 +1765,17 @@ const WixBridge = {
 
     window.addEventListener("message", (e) => this._onMessage(e));
 
-    // Give the parent Wix page a moment to answer "hello" — if it never does
-    // (e.g. previewing the raw HTML file inside some other iframe), fall back
-    // to plain localStorage rather than hanging forever.
+    // Public Wix page: authenticate with the Team PIN before requesting any
+    // shared patient data from the backend.
+    const authenticated = await this.authenticate();
+    if (!authenticated) {
+      console.warn("WixBridge: team PIN authentication failed or was cancelled.");
+      return null;
+    }
+
     const state = await Promise.race([
       this._call("wixapp:init", {}),
-      new Promise((resolve) => setTimeout(() => resolve(undefined), 2500)),
+      new Promise((resolve) => setTimeout(() => resolve(undefined), 10000)),
     ]);
 
     if (state === undefined) {
@@ -1725,9 +1786,58 @@ const WixBridge = {
     return state;
   },
 
-  // Fire-and-forget write to the shared backend. Always resolves; failures are
-  // logged and surfaced as a toast, but never block the local UI since the
-  // local copy (localStorage) is already the source of truth for this session.
+  async authenticate() {
+    const gate = document.getElementById("dg-pin-gate");
+    const form = document.getElementById("dg-pin-form");
+    const input = document.getElementById("dg-team-pin");
+    const button = document.getElementById("dg-pin-submit");
+    const message = document.getElementById("dg-pin-message");
+
+    if (!gate || !form || !input) return false;
+
+    return new Promise((resolve) => {
+      let finished = false;
+      const finish = (ok) => {
+        if (finished) return;
+        finished = true;
+        resolve(ok);
+      };
+
+      input.focus();
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const pin = String(input.value || "").trim();
+        if (!pin) {
+          message.textContent = "Please enter your PIN.";
+          input.focus();
+          return;
+        }
+
+        gate.classList.add("loading");
+        button.textContent = "Verifying…";
+        message.textContent = "";
+
+        try {
+          const result = await this._call("wixapp:verifyPin", { pin });
+          if (result && result.success && result.accessToken) {
+            this.accessToken = result.accessToken;
+            gate.classList.add("hidden");
+            finish(true);
+            return;
+          }
+          message.textContent = (result && result.message) || "Incorrect PIN.";
+          input.select();
+        } catch (e) {
+          message.textContent = e && e.message ? e.message : "Unable to verify PIN.";
+        } finally {
+          gate.classList.remove("loading");
+          button.textContent = "Access Dashboard";
+        }
+      });
+    });
+  },
+
   async save(type, payload) {
     if (!this.enabled) return;
     try {
@@ -1740,8 +1850,6 @@ const WixBridge = {
     }
   },
 
-  // Pulls the latest shared state (used for periodic refresh so users see
-  // each other's edits without a full realtime layer).
   async refresh() {
     if (!this.enabled) return null;
     try {
@@ -1764,7 +1872,13 @@ const WixBridge = {
     return new Promise((resolve, reject) => {
       const reqId = ++this._reqId;
       this._pending.set(reqId, { resolve, reject });
-      window.parent.postMessage({ source: "dg-app", type, reqId, payload }, "*");
+
+      let outgoingPayload = payload || {};
+      if (this.accessToken && type !== "wixapp:verifyPin") {
+        outgoingPayload = { ...outgoingPayload, accessToken: this.accessToken };
+      }
+
+      window.parent.postMessage({ source: "dg-app", type, reqId, payload: outgoingPayload }, "*");
       setTimeout(() => {
         if (this._pending.has(reqId)) {
           this._pending.delete(reqId);
