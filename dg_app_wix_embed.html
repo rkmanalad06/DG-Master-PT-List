@@ -5254,9 +5254,13 @@ const PSA_CALL_STATUS_DEFAULTS = [
 function psaCallStatusOptions() {
   const saved = AC().options?.psaCallStatuses;
   const list = Array.isArray(saved) && saved.length ? saved : PSA_CALL_STATUS_DEFAULTS;
-  // PSA & Psoriasis starts with a blank Call Status. The generic
-  // "Call (upcoming appt)" action is intentionally not a PSA choice.
-  return list.filter((x) => String(x?.key || "").trim().toLowerCase() !== "call" && String(x?.label || "").trim().toLowerCase() !== "call (upcoming appt)");
+  // PSA & Psoriasis NEVER uses the generic upcoming-appointment Call action.
+  // Keep every other saved/custom status so Admin can edit them.
+  return list.filter((x) => {
+    const key = String(x?.key || "").trim().toLowerCase();
+    const label = String(x?.label || "").trim().toLowerCase();
+    return key !== "call" && label !== "call (upcoming appt)" && label !== "call";
+  });
 }
 function psaCallStatusInfo(data) {
   const raw = psaCallStatusValue(data);
@@ -6743,7 +6747,9 @@ function clOpenActionPopover(uid, anchor) {
   document.addEventListener("keydown", onKey, true);
   window.addEventListener("resize", onScroll);
   window.addEventListener("scroll", onScroll, true);
-  clPopover = { el, uid, onDoc, onKey, onScroll, psa: CALL_SHEET_ID === "psa_and_psoriasis" && anchor?.dataset?.psa === "1" };
+  const anchorCol = String(anchor?.closest?.("td")?.dataset?.col || "").trim().toLowerCase();
+  const isPsaStatusAnchor = CALL_SHEET_ID === "psa_and_psoriasis" && (anchor?.dataset?.psa === "1" || anchorCol === PSA_CALL_STATUS_FIELD.toLowerCase());
+  clPopover = { el, uid, onDoc, onKey, onScroll, psa: isPsaStatusAnchor };
 
   el.addEventListener("click", (e) => {
     const t = e.target;
@@ -6826,7 +6832,7 @@ function clPaintPopover(initial) {
   const check = `<svg class="cl-check" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   let h = `<div class="cl-pop-title">${esc(rec.displayName || (isPsa ? "Set call status" : "Set action"))}</div>`;
   if (!isPsa && info.flagged) h += `<div class="cl-pop-note">Next visit ${clDaysPhrase(info.days)}. Flagged Needs Attention until Confirmed, Refused or Resched is recorded.</div>`;
-  const popOpts = isPsa ? psaCallStatusOptions() : CALL_ACTIONS;
+  const popOpts = isPsa ? psaCallStatusOptions().filter((a) => String(a?.key || "").trim().toLowerCase() !== "call" && String(a?.label || "").trim().toLowerCase() !== "call (upcoming appt)") : CALL_ACTIONS;
   h += `<div class="cl-opts" role="group" aria-label="${isPsa ? "Call Status" : "Action"}">${popOpts.map((a) => `
       <button type="button" class="cl-opt cl-tone-${a.tone}${a.key === stored ? " on" : ""}" data-cl-act="${a.key}" data-f="act-${a.key}" aria-pressed="${a.key === stored}">
         <span class="cl-dot"></span>${esc(a.label)}${a.key === stored ? check : ""}
