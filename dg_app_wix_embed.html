@@ -1433,8 +1433,6 @@ const GROUPS = [
 
 const DG_PHARMACY_FIELDS = {
   status: "stable/ Unstable- Joint pain-recentflare",
-  // Kept only for compatibility with older saved records. It is NOT displayed as a column.
-  legacyReason: "Unstable Reason",
   lastSeen: "last seen",
   prednisone: "Prednisone in the last one year -date",
   assigned: "Assigned To"
@@ -1459,21 +1457,16 @@ function dgPharmacyIsUnstable(data) {
 function dgPharmacyCombinedStatus(data) {
   const raw = String(data?.[DG_PHARMACY_FIELDS.status] || "").trim();
   if (!raw) return "";
-  const lower = raw.toLowerCase();
+  const lower = raw.toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, " ");
   if (lower === "stable") return "Stable";
-  if (lower === "unstable - joint pain") return "Unstable - Joint Pain";
-  if (lower === "unstable - recent flare") return "Unstable - Recent Flare";
+  if (lower === "unstable - joint pain" || lower === "unstable/joint pain") return "Unstable - Joint Pain";
+  if (lower === "unstable - recent flare" || lower === "unstable/recent flare") return "Unstable - Recent Flare";
   if (lower.includes("joint pain") && (lower.includes("recent flare") || lower.includes("recentflare"))) return "Unstable - Joint Pain & Recent Flare";
   if (lower.includes("joint pain")) return "Unstable - Joint Pain";
   if (lower.includes("recent flare") || lower.includes("recentflare")) return "Unstable - Recent Flare";
-  if (lower === "unstable") {
-    const legacy = String(data?.[DG_PHARMACY_FIELDS.legacyReason] || "").trim().toLowerCase();
-    if (legacy.includes("joint pain") && (legacy.includes("recent flare") || legacy.includes("recentflare"))) return "Unstable - Joint Pain & Recent Flare";
-    if (legacy.includes("joint pain")) return "Unstable - Joint Pain";
-    if (legacy.includes("recent flare") || legacy.includes("recentflare")) return "Unstable - Recent Flare";
-    return "Unstable";
-  }
-  return raw;
+  // An old record that only says "Unstable" has no selectable reason yet.
+  // Leave it blank rather than silently choosing Stable or a reason.
+  return "";
 }
 function dgPharmacyNeedsAfd(data) { return dgPharmacyIsUnstable(data) && !!String(data?.[DG_PHARMACY_FIELDS.prednisone] || "").trim(); }
 
@@ -5689,8 +5682,7 @@ function clSaveCustomColumns(cols) {
 function clColumns(cfg, withHidden) {
   let all = (RAW_SHEETS[cfg.id]?.headers || []).slice();
   if (cfg.id === "dg_pharmacy") {
-    // The unstable reason is part of the status value, not a separate column.
-    all = all.filter((f) => f !== DG_PHARMACY_FIELDS.legacyReason);
+    // Status and reason are one field. There is no separate Unstable Reason column.
     [DG_PHARMACY_FIELDS.status, DG_PHARMACY_FIELDS.lastSeen, DG_PHARMACY_FIELDS.prednisone, DG_PHARMACY_FIELDS.assigned].forEach((f) => {
       if (!all.includes(f)) all.push(f);
     });
@@ -6360,10 +6352,13 @@ function wireCallListPage(cfg) {
    if (!afd) return;
    const rec = clRecord(afd.dataset.uid);
    if (!rec) return;
-   const currentlyChecked = afd.classList.contains("is-checked");
+   const currentlyChecked = String(rec.data?.[DG_PHARMACY_FIELDS.assigned] || "").trim().toUpperCase() === "AFD";
    updateRecord(rec.uid, { [DG_PHARMACY_FIELDS.assigned]: currentlyChecked ? "" : "AFD" });
    toast(currentlyChecked ? "Refer to AFD unchecked" : "Assigned To set to AFD");
    clRenderTable(cfg); clRefreshKpi(); renderSidebar();
+   e.preventDefault();
+   e.stopPropagation();
+   return;
  });
  region.addEventListener("change", (e) => {
  const cb = e.target;
@@ -6372,8 +6367,6 @@ function wireCallListPage(cfg) {
    const rec = clRecord(cb.dataset.uid);
    if (!rec) return;
    const patch = { [cb.dataset.field]: cb.value };
-   // Keep the old reason field blank/unused; the selected status now contains the full reason.
-   if (cb.dataset.field === DG_PHARMACY_FIELDS.status) patch[DG_PHARMACY_FIELDS.legacyReason] = "";
    updateRecord(rec.uid, patch);
    toast(`Saved "${clColLabel(cb.dataset.field)}"`);
    clRenderTable(cfg); clRefreshKpi(); renderSidebar();
