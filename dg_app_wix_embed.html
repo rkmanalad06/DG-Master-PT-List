@@ -1182,6 +1182,14 @@ td.cl-action-td { white-space: normal; }
 .dg-cal-foot{display:flex;justify-content:space-between;margin-top:8px}
 .dg-cal-foot button{border:none;border-radius:6px;background:transparent;color:var(--accent,#7a2233);font:inherit;font-size:12.5px;font-weight:600;padding:4px 8px;cursor:pointer}
 .dg-cal-foot button:hover{background:var(--accent-soft,#f3dde0)}
+
+.diag-prednisone-toggle{display:inline-flex;border:1px solid var(--border-subtle,#d9dce3);border-radius:7px;overflow:hidden;background:var(--bg-surface,#fff)}
+.diag-yn-btn{border:0;border-right:1px solid var(--border-subtle,#d9dce3);background:transparent;color:var(--text-secondary,#565c6a);font:inherit;font-size:11px;font-weight:600;padding:5px 11px;cursor:pointer;line-height:1.1}
+.diag-yn-btn:last-child{border-right:0}
+.diag-yn-btn:hover{background:#f5f6f8}
+.diag-yn-btn.active.yes{background:#e5f5ec;color:#1e7d4b}
+.diag-yn-btn.active.no{background:#fbe6e5;color:#b3312c}
+.diag-assignment-note{font-size:10.5px;line-height:1.2;color:#c2410c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;min-width:0;flex:1}
 .cl-stat-sub{display:block;font-size:11px;line-height:1.3;color:var(--text-tertiary,#8b8b9a);margin:2px 0 6px;font-weight:400}
 .cl-stat-static{cursor:default}
 .cl-stat-static:hover{border-color:var(--border-subtle);box-shadow:none}
@@ -1664,8 +1672,8 @@ const SHEET_CONFIG = [
     dateFields: ["DOB"],
     completion: { field: "Assigned to", mode: "nonblank", label: "Assigned to is filled in" },
     searchFields: ["Patient Name", "Acc #", "Home Phone", "Assigned to"],
-    inlineFields: ["Assigned to"],
-    defaultHeaders: ["Patient Name", "DOB", "Sex", "Age", "Home Phone", "Acc #", "Assigned to"],
+    inlineFields: ["Prednisone", "Assigned to"],
+    defaultHeaders: ["Patient Name", "DOB", "Sex", "Age", "Home Phone", "Acc #", "Prednisone", "Assigned to"],
   },
   {
     id: "gca",
@@ -1680,9 +1688,8 @@ const SHEET_CONFIG = [
     dateFields: ["DOB"],
     completion: { field: "Assigned to", mode: "nonblank", label: "Assigned to is filled in" },
     searchFields: ["Patient Name", "Acc #", "Home Phone", "Assigned to"],
-    inlineFields: ["Assigned to"],
-    defaultHeaders: ["Patient Name", "DOB", "Sex", "Age", "Home Phone", "Acc #", "Assigned to"],
-    hideFields: ["IF NOT ON BIOLOGICS REFER TO PUTZ"],
+    inlineFields: ["Prednisone", "Assigned to"],
+    defaultHeaders: ["Patient Name", "DOB", "Sex", "Age", "Home Phone", "Acc #", "Prednisone", "Assigned to"],
   },
   {
     id: "gout",
@@ -5422,6 +5429,32 @@ const CL_CORR_STATUS = "CORRECTION STATUS";
 const CL_PA_FIELD = "PA Initiated / Done";
 function clIsInfusion() { return isInfusionId(CALL_SHEET_ID); }
 function clIsGca() { return CALL_SHEET_ID === "gca"; }
+function clIsPmr() { return CALL_SHEET_ID === "pmr"; }
+const DIAG_PREDNISONE_FIELD = "Prednisone";
+function clIsPrednisoneTab() { return clIsPmr() || clIsGca(); }
+function diagPrednisoneValue(data) {
+  const raw = String(data?.[DIAG_PREDNISONE_FIELD] || "").trim().toLowerCase();
+  if (["yes", "y", "true", "1"].includes(raw)) return "Yes";
+  if (["no", "n", "false", "0"].includes(raw)) return "No";
+  return "";
+}
+function diagAssignmentNote(data) {
+  if (clIsPsa()) return psaInsuranceNote(data);
+  if (!clIsPrednisoneTab()) return "";
+  const pred = diagPrednisoneValue(data);
+  if (!pred) return "";
+  if (pred === "Yes") return "Refer to APPS";
+  return clIsGca() ? "Refer to Usmani" : "Refer to PUTZ";
+}
+function diagPrednisoneCellHtml(r) {
+  const value = diagPrednisoneValue(r.data);
+  return `<td class="inline-cell diag-prednisone-td" data-col="${esc(DIAG_PREDNISONE_FIELD)}">
+    <div class="diag-prednisone-toggle" role="group" aria-label="Prednisone">
+      <button type="button" class="diag-yn-btn${value === "Yes" ? " active yes" : ""}" data-diag-pred="Yes" data-uid="${esc(r.uid)}">Yes</button>
+      <button type="button" class="diag-yn-btn${value === "No" ? " active no" : ""}" data-diag-pred="No" data-uid="${esc(r.uid)}">No</button>
+    </div>
+  </td>`;
+}
 // GCA "On Infusion?" — a patient is on infusion when they appear in DG Infusion PAs.
 // Matches by account # (authoritative) or by patient name; DOB must also agree when both sides have one.
 let INF_IDX = { cache: null, byAcct: new Set(), byName: new Map() };
@@ -5754,6 +5787,9 @@ function clSaveCustomColumns(cols) {
 }
 function clColumns(cfg, withHidden) {
   let all = (RAW_SHEETS[cfg.id]?.headers || []).slice();
+  if (clIsPrednisoneTab()) {
+    if (!all.includes(DIAG_PREDNISONE_FIELD)) all.push(DIAG_PREDNISONE_FIELD);
+  }
   if (cfg.id === "dg_pharmacy") {
     // Status and reason are one field. There is no separate Unstable Reason column.
     [DG_PHARMACY_FIELDS.status, DG_PHARMACY_FIELDS.lastSeen, DG_PHARMACY_FIELDS.prednisone, DG_PHARMACY_FIELDS.assigned].forEach((f) => {
@@ -5770,7 +5806,6 @@ function clColumns(cfg, withHidden) {
     const ix = (h) => { const i = cfg.defaultHeaders.findIndex((x) => x.toLowerCase() === String(h).trim().toLowerCase()); return i < 0 ? 999 : i; };
     all = all.map((h, i) => [h, i]).sort((a, b) => ix(a[0]) - ix(b[0]) || a[1] - b[1]).map((x) => x[0]);
   }
-  if (clIsGca()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti, 0, "__infusion"); else all.push("__infusion"); }
   if (clIsCallList() && !all.includes(CL.ACTION)) all.push(CL.ACTION);
   if (cfg.id === "psa_and_psoriasis") {
     const actualCallStatus = all.find((h) => String(h).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase());
@@ -6248,6 +6283,7 @@ function clRowHtml(cfg, r, cols) {
     if (c === "__infusion") return `<td class="cl-inf-td" data-col="__infusion">${clInfusionCellHtml(r)}</td>`;
     if (c === "__month") { const m = clMonthInfo(r.data); return `<td data-col="__month">${m ? `<span class="cl-month-chip">${esc(m.label)}</span>` : `<span class="text-muted">\u2014</span>`}</td>`; }
     if (cfg.id === "dg_pharmacy" && Object.values(DG_PHARMACY_FIELDS).includes(c)) return dgPharmacyCellHtml(cfg, r, c);
+    if (clIsPrednisoneTab() && c === DIAG_PREDNISONE_FIELD) return diagPrednisoneCellHtml(r);
     if (cfg.id === "psa_and_psoriasis" && String(c).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase()) {
       const ps = psaCallStatusInfo(r.data);
       const label = ps.label || "Select status";
@@ -6261,13 +6297,13 @@ function clRowHtml(cfg, r, cols) {
         </div>
       </td>`;
     }
-    if (cfg.id === "psa_and_psoriasis" && c === "Assigned To") {
+    if ((cfg.id === "psa_and_psoriasis" && c === "Assigned To") || ((clIsPmr() || clIsGca()) && c === CL.TEAM)) {
       const val = r.data[c] || "";
-      const note = psaInsuranceNote(r.data);
+      const note = diagAssignmentNote(r.data);
       return `<td class="inline-cell" data-col="${esc(c)}">
-        <div class="inline-cell-wrap psa-assigned-wrap" style="display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap">
-          <input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" list="cl-team-list" style="min-width:80px;flex:0 0 90px" />
-          ${note ? `<span class="psa-insurance-note" style="font-size:10px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;flex:1;min-width:0" title="${esc(note)}">${esc(note)}</span>` : ""}
+        <div class="inline-cell-wrap diag-assigned-wrap" style="display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap">
+          <input type="text" class="inline-edit-input" data-uid="${esc(r.uid)}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" list="cl-team-list" style="min-width:80px;flex:0 0 90px" />
+          ${note ? `<span class="diag-assignment-note" title="${esc(note)}">${esc(note)}</span>` : ""}
         </div>
       </td>`;
     }
@@ -6278,7 +6314,7 @@ function clRowHtml(cfg, r, cols) {
     const dexa = clIsDexaCol(c) && clDexaYes(val);
     return `<td class="inline-cell${c === cfg.nameField ? " name-col" : ""}${dexa ? " cl-dexa-yes" : ""}" data-col="${esc(c)}">
       <div class="inline-cell-wrap">
-        <input type="text" class="inline-edit-input${clIsGca() && c === CL.TEAM && !gcaOnInfusion(r) ? " cl-refer" : ""}" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="${clIsGca() && c === CL.TEAM && !gcaOnInfusion(r) ? "Refer to " + biText("gca", "refer") : "—"}" title="${esc(val)}" ${c === CL.TEAM ? 'list="cl-team-list"' : clIsDays() && c === DAY_FIELD ? 'list="cl-day-list"' : ""} />
+        <input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" ${c === CL.TEAM ? 'list="cl-team-list"' : clIsDays() && c === DAY_FIELD ? 'list="cl-day-list"' : ""} />
         ${dexa ? '<span class="cl-dexa">' + esc(biText("dexa", "chip")) + '</span>' : ""}
         ${isDate ? `<button type="button" class="cal-btn" data-uid="${r.uid}" data-field="${esc(c)}" title="Pick a date" aria-label="Pick a date for ${esc(c)}">${calendarIconSvg()}</button>` : ""}
       </div>
@@ -6323,12 +6359,6 @@ function clRefreshRow(uid) {
       if (!on && chip) chip.remove();
     });
   }
-  if (clIsGca()) {
-    const ic = [...tr.children].find((td) => td.dataset.col === "__infusion");
-    if (ic) ic.innerHTML = clInfusionCellHtml(r);
-    const ti = [...tr.querySelectorAll("input.inline-edit-input")].find((i) => i.dataset.field === CL.TEAM);
-    if (ti) { const on = gcaOnInfusion(r); ti.classList.toggle("cl-refer", !on); ti.placeholder = on ? "\u2014" : "Refer to " + biText("gca", "refer"); }
-  }
  if (clIsInfusion()) { clRefreshCorr(tr, r); tr.querySelectorAll("textarea.cl-wrap-input").forEach(clGrow); }
 }
 
@@ -6354,7 +6384,7 @@ function clRenderTable(cfg) {
   const teams = [...new Set([...(clIsOsteo() ? ["JP", "SU", "Cancelled"] : []), ...(clAssignMeta() ? clAssignMeta().suggest : []), ...everything.map((r) => String(r.data[CL.TEAM] || "").trim()).filter(Boolean)])].sort();
 
   const th = (c) => `<th data-col="${esc(c)}" draggable="true" title="Drag to reorder · drag the edge to resize · click to sort">
-      <span class="cl-th-label">${esc(clColLabel(c))}</span>${clIsGca() && c === CL.TEAM ? '<span class="cl-th-note">If not on Infusion, refer to ' + esc(biText("gca", "refer")) + '</span>' : ""}${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}${customNames.has(c) ? `<button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Remove this column" aria-label="Remove column ${esc(c)}">×</button>` : ""}
+      <span class="cl-th-label">${esc(clColLabel(c))}</span>${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}${customNames.has(c) ? `<button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Remove this column" aria-label="Remove column ${esc(c)}">×</button>` : ""}
       <span class="cl-resize" data-col="${esc(c)}" role="separator" aria-orientation="vertical" aria-label="Resize ${esc(clColLabel(c))} column"></span>
     </th>`;
 
@@ -6503,6 +6533,14 @@ function wireCallListPage(cfg) {
 
   // --- Table (delegated; the region itself persists across re-renders) ---
   region.addEventListener("click", (e) => {
+    const predBtn = e.target.closest("[data-diag-pred]");
+    if (predBtn && clIsPrednisoneTab()) {
+      e.preventDefault();
+      e.stopPropagation();
+      const uid = predBtn.dataset.uid;
+      clApply(uid, { [DIAG_PREDNISONE_FIELD]: predBtn.dataset.diagPred }, { toast: `Prednisone: ${predBtn.dataset.diagPred}` });
+      return;
+    }
     const t = e.target;
     const pager = t.closest(".pager-btns button[data-page]");
     if (pager) { clState.page = +pager.dataset.page; clRenderTable(cfg); return; }
@@ -6668,7 +6706,7 @@ function clExport(cfg) {
   const cols = clColumns(cfg).filter((c) => c !== "__status");
   const rows = clFilteredRows(cfg).map((r) => {
     const o = {};
-    cols.forEach((c) => { if (c === "__infusion") o[clColLabel(c)] = gcaOnInfusion(r) ? "Yes" : "No"; else if (c === "__month") { const m = clMonthInfo(r.data); o[clColLabel(c)] = m ? m.label : ""; } else o[clColLabel(c)] = c === CL.ACTION ? callPill(r.data).label : (r.data[c] || (clIsInfusion() && c === CL_CORR_FIELD ? callInfo(r.data).auto : "")) || ""; });
+    cols.forEach((c) => { if (c === "__month") { const m = clMonthInfo(r.data); o[clColLabel(c)] = m ? m.label : ""; } else o[clColLabel(c)] = c === CL.ACTION ? callPill(r.data).label : (r.data[c] || (clIsInfusion() && c === CL_CORR_FIELD ? callInfo(r.data).auto : "")) || ""; });
     o["Status"] = clIsGeneric() ? ((STATUS_META[r.status] || {}).label || "") : clAssignSt(r.data).label;
     const rm = callReminder(r.data);
     if (clIsInfusion()) o["Correction Status"] = clCorrLabel(r.data);
@@ -7225,7 +7263,6 @@ const BI_DEF = {
   osteo: { jp: "jp, justin, putz", su: "su, sabahat, usmani", cancel: "cancel" },
   psa: { aetna: "aetna", priority: "high, urgent, asap" },
   dexa: { col: "dexa", yes: "y, yes", chip: "Add DEXA to appt" },
-  gca: { refer: "PUTZ" },
   call: { confirmed: "confirm", refused: "refus", resched: "resched", progress: "progress" },
 };
 function biText(g, k) { const o = (((AC().builtin || {})[g]) || {})[k]; return typeof o === "string" && o.trim() ? o.trim() : BI_DEF[g][k]; }
@@ -7976,10 +8013,7 @@ function acBuiltinHtml() {
   const osteoLive = live(() => tally(recsOf((s) => s === "dg_osteoporosis_pas"), (r) => clWith(r.sheetId, () => callInfo(r.data).key), [["jp", "JP"], ["su", "SU"], ["both", "JP & SU"], ["cancelled", "Cancelled"], ["other", "Other names"], ["none", "Unassigned"]]));
   const psaLive = live(() => { const l = recsOf((s) => s === "psa_and_psoriasis"); return `High priority ${fmtNum(l.filter((r) => psaHigh(r.data)).length)} · Aetna ${fmtNum(l.filter((r) => psaAetna(r.data)).length)}`; });
   const dexaLive = live(() => { const l = recsOf((s) => s === "pts_0908_0911"); return `DEXA due on ${fmtNum(l.filter((r) => clWith(r.sheetId, () => callInfo(r.data).dexa)).length)} of ${fmtNum(l.length)} patients`; });
-  const gcaLive = live(() => { const l = recsOf((s) => s === "gca"); return `On infusion ${fmtNum(l.filter((r) => clWith(r.sheetId, () => gcaOnInfusion(r))).length)} of ${fmtNum(l.length)} GCA patients`; });
   const callLive = live(() => tally(recsOf((s) => s === "call_list_upcoming"), (r) => callActionKey(r.data[CL.ACTION]), [["call", "Call"], ["confirmed", "Confirmed"], ["refused", "Refused"], ["resched", "Resched"], ["progress", "In progress"]]));
-  const gTabs = ((b.gca || {}).tabs) || ["dg_infusion_pas", "dg_infusion_other"];
-  const gcaBoxes = ["dg_infusion_pas", "dg_infusion_other"].map((sid) => `<label style="display:inline-flex;gap:6px;align-items:center;margin-right:16px"><input type="checkbox" data-ac="bi-gca-tab" data-k="${sid}" ${gTabs.includes(sid) ? "checked" : ""} /> ${esc(SHEET_BY_ID[sid].adminLabel || SHEET_BY_ID[sid].label)}</label>`).join("");
   return `<div class="card ac-card"><p style="margin:0">Every rule below used to be fixed in the app. Each shows its original setting in grey; type your own to change it, or leave it empty to keep the original. Lists are comma separated, and capital letters do not matter. Changes go to your draft like everything else in Admin.</p></div>
     <div class="card ac-card">${head("pa", "Prior Auth words", "DG Infusion PAs")}
       <p class="form-hint">Which words in the <b>PA Initiated / Done</b> column count as Sent, Resubmit or Approved. Anything else that is filled in counts as Others. Checked from Resubmit down, so "Resubmitted" is never counted as Sent.</p>
@@ -7996,10 +8030,6 @@ function acBuiltinHtml() {
     <div class="card ac-card">${head("dexa", "DEXA flag", "0908–0911 Patients")}
       <p class="form-hint">Any column that starts with this word is a DEXA column. When it starts with one of the "yes" words, the row gets the reminder chip.</p>
       <div class="ac-row">${field("dexa", "col", "DEXA columns start with")}${field("dexa", "yes", "Counts as yes when it starts with")}${field("dexa", "chip", "Reminder chip text")}</div>${dexaLive}</div>
-    <div class="card ac-card">${head("gca", "On Infusion? and referral", "GCA")}
-      <p class="form-hint">A GCA patient is "on infusion" when they are found (by account # or by name and date of birth) in the infusion views ticked below. If not, the Assigned To box says who to refer to.</p>
-      <div class="form-group"><label>Found in</label><div>${gcaBoxes}</div></div>
-      <div class="ac-row">${field("gca", "refer", "Refer to")}</div>${gcaLive}</div>
     <div class="card ac-card">${head("call", "Call outcomes", "Call List – Upcoming Appointment")}
       <p class="form-hint">Words typed in the Action column for each outcome. Anything else stays "Call". The names of the Action buttons are under Options.</p>
       <div class="ac-row">${field("call", "confirmed", "Called & Confirmed")}${field("call", "refused", "Called & Refused")}${field("call", "resched", "Resched")}${field("call", "progress", "In Progress")}</div>${callLive}</div>
@@ -8288,15 +8318,6 @@ function acOnEvent(e, type) {
     // row highlights & automatic corrections
     case "bi-set": { const g = el.dataset.g; acEdit((d) => { d.builtin = d.builtin || {}; const o = (d.builtin[g] = d.builtin[g] || {}); const t = String(v).trim(); if (t && t !== BI_DEF[g][k]) o[k] = t; else delete o[k]; if (!Object.keys(o).length) delete d.builtin[g]; }); break; }
     case "bi-reset": { const g = el.dataset.g; acEdit((d) => { if (d.builtin) delete d.builtin[g]; }); toast("Original settings restored in the draft"); break; }
-    case "bi-gca-tab": acEdit((d) => {
-      d.builtin = d.builtin || {}; const o = (d.builtin.gca = d.builtin.gca || {});
-      const all = ["dg_infusion_pas", "dg_infusion_other"];
-      const set = new Set(Array.isArray(o.tabs) ? o.tabs : all);
-      if (v) set.add(k); else set.delete(k);
-      const list = all.filter((x) => set.has(x));
-      if (list.length === all.length) delete o.tabs; else o.tabs = list;
-      if (!Object.keys(o).length) delete d.builtin.gca;
-    }); break;
     case "bi-goto": acUI.section = el.dataset.s; acUI.err = ""; break;
     case "al-add": { const ak = el.dataset.ak; acEdit((d) => { acAlList(d, id, ak).push(ak === "hl" ? { id: "h" + Date.now().toString(36), on: true, label: "New highlight rule", tone: "red", logic: "all", conds: [] } : { id: "a" + Date.now().toString(36), on: true, text: "Wrong dates", logic: "all", conds: [] }); }); break; }
     case "al-del": { const ak = el.dataset.ak, ri = +el.dataset.ri; confirmDialog("Delete this rule?", "It will be removed from the draft.", () => { acEdit((d) => { acAlList(d, id, ak).splice(ri, 1); }); acRefresh(); }, { okLabel: "Delete rule" }); return; }
