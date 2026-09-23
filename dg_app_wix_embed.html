@@ -5246,7 +5246,6 @@ function psaCallStatusValue(data) {
   return String(data?.[key] || "").trim();
 }
 const PSA_CALL_STATUS_DEFAULTS = [
-  { key: "call", label: "Call (upcoming appt)", tone: "blue" },
   { key: "confirmed", label: "Called & Confirmed", tone: "green" },
   { key: "refused", label: "Called & Refused", tone: "red" },
   { key: "resched", label: "Resched", tone: "orange" },
@@ -5254,8 +5253,10 @@ const PSA_CALL_STATUS_DEFAULTS = [
 ];
 function psaCallStatusOptions() {
   const saved = AC().options?.psaCallStatuses;
-  if (Array.isArray(saved) && saved.length) return saved;
-  return PSA_CALL_STATUS_DEFAULTS;
+  const list = Array.isArray(saved) && saved.length ? saved : PSA_CALL_STATUS_DEFAULTS;
+  // PSA & Psoriasis starts with a blank Call Status. The generic
+  // "Call (upcoming appt)" action is intentionally not a PSA choice.
+  return list.filter((x) => String(x?.key || "").trim().toLowerCase() !== "call" && String(x?.label || "").trim().toLowerCase() !== "call (upcoming appt)");
 }
 function psaCallStatusInfo(data) {
   const raw = psaCallStatusValue(data);
@@ -6238,15 +6239,14 @@ function clRowHtml(cfg, r, cols) {
     if (cfg.id === "dg_pharmacy" && Object.values(DG_PHARMACY_FIELDS).includes(c)) return dgPharmacyCellHtml(cfg, r, c);
     if (cfg.id === "psa_and_psoriasis" && String(c).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase()) {
       const ps = psaCallStatusInfo(r.data);
-      const currentKey = ps.key || "";
-      const options = psaCallStatusOptions();
-      const optionRows = options.map((x) => `<option value="${esc(x.key)}" ${currentKey === x.key ? "selected" : ""}>${esc(x.label)}</option>`).join("");
+      const label = ps.label || "Select status";
+      const tone = ps.key ? ps.tone : "gray";
+      const dashed = ps.key ? "" : " dashed";
       return `<td class="inline-cell psa-call-status-td" data-col="${esc(c)}">
         <div class="inline-cell-wrap psa-call-status-wrap">
-          <select class="psa-call-status-select" data-uid="${esc(r.uid)}" aria-label="Call Status">
-            <option value="" ${currentKey ? "" : "selected"}>Select status</option>
-            ${optionRows}
-          </select>
+          <button type="button" class="cl-pill cl-tone-${esc(tone)}${dashed}" data-cl-open data-psa="1" data-uid="${esc(r.uid)}" aria-haspopup="dialog" aria-label="Call Status: ${esc(label)}. Change.">
+            <span class="cl-pill-text">${esc(label)}</span>${chevronSmallSvg()}
+          </button>
         </div>
       </td>`;
     }
@@ -6451,22 +6451,6 @@ function wireCallListPage(cfg) {
    const patch = { [cb.dataset.field]: cb.value };
    updateRecord(rec.uid, patch);
    toast(`Saved "${clColLabel(cb.dataset.field)}"`);
-   clRenderTable(cfg); clRefreshKpi(); renderSidebar();
-   return;
- }
- if (cb.classList.contains("psa-call-status-select")) {
-   const uid = cb.dataset.uid;
-   const key = cb.value;
-   const rec = clRecord(uid);
-   if (!rec) return;
-   if (!key) return;
-   const before = psaCallStatusInfo(rec.data).key || "";
-   if (key === "resched") {
-     cb.value = before;
-     clOpenPsaReschedModal(uid);
-     return;
-   }
-   psaCallChooseStatus(uid, key);
    clRenderTable(cfg); clRefreshKpi(); renderSidebar();
    return;
  }
@@ -7998,7 +7982,8 @@ function acOptsHtml() {
   const opt = d.options || {};
   const notes = (Array.isArray(opt.notes) && opt.notes.length ? opt.notes : (CALL_NOTES.__base || CALL_NOTES));
   const dgStatuses = Array.isArray(opt.dgPharmacyStatuses) ? opt.dgPharmacyStatuses : DG_PHARMACY_DEFAULT_STATUS_OPTIONS;
-  const psaStatuses = Array.isArray(opt.psaCallStatuses) && opt.psaCallStatuses.length ? opt.psaCallStatuses : PSA_CALL_STATUS_DEFAULTS;
+  const psaStatusSaved = Array.isArray(opt.psaCallStatuses) && opt.psaCallStatuses.length ? opt.psaCallStatuses : PSA_CALL_STATUS_DEFAULTS;
+  const psaStatuses = psaStatusSaved.filter((x) => String(x?.key || "").trim().toLowerCase() !== "call" && String(x?.label || "").trim().toLowerCase() !== "call (upcoming appt)");
   return `<div class="card ac-card"><h3>PSA &amp; Psoriasis — Call Status Options</h3>
       <p class="form-hint">These are the choices in the <b>Call Status</b> column. The patient starts blank. You can edit, delete, or add choices later.</p>
       ${psaStatuses.map((st, i) => `<div class="ac-cond" style="grid-template-columns:1fr 130px auto"><input class="ac-in" data-ac="psa-status-edit" data-i="${i}" value="${esc(st.label)}" /><select class="ac-in" data-ac="psa-status-tone" data-i="${i}">${AC_TONES.map(([k,l]) => `<option value="${k}" ${st.tone===k?"selected":""}>${l}</option>`).join("")}</select><button class="btn sm danger" data-ac="psa-status-del" data-i="${i}">Delete</button></div>`).join("")}
@@ -8154,7 +8139,7 @@ function acOnEvent(e, type) {
     case "psa-status-add": {
       acEdit((d) => {
         d.options = d.options || {};
-        const list = Array.isArray(d.options.psaCallStatuses) && d.options.psaCallStatuses.length ? d.options.psaCallStatuses.slice() : PSA_CALL_STATUS_DEFAULTS.map((x) => ({...x}));
+        const list = (Array.isArray(d.options.psaCallStatuses) && d.options.psaCallStatuses.length ? d.options.psaCallStatuses.slice() : PSA_CALL_STATUS_DEFAULTS.map((x) => ({...x}))).filter((x) => String(x?.key || "").trim().toLowerCase() !== "call" && String(x?.label || "").trim().toLowerCase() !== "call (upcoming appt)");
         let n = "New status", i = 2;
         while (list.some((x) => String(x.label).toLowerCase() === n.toLowerCase())) n = `New status ${i++}`;
         list.push({ key: "custom_" + Date.now().toString(36), label: n, tone: "gray" });
@@ -8165,7 +8150,7 @@ function acOnEvent(e, type) {
     case "psa-status-edit": {
       const i = +el.dataset.i;
       acEdit((d) => {
-        const list = Array.isArray(d.options.psaCallStatuses) && d.options.psaCallStatuses.length ? d.options.psaCallStatuses.slice() : PSA_CALL_STATUS_DEFAULTS.map((x) => ({...x}));
+        const list = (Array.isArray(d.options.psaCallStatuses) && d.options.psaCallStatuses.length ? d.options.psaCallStatuses.slice() : PSA_CALL_STATUS_DEFAULTS.map((x) => ({...x}))).filter((x) => String(x?.key || "").trim().toLowerCase() !== "call" && String(x?.label || "").trim().toLowerCase() !== "call (upcoming appt)");
         const value = String(v).trim();
         if (i < 0 || i >= list.length || !value) return;
         if (list.some((x, idx) => idx !== i && String(x.label).trim().toLowerCase() === value.toLowerCase())) return;
@@ -8177,7 +8162,7 @@ function acOnEvent(e, type) {
     case "psa-status-tone": {
       const i = +el.dataset.i;
       acEdit((d) => {
-        const list = Array.isArray(d.options.psaCallStatuses) && d.options.psaCallStatuses.length ? d.options.psaCallStatuses.slice() : PSA_CALL_STATUS_DEFAULTS.map((x) => ({...x}));
+        const list = (Array.isArray(d.options.psaCallStatuses) && d.options.psaCallStatuses.length ? d.options.psaCallStatuses.slice() : PSA_CALL_STATUS_DEFAULTS.map((x) => ({...x}))).filter((x) => String(x?.key || "").trim().toLowerCase() !== "call" && String(x?.label || "").trim().toLowerCase() !== "call (upcoming appt)");
         if (i >= 0 && i < list.length) list[i] = { ...list[i], tone: v };
         d.options.psaCallStatuses = list;
       });
@@ -8187,7 +8172,7 @@ function acOnEvent(e, type) {
       const i = +el.dataset.i;
       confirmDialog("Delete this Call Status?", "Existing patient records keep their saved value, but this choice will no longer appear for new selections.", () => {
         acEdit((d) => {
-          const list = Array.isArray(d.options.psaCallStatuses) && d.options.psaCallStatuses.length ? d.options.psaCallStatuses.slice() : PSA_CALL_STATUS_DEFAULTS.map((x) => ({...x}));
+          const list = (Array.isArray(d.options.psaCallStatuses) && d.options.psaCallStatuses.length ? d.options.psaCallStatuses.slice() : PSA_CALL_STATUS_DEFAULTS.map((x) => ({...x}))).filter((x) => String(x?.key || "").trim().toLowerCase() !== "call" && String(x?.label || "").trim().toLowerCase() !== "call (upcoming appt)");
           if (i >= 0 && i < list.length) list.splice(i, 1);
           d.options.psaCallStatuses = list;
         });
