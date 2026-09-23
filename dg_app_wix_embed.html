@@ -6237,7 +6237,7 @@ function clRowHtml(cfg, r, cols) {
       return `<td class="inline-cell" data-col="${esc(c)}">
         <div class="inline-cell-wrap" style="display:flex;flex-direction:column;align-items:stretch;gap:4px">
           ${note ? `<span class="text-muted" style="font-size:11px;line-height:1.25">${esc(note)}</span>` : ""}
-          <input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="${note ? esc(note) : "—"}" title="${esc(val)}" list="cl-team-list" />
+          <input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" list="cl-team-list" />
         </div>
       </td>`;
     }
@@ -6680,7 +6680,7 @@ let clSuppressOpenUntil = 0;
 const CL_CLEAR = { [CL.ATTEMPT]: "", [CL.NOTE]: "", [CL.REMIND]: "", [CL.RESCHED]: "" };
 
 function clFindPill(uid) {
-  return [...document.querySelectorAll("#cl-table-region .cl-pill[data-cl-open]")].find((b) => b.dataset.uid === uid && !b.classList.contains("dashed") && b.closest(".cl-action-cell").firstElementChild === b) || null;
+  return [...document.querySelectorAll("#cl-table-region .cl-pill[data-cl-open]")].find((b) => b.dataset.uid === uid && (b.dataset.psa === "1" || !b.classList.contains("dashed")) && b.closest(".cl-action-cell")?.firstElementChild === b) || null;
 }
 function clClosePopover(restoreFocus) {
   if (!clPopover) return;
