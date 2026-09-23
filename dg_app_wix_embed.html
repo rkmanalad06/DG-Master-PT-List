@@ -1635,8 +1635,8 @@ const SHEET_CONFIG = [
     dateFields: ["next f/u", "LAST SEEN"],
     completion: { field: "Assigned To", mode: "nonblank", label: "Assigned To is filled in" },
     searchFields: ["Patient Acct No", "PsA Diagnosis", "Psoriasis Code", "current insurance", "status on buy and bill", "Provider", "Priority", "Assigned To"],
-    inlineFields: ["status on buy and bill", "next f/u", "Priority", "Assigned To"],
-    defaultHeaders: ["Patient Acct No", "PsA Diagnosis", "Psoriasis Code", "current insurance", "status on buy and bill", "next f/u", "Provider", "LAST SEEN", "Priority", "Assigned To"],
+    inlineFields: ["status on buy and bill", "next f/u", "Priority", "Assigned To", "Call Status"],
+    defaultHeaders: ["Patient Acct No", "PsA Diagnosis", "Psoriasis Code", "current insurance", "status on buy and bill", "next f/u", "Provider", "LAST SEEN", "Priority", "Assigned To", "Call Status"],
     exactColumns: true,
   },
   {
@@ -4977,6 +4977,13 @@ const ASSIGN_META = {
 };
 function clAssignMeta() { return ASSIGN_META[CALL_SHEET_ID] || null; }
 function clIsPsa() { return CALL_SHEET_ID === "psa_and_psoriasis"; }
+function psaInsuranceNote(data) {
+  if (!clIsPsa()) return "";
+  const insurance = String(data?.["current insurance"] || "").trim();
+  if (/\bmedicare\b/i.test(insurance)) return "Note: Refer to Usmani";
+  if (/\bregence\b/i.test(insurance)) return "Note: DO NOT ASSIGN TO USMANI";
+  return "";
+}
 function clIsDays() { return !!(SHEET_BY_ID[CALL_SHEET_ID] && SHEET_BY_ID[CALL_SHEET_ID].dayGroups); }
 function clIsDexaCol(c) { const t = String(c).trim().toLowerCase(); return clIsDays() && biList("dexa", "col").some((w) => t.startsWith(w)); }
 function clDexaYes(v) { return biMatch("dexa", "yes", "lead", v); }
@@ -5216,6 +5223,26 @@ const CALL_ACTIONS = [
   { key: "resched", label: "Resched", tone: "orange" },
   { key: "progress", label: "In Progress", tone: "yellow" },
 ];
+const PSA_CALL_STATUS_FIELD = "Call Status";
+const PSA_CALL_STATUS_DEFAULTS = [
+  { key: "call", label: "Call (upcoming appt)", tone: "blue" },
+  { key: "confirmed", label: "Called & Confirmed", tone: "green" },
+  { key: "refused", label: "Called & Refused", tone: "red" },
+  { key: "resched", label: "Resched", tone: "orange" },
+  { key: "progress", label: "In Progress", tone: "yellow" },
+];
+function psaCallStatusOptions() {
+  const saved = AC().options?.psaCallStatuses;
+  if (Array.isArray(saved) && saved.length) return saved;
+  return PSA_CALL_STATUS_DEFAULTS;
+}
+function psaCallStatusInfo(data) {
+  const raw = String(data?.[PSA_CALL_STATUS_FIELD] || "").trim();
+  if (!raw) return { key: "", label: "", tone: "gray" };
+  const opts = psaCallStatusOptions();
+  const found = opts.find((x) => String(x.label || "").trim().toLowerCase() === raw.toLowerCase());
+  return found ? { ...found } : { key: "custom", label: raw, tone: "gray" };
+}
 const CALL_NOTES = ["No Answer", "Sent VM", "For Callback"];
 const CALL_STATUSES = [
   { key: "pending", label: "Not yet assigned", tone: "gray" },
@@ -5702,6 +5729,7 @@ function clColumns(cfg, withHidden) {
   }
   if (clIsGca()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti, 0, "__infusion"); else all.push("__infusion"); }
   if (clIsCallList() && !all.includes(CL.ACTION)) all.push(CL.ACTION);
+  if (cfg.id === "psa_and_psoriasis" && !all.includes(PSA_CALL_STATUS_FIELD)) all.push(PSA_CALL_STATUS_FIELD);
   clCustomColumns().forEach((c) => { if (!all.includes(c.name)) all.push(c.name); });
   if (clIsAssignTab() || clIsOsteo() || clIsInfusion()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else if (!(clIsGeneric() && cfg.isReference)) all.push("__status");
   { const mc = clMonthCol(); if (mc) { const mi = all.indexOf(mc); if (mi >= 0) all.splice(mi + 1, 0, "__month"); else all.push("__month"); } }
@@ -5729,6 +5757,7 @@ function clColumns(cfg, withHidden) {
 }
 function clColLabel(col) {
   if (CALL_SHEET_ID === "dg_pharmacy" && DG_PHARMACY_LABELS[col]) return DG_PHARMACY_LABELS[col];
+  if (CALL_SHEET_ID === "psa_and_psoriasis" && col === PSA_CALL_STATUS_FIELD) return "Call Status";
   return clLabels()[col] || clBaseLabel(col);
 }
 function clDefaultWidth(cfg, col) {
@@ -6169,6 +6198,21 @@ function clRowHtml(cfg, r, cols) {
     if (c === "__infusion") return `<td class="cl-inf-td" data-col="__infusion">${clInfusionCellHtml(r)}</td>`;
     if (c === "__month") { const m = clMonthInfo(r.data); return `<td data-col="__month">${m ? `<span class="cl-month-chip">${esc(m.label)}</span>` : `<span class="text-muted">\u2014</span>`}</td>`; }
     if (cfg.id === "dg_pharmacy" && Object.values(DG_PHARMACY_FIELDS).includes(c)) return dgPharmacyCellHtml(cfg, r, c);
+    if (cfg.id === "psa_and_psoriasis" && c === PSA_CALL_STATUS_FIELD) {
+      const ps = psaCallStatusInfo(r.data);
+      const label = ps.label || "";
+      return `<td class="cl-action-td" data-col="${esc(c)}"><div class="cl-action-cell"><button type="button" class="cl-pill cl-tone-${ps.tone}${label ? "" : " dashed"}" data-cl-open data-uid="${esc(r.uid)}" data-cl-psa="1" aria-haspopup="dialog" aria-label="Call Status: ${esc(label || "Select status")}. Change."><span class="cl-pill-text">${esc(label || "Select status")}</span>${chevronSmallSvg()}</button></div></td>`;
+    }
+    if (cfg.id === "psa_and_psoriasis" && c === "Assigned To") {
+      const val = r.data[c] || "";
+      const note = psaInsuranceNote(r.data);
+      return `<td class="inline-cell" data-col="${esc(c)}">
+        <div class="inline-cell-wrap" style="display:flex;flex-direction:column;align-items:stretch;gap:4px">
+          ${note ? `<span class="text-muted" style="font-size:11px;line-height:1.25">${esc(note)}</span>` : ""}
+          <input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="${note ? esc(note) : "—"}" title="${esc(val)}" list="cl-team-list" />
+        </div>
+      </td>`;
+    }
     if (c === CL.ACTION && clIsCallList()) return `<td class="cl-action-td" data-col="${esc(c)}">${clActionCellHtml(r)}</td>`;
  if (clIsInfusion() && clIsWrapCol(c) && !clIsDateCol(cfg, c)) return clWrapCellHtml(cfg, r, c);
     const val = r.data[c] || "";
@@ -6652,13 +6696,16 @@ function clOpenActionPopover(uid, anchor) {
   document.addEventListener("keydown", onKey, true);
   window.addEventListener("resize", onScroll);
   window.addEventListener("scroll", onScroll, true);
-  clPopover = { el, uid, onDoc, onKey, onScroll };
+  clPopover = { el, uid, onDoc, onKey, onScroll, psa: CALL_SHEET_ID === "psa_and_psoriasis" && anchor?.dataset?.psa === "1" };
 
   el.addEventListener("click", (e) => {
     const t = e.target;
     const opt = t.closest("[data-cl-act]");
     const att = t.closest("[data-cl-attempt]");
-    if (opt) clChooseAction(uid, opt.dataset.clAct);
+    if (opt) {
+      if (clPopover?.psa) psaCallChooseStatus(uid, opt.dataset.clAct);
+      else clChooseAction(uid, opt.dataset.clAct);
+    }
     else if (att) clApply(uid, { [CL.ATTEMPT]: att.dataset.clAttempt }), clPaintPopover();
     else if (t.closest("[data-cl-cal]")) { clClosePopover(); clOpenReschedModal(uid); }
     else if (t.closest("[data-cl-clear]")) { clApply(uid, { [CL.ACTION]: "", ...CL_CLEAR }, { toast: "Action cleared" }); clPaintPopover(); }
@@ -6674,6 +6721,38 @@ function clOpenActionPopover(uid, anchor) {
     }
   });
   clPaintPopover(true);
+}
+function psaCallChooseStatus(uid, key) {
+  const rec = clRecord(uid);
+  if (!rec) return;
+  const d = rec.data;
+  const a = psaCallStatusOptions().find((x) => x.key === key);
+  if (!a) return;
+  if (key === "resched") {
+    clClosePopover();
+    clOpenPsaReschedModal(uid);
+    return;
+  }
+  if (key === "progress") {
+    clApply(uid, { [PSA_CALL_STATUS_FIELD]: a.label, [CL.ATTEMPT]: d[CL.ATTEMPT] || "1", [CL.NOTE]: d[CL.NOTE] || "No Answer", [CL.REMIND]: d[CL.REMIND] || "", [CL.RESCHED]: "" });
+  } else {
+    clApply(uid, { [PSA_CALL_STATUS_FIELD]: a.label, [CL.ATTEMPT]: "", [CL.NOTE]: "", [CL.REMIND]: "", [CL.RESCHED]: "" }, { toast: `Marked "${a.label}"` });
+  }
+  clPaintPopover();
+}
+function clOpenPsaReschedModal(uid) {
+  // Reuse the existing reschedule calendar but save the result into Call Status.
+  const rec = clRecord(uid);
+  if (!rec) return;
+  const modal = openModal(`<div class="modal-header"><div><h3>Reschedule call</h3><p>Select the new date.</p></div></div><div class="modal-body"><input type="date" id="psa-resched-date" class="ac-in" value="${esc(rec.data[CL.RESCHED] || "")}" /></div><div class="modal-footer"><button class="btn" id="psa-resched-cancel">Cancel</button><button class="btn primary" id="psa-resched-save">Save</button></div>`);
+  modal.querySelector("#psa-resched-cancel").addEventListener("click", closeModal);
+  modal.querySelector("#psa-resched-save").addEventListener("click", () => {
+    const v = modal.querySelector("#psa-resched-date").value;
+    const a = psaCallStatusOptions().find((x) => x.key === "resched");
+    if (!v || !a) return;
+    clApply(uid, { [PSA_CALL_STATUS_FIELD]: a.label, [CL.RESCHED]: v, [CL.ATTEMPT]: "", [CL.NOTE]: "", [CL.REMIND]: "" }, { toast: `Rescheduled – ${clFmtMDY(clIsoToDate(v))}` });
+    closeModal();
+  });
 }
 function clChooseAction(uid, key) {
   const rec = clRecord(uid);
@@ -6693,13 +6772,15 @@ function clPaintPopover(initial) {
   const rec = clRecord(clPopover.uid);
   if (!rec) { clClosePopover(); return; }
   const d = rec.data;
-  const info = callInfo(d);
-  const stored = info.key;
+  const isPsa = !!clPopover.psa;
+  const info = isPsa ? psaCallStatusInfo(d) : callInfo(d);
+  const stored = isPsa ? info.key : info.key;
   const hadFocus = document.activeElement?.closest?.(".cl-popover") ? document.activeElement.dataset.f : null;
   const check = `<svg class="cl-check" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-  let h = `<div class="cl-pop-title">${esc(rec.displayName || "Set action")}</div>`;
-  if (info.flagged) h += `<div class="cl-pop-note">Next visit ${clDaysPhrase(info.days)}. Flagged Needs Attention until Confirmed, Refused or Resched is recorded.</div>`;
-  h += `<div class="cl-opts" role="group" aria-label="Action">${CALL_ACTIONS.map((a) => `
+  let h = `<div class="cl-pop-title">${esc(rec.displayName || (isPsa ? "Set call status" : "Set action"))}</div>`;
+  if (!isPsa && info.flagged) h += `<div class="cl-pop-note">Next visit ${clDaysPhrase(info.days)}. Flagged Needs Attention until Confirmed, Refused or Resched is recorded.</div>`;
+  const popOpts = isPsa ? psaCallStatusOptions() : CALL_ACTIONS;
+  h += `<div class="cl-opts" role="group" aria-label="${isPsa ? "Call Status" : "Action"}">${popOpts.map((a) => `
       <button type="button" class="cl-opt cl-tone-${a.tone}${a.key === stored ? " on" : ""}" data-cl-act="${a.key}" data-f="act-${a.key}" aria-pressed="${a.key === stored}">
         <span class="cl-dot"></span>${esc(a.label)}${a.key === stored ? check : ""}
       </button>`).join("")}</div>`;
@@ -7854,7 +7935,12 @@ function acOptsHtml() {
   const opt = d.options || {};
   const notes = (Array.isArray(opt.notes) && opt.notes.length ? opt.notes : (CALL_NOTES.__base || CALL_NOTES));
   const dgStatuses = Array.isArray(opt.dgPharmacyStatuses) ? opt.dgPharmacyStatuses : DG_PHARMACY_DEFAULT_STATUS_OPTIONS;
-  return `<div class="card ac-card"><h3>DG Pharmacy Status Options</h3>
+  const psaStatuses = Array.isArray(opt.psaCallStatuses) && opt.psaCallStatuses.length ? opt.psaCallStatuses : PSA_CALL_STATUS_DEFAULTS;
+  return `<div class="card ac-card"><h3>PSA &amp; Psoriasis — Call Status Options</h3>
+      <p class="form-hint">These are the choices in the <b>Call Status</b> column. The patient starts blank. You can edit, delete, or add choices later.</p>
+      ${psaStatuses.map((st, i) => `<div class="ac-cond" style="grid-template-columns:1fr 130px auto"><input class="ac-in" data-ac="psa-status-edit" data-i="${i}" value="${esc(st.label)}" /><select class="ac-in" data-ac="psa-status-tone" data-i="${i}">${AC_TONES.map(([k,l]) => `<option value="${k}" ${st.tone===k?"selected":""}>${l}</option>`).join("")}</select><button class="btn sm danger" data-ac="psa-status-del" data-i="${i}">Delete</button></div>`).join("")}
+      <button class="btn sm" data-ac="psa-status-add">+ Add Call Status</button></div>
+    <div class="card ac-card"><h3>DG Pharmacy Status Options</h3>
       <p class="form-hint">These are the choices shown in the DG Pharmacy <b>Stable/Unstable</b> dropdown. The first value is always blank until a status is selected. Edit or delete the choices below, or add a new one. Existing patient records keep their saved value even if an option is later removed.</p>
       <div class="ac-cond-h" style="margin-bottom:8px"><b>Blank / Select status</b> is built in and cannot be deleted.</div>
       ${dgStatuses.length ? dgStatuses.map((status, i) => `<div class="ac-cond" style="grid-template-columns:1fr auto"><input class="ac-in" data-ac="dg-status-edit" data-i="${i}" value="${esc(status)}" aria-label="DG Pharmacy status option ${i + 1}" /><button class="btn sm danger" data-ac="dg-status-del" data-i="${i}" aria-label="Delete DG Pharmacy status option">Delete</button></div>`).join("") : `<p class="form-hint">No status options configured. Add one below.</p>`}
@@ -8001,6 +8087,51 @@ function acOnEvent(e, type) {
     case "cd-col": acEdit((d) => { const cd = cardOf(d)[el.dataset.ck || "conds"][di]; cd.col = v; if (v === "__assigned") { cd.op = "yes"; cd.val = ""; } else if (cd.op === "yes" || cd.op === "no") cd.op = "filled"; }); break;
     case "cd-op": acEdit((d) => { const cd = cardOf(d)[el.dataset.ck || "conds"][di]; cd.op = v; if ((v === "dbefore" || v === "dafter") && !acDataCols(id).includes(cd.val)) cd.val = acDataCols(id).find((x) => x !== cd.col) || ""; }); break;
     case "cd-val": acEdit((d) => { cardOf(d)[el.dataset.ck || "conds"][di].val = String(v); }); break;
+    // PSA & Psoriasis call status options
+    case "psa-status-add": {
+      acEdit((d) => {
+        d.options = d.options || {};
+        const list = Array.isArray(d.options.psaCallStatuses) && d.options.psaCallStatuses.length ? d.options.psaCallStatuses.slice() : PSA_CALL_STATUS_DEFAULTS.map((x) => ({...x}));
+        let n = "New status", i = 2;
+        while (list.some((x) => String(x.label).toLowerCase() === n.toLowerCase())) n = `New status ${i++}`;
+        list.push({ key: "custom_" + Date.now().toString(36), label: n, tone: "gray" });
+        d.options.psaCallStatuses = list;
+      });
+      break;
+    }
+    case "psa-status-edit": {
+      const i = +el.dataset.i;
+      acEdit((d) => {
+        const list = Array.isArray(d.options.psaCallStatuses) && d.options.psaCallStatuses.length ? d.options.psaCallStatuses.slice() : PSA_CALL_STATUS_DEFAULTS.map((x) => ({...x}));
+        const value = String(v).trim();
+        if (i < 0 || i >= list.length || !value) return;
+        if (list.some((x, idx) => idx !== i && String(x.label).trim().toLowerCase() === value.toLowerCase())) return;
+        list[i] = { ...list[i], label: value };
+        d.options.psaCallStatuses = list;
+      });
+      break;
+    }
+    case "psa-status-tone": {
+      const i = +el.dataset.i;
+      acEdit((d) => {
+        const list = Array.isArray(d.options.psaCallStatuses) && d.options.psaCallStatuses.length ? d.options.psaCallStatuses.slice() : PSA_CALL_STATUS_DEFAULTS.map((x) => ({...x}));
+        if (i >= 0 && i < list.length) list[i] = { ...list[i], tone: v };
+        d.options.psaCallStatuses = list;
+      });
+      break;
+    }
+    case "psa-status-del": {
+      const i = +el.dataset.i;
+      confirmDialog("Delete this Call Status?", "Existing patient records keep their saved value, but this choice will no longer appear for new selections.", () => {
+        acEdit((d) => {
+          const list = Array.isArray(d.options.psaCallStatuses) && d.options.psaCallStatuses.length ? d.options.psaCallStatuses.slice() : PSA_CALL_STATUS_DEFAULTS.map((x) => ({...x}));
+          if (i >= 0 && i < list.length) list.splice(i, 1);
+          d.options.psaCallStatuses = list;
+        });
+        acRefresh();
+      });
+      return;
+    }
     // DG Pharmacy status options
     case "dg-status-add": {
       acEdit((d) => {
