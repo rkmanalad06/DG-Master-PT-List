@@ -5276,14 +5276,21 @@ function psaCallStatusOptions() {
 function psaCallStatusInfo(data) {
   const raw = psaCallStatusValue(data);
   const rawLower = raw.toLowerCase();
-  // Older versions could save the generic upcoming-appointment action into
-  // Call Status. Treat that legacy value as blank so it can never reappear.
+  // Legacy generic call values are treated as blank.
   if (!raw || rawLower === "call" || rawLower === "call (upcoming appt)" || rawLower === "call (upcoming appointment)") {
     return { key: "", label: "", tone: "gray" };
   }
+  // Dynamic PSA outputs keep the selected workflow visible in the cell.
+  if (/^resched\s*[-–—]/i.test(raw)) return { key: "resched", label: raw, tone: "orange" };
+  if (/^in\s*progress\s*\(\d+\)/i.test(raw)) return { key: "progress", label: raw, tone: "yellow" };
   const opts = psaCallStatusOptions();
   const found = opts.find((x) => String(x.label || "").trim().toLowerCase() === rawLower);
   return found ? { ...found } : { key: "custom", label: raw, tone: "gray" };
+}
+function psaProgressLabel(data, attempt, note) {
+  const n = String(attempt || data?.[CL.ATTEMPT] || "1").trim() || "1";
+  const reason = String(note || data?.[CL.NOTE] || "No Answer").trim() || "No Answer";
+  return `In Progress (${n}) - ${reason}`;
 }
 const CALL_NOTES = ["No Answer", "Sent VM", "For Callback"];
 const CALL_STATUSES = [
@@ -5753,9 +5760,14 @@ function clApply(uid, patch, opts = {}) {
   if (!Object.keys(changed).length) return false;
   updateRecord(uid, changed);
   if (opts.toast) toast(opts.toast);
+  // PSA call status and prednisone toggles are lightweight inline controls.
+  // Refresh only the affected row so the click feels immediate instead of
+  // rebuilding the KPI/sidebar UI after every selection.
   clRefreshRow(uid);
-  clRefreshKpi();
-  renderSidebar();
+  if (CALL_SHEET_ID !== "psa_and_psoriasis") {
+    clRefreshKpi();
+    renderSidebar();
+  }
   return true;
 }
 
@@ -6360,6 +6372,18 @@ function clRefreshRow(uid) {
       if (!on && chip) chip.remove();
     });
   }
+ if (CALL_SHEET_ID === "psa_and_psoriasis") {
+   const psTd = [...tr.children].find((td) => String(td.dataset.col || "").trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase());
+   if (psTd) {
+     const ps = psaCallStatusInfo(r.data);
+     const label = ps.label || "Select status";
+     const tone = ps.key ? ps.tone : "gray";
+     const dashed = ps.key ? "" : " dashed";
+     psTd.innerHTML = `<div class="inline-cell-wrap psa-call-status-wrap"><button type="button" class="cl-pill cl-tone-${esc(tone)}${dashed}" data-cl-open data-psa="1" data-psa-status-button="1" data-uid="${esc(r.uid)}" aria-haspopup="dialog" aria-label="Call Status: ${esc(label)}. Change."><span class="cl-pill-text">${esc(label)}</span>${chevronSmallSvg()}</button></div>`;
+     const btn = psTd.querySelector("[data-psa-status-button=\"1\"]");
+     if (btn) btn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); if (clPopover && clPopover.uid === btn.dataset.uid) clClosePopover(); else clOpenActionPopover(btn.dataset.uid, btn); });
+   }
+ }
  if (clIsInfusion()) { clRefreshCorr(tr, r); tr.querySelectorAll("textarea.cl-wrap-input").forEach(clGrow); }
 }
 
@@ -6539,7 +6563,26 @@ function wireCallListPage(cfg) {
       e.preventDefault();
       e.stopPropagation();
       const uid = predBtn.dataset.uid;
-      clApply(uid, { [DIAG_PREDNISONE_FIELD]: predBtn.dataset.diagPred }, { toast: `Prednisone: ${predBtn.dataset.diagPred}` });
+      const value = predBtn.dataset.diagPred;
+      const rec = clRecord(uid);
+      if (!rec) return;
+      if (String(rec.data[DIAG_PREDNISONE_FIELD] || "") === value) return;
+      // Update the visible toggle and assignment placeholder immediately; the
+      // normal save path still writes the value to the shared edited-row store.
+      rec.data[DIAG_PREDNISONE_FIELD] = value;
+      updateRecord(uid, { [DIAG_PREDNISONE_FIELD]: value });
+      const tr = predBtn.closest("tr");
+      tr?.querySelectorAll("[data-diag-pred]").forEach((b) => {
+        b.classList.toggle("active", b.dataset.diagPred === value);
+        b.classList.toggle("yes", b.dataset.diagPred === "Yes");
+        b.classList.toggle("no", b.dataset.diagPred === "No");
+      });
+      const assignedInput = tr?.querySelector(".diag-assignment-input");
+      if (assignedInput && !String(assignedInput.value || "").trim()) {
+        assignedInput.placeholder = diagAssignmentNote(rec.data) || "—";
+        assignedInput.title = diagAssignmentNote(rec.data) || "";
+      }
+      toast(`Prednisone: ${value}`);
       return;
     }
     const t = e.target;
@@ -6829,14 +6872,25 @@ function clOpenActionPopover(uid, anchor) {
       if (clPopover?.psa) psaCallChooseStatus(uid, opt.dataset.clAct);
       else clChooseAction(uid, opt.dataset.clAct);
     }
-    else if (att) clApply(uid, { [CL.ATTEMPT]: att.dataset.clAttempt }), clPaintPopover();
+    else if (att) {
+      if (clPopover?.psa) {
+        const rr = clRecord(uid);
+        if (rr) clApply(uid, { [CL.ATTEMPT]: att.dataset.clAttempt, [PSA_CALL_STATUS_FIELD]: psaProgressLabel(rr.data, att.dataset.clAttempt, rr.data[CL.NOTE] || "No Answer") });
+      } else clApply(uid, { [CL.ATTEMPT]: att.dataset.clAttempt });
+      clPaintPopover();
+    }
     else if (t.closest("[data-cl-cal]")) { clClosePopover(); clOpenReschedModal(uid); }
     else if (t.closest("[data-cl-clear]")) { clApply(uid, { [CL.ACTION]: "", ...CL_CLEAR }, { toast: "Action cleared" }); clPaintPopover(); }
   });
   el.addEventListener("change", (e) => {
     if (e.target.id === "cl-note") {
       const v = e.target.value;
-      clApply(uid, v === "For Callback" ? { [CL.NOTE]: v } : { [CL.NOTE]: v, [CL.REMIND]: "" });
+      if (clPopover?.psa) {
+        const rr = clRecord(uid);
+        if (rr) clApply(uid, { [CL.NOTE]: v, [CL.REMIND]: v === "For Callback" ? rr.data[CL.REMIND] || "" : "", [PSA_CALL_STATUS_FIELD]: psaProgressLabel(rr.data, rr.data[CL.ATTEMPT] || "1", v || "No Answer") });
+      } else {
+        clApply(uid, v === "For Callback" ? { [CL.NOTE]: v } : { [CL.NOTE]: v, [CL.REMIND]: "" });
+      }
       clPaintPopover();
     } else if (e.target.id === "cl-remind") {
       clApply(uid, { [CL.REMIND]: e.target.value }, { toast: e.target.value ? "Reminder saved" : undefined });
@@ -6857,7 +6911,9 @@ function psaCallChooseStatus(uid, key) {
     return;
   }
   if (key === "progress") {
-    clApply(uid, { [PSA_CALL_STATUS_FIELD]: a.label, [CL.ATTEMPT]: d[CL.ATTEMPT] || "1", [CL.NOTE]: d[CL.NOTE] || "No Answer", [CL.REMIND]: d[CL.REMIND] || "", [CL.RESCHED]: "" });
+    const attempt = d[CL.ATTEMPT] || "1";
+    const note = d[CL.NOTE] || "No Answer";
+    clApply(uid, { [PSA_CALL_STATUS_FIELD]: psaProgressLabel(d, attempt, note), [CL.ATTEMPT]: attempt, [CL.NOTE]: note, [CL.REMIND]: d[CL.REMIND] || "", [CL.RESCHED]: "" });
   } else {
     clApply(uid, { [PSA_CALL_STATUS_FIELD]: a.label, [CL.ATTEMPT]: "", [CL.NOTE]: "", [CL.REMIND]: "", [CL.RESCHED]: "" }, { toast: `Marked "${a.label}"` });
   }
@@ -6873,7 +6929,7 @@ function clOpenPsaReschedModal(uid) {
     const v = modal.querySelector("#psa-resched-date").value;
     const a = psaCallStatusOptions().find((x) => x.key === "resched");
     if (!v || !a) return;
-    clApply(uid, { [PSA_CALL_STATUS_FIELD]: a.label, [CL.RESCHED]: v, [CL.ATTEMPT]: "", [CL.NOTE]: "", [CL.REMIND]: "" }, { toast: `Rescheduled – ${clFmtMDY(clIsoToDate(v))}` });
+    clApply(uid, { [PSA_CALL_STATUS_FIELD]: `Resched - ${clFmtMDY(clIsoToDate(v))}`, [CL.RESCHED]: v, [CL.ATTEMPT]: "", [CL.NOTE]: "", [CL.REMIND]: "" }, { toast: `Rescheduled – ${clFmtMDY(clIsoToDate(v))}` });
     closeModal();
   });
 }
