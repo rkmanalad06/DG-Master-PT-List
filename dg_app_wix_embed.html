@@ -1079,6 +1079,8 @@ table.cl-table tbody tr.cl-row-attn td:first-child { box-shadow: inset 3px 0 0 #
 .psa-call-status-select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .psa-call-status-select:hover { border-color: var(--accent); }
 .psa-call-status-wrap { min-width: 112px; }
+.psa-call-status-td .cl-pill { pointer-events:auto; }
+.psa-assigned-wrap .inline-edit-input { width:90px; box-sizing:border-box; }
 .psa-insurance-note { color: var(--text-tertiary, #8b8b9a); font-weight: 500; }
 td.cl-action-td { white-space: normal; }
 .cl-action-cell { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
@@ -5264,9 +5266,14 @@ function psaCallStatusOptions() {
 }
 function psaCallStatusInfo(data) {
   const raw = psaCallStatusValue(data);
-  if (!raw) return { key: "", label: "", tone: "gray" };
+  const rawLower = raw.toLowerCase();
+  // Older versions could save the generic upcoming-appointment action into
+  // Call Status. Treat that legacy value as blank so it can never reappear.
+  if (!raw || rawLower === "call" || rawLower === "call (upcoming appt)" || rawLower === "call (upcoming appointment)") {
+    return { key: "", label: "", tone: "gray" };
+  }
   const opts = psaCallStatusOptions();
-  const found = opts.find((x) => String(x.label || "").trim().toLowerCase() === raw.toLowerCase());
+  const found = opts.find((x) => String(x.label || "").trim().toLowerCase() === rawLower);
   return found ? { ...found } : { key: "custom", label: raw, tone: "gray" };
 }
 const CALL_NOTES = ["No Answer", "Sent VM", "For Callback"];
@@ -6248,7 +6255,7 @@ function clRowHtml(cfg, r, cols) {
       const dashed = ps.key ? "" : " dashed";
       return `<td class="inline-cell psa-call-status-td" data-col="${esc(c)}">
         <div class="inline-cell-wrap psa-call-status-wrap">
-          <button type="button" class="cl-pill cl-tone-${esc(tone)}${dashed}" data-cl-open data-psa="1" data-uid="${esc(r.uid)}" aria-haspopup="dialog" aria-label="Call Status: ${esc(label)}. Change.">
+          <button type="button" class="cl-pill cl-tone-${esc(tone)}${dashed}" data-cl-open data-psa="1" data-psa-status-button="1" data-uid="${esc(r.uid)}" aria-haspopup="dialog" aria-label="Call Status: ${esc(label)}. Change.">
             <span class="cl-pill-text">${esc(label)}</span>${chevronSmallSvg()}
           </button>
         </div>
@@ -6258,9 +6265,9 @@ function clRowHtml(cfg, r, cols) {
       const val = r.data[c] || "";
       const note = psaInsuranceNote(r.data);
       return `<td class="inline-cell" data-col="${esc(c)}">
-        <div class="inline-cell-wrap psa-assigned-wrap" style="display:flex;flex-direction:column;align-items:stretch;gap:4px">
-          <input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" list="cl-team-list" />
-          ${note ? `<span class="psa-insurance-note" style="font-size:11px;line-height:1.25">${esc(note)}</span>` : ""}
+        <div class="inline-cell-wrap psa-assigned-wrap" style="display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap">
+          <input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" list="cl-team-list" style="min-width:80px;flex:0 0 90px" />
+          ${note ? `<span class="psa-insurance-note" style="font-size:10px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;flex:1;min-width:0" title="${esc(note)}">${esc(note)}</span>` : ""}
         </div>
       </td>`;
     }
@@ -6379,6 +6386,23 @@ function clRenderTable(cfg) {
     </div>`}
   `;
 
+  // PSA Call Status uses a dedicated direct listener. This avoids the generic
+  // Action handler intercepting the click and makes the status button reliably
+  // clickable even when the table is rebuilt.
+  if (cfg.id === "psa_and_psoriasis") {
+    region.querySelectorAll("[data-psa-status-button=\"1\"]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (clPopover && clPopover.uid === btn.dataset.uid) {
+          clClosePopover();
+          return;
+        }
+        clOpenActionPopover(btn.dataset.uid, btn);
+      });
+    });
+  }
+
   clSyncSel();
   clGrowAll(); requestAnimationFrame(clGrowAll);
   const count = document.getElementById("cl-count");
@@ -6478,21 +6502,6 @@ function wireCallListPage(cfg) {
   });
 
   // --- Table (delegated; the region itself persists across re-renders) ---
-  // PSA Call Status needs a direct pointer handler because the table has several
-  // delegated click/resize layers. Handle the status pill before those layers.
-  region.addEventListener("pointerdown", (e) => {
-    const psa = e.target.closest?.("[data-cl-open][data-psa=\"1\"]");
-    if (!psa) return;
-    e.preventDefault();
-    e.stopPropagation();
-    if (clPopover && clPopover.uid === psa.dataset.uid) {
-      clClosePopover();
-      clSuppressOpenUntil = Date.now() + 350;
-    } else {
-      clOpenActionPopover(psa.dataset.uid, psa);
-      clSuppressOpenUntil = Date.now() + 350;
-    }
-  }, true);
   region.addEventListener("click", (e) => {
     const t = e.target;
     const pager = t.closest(".pager-btns button[data-page]");
