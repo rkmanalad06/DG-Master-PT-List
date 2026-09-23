@@ -5463,7 +5463,7 @@ function diagPrednisoneCellHtml(r) {
     <div class="diag-prednisone-toggle" role="group" aria-label="Prednisone">
       <button type="button" class="diag-yn-btn${value === "Yes" ? " active yes" : ""}" data-diag-pred="Yes" data-uid="${esc(r.uid)}">Yes</button>
       <button type="button" class="diag-yn-btn${value === "No" ? " active no" : ""}" data-diag-pred="No" data-uid="${esc(r.uid)}">No</button>
-      ${value ? `<button type="button" class="diag-yn-btn diag-clear-btn" data-diag-pred="" data-uid="${esc(r.uid)}" title="Clear prednisone selection">Clear</button>` : ""}
+      ${value ? `<button type="button" class="diag-yn-btn diag-clear-btn" data-diag-pred="" data-uid="${esc(r.uid)}" title="Undo prednisone selection" aria-label="Undo prednisone selection">↶</button>` : ""}
     </div>
   </td>`;
 }
