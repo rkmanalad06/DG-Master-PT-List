@@ -6107,7 +6107,7 @@ function clRowHtml(cfg, r, cols) {
   const cells = cols.map((c) => {
     if (c === "__status") return `<td data-col="__status">${clStatusBadge(r.data, r)}</td>`;
     if (c === "__infusion") return `<td class="cl-inf-td" data-col="__infusion">${clInfusionCellHtml(r)}</td>`;
-    if (c === "__month") { const m = clMonthInfo(r.data); return `<td data-col="__month">${m ? `<span class="cl-month-chip">${esc(m.label)}</span>` : `<span class="text-muted">\u2014</span>`}</td>`;
+    if (c === "__month") { const m = clMonthInfo(r.data); return `<td data-col="__month">${m ? `<span class="cl-month-chip">${esc(m.label)}</span>` : `<span class="text-muted">\u2014</span>`}</td>`; }
     if (cfg.id === "dg_pharmacy" && Object.values(DG_PHARMACY_FIELDS).includes(c)) return dgPharmacyCellHtml(cfg, r, c);
     if (c === CL.ACTION && clIsCallList()) return `<td class="cl-action-td" data-col="${esc(c)}">${clActionCellHtml(r)}</td>`;
  if (clIsInfusion() && clIsWrapCol(c) && !clIsDateCol(cfg, c)) return clWrapCellHtml(cfg, r, c);
