@@ -5002,7 +5002,9 @@ const DG_INFUSION_OTHER_TO_COMBINED = {
   "Team Member": "Team member",
   "Corrections / Notes": "Corrections / Notes",
   "Call Status": "Call Status",
-  "REGENCE": "REGENCE"
+  "scheduled y/n": "Call Status",
+  "REGENCE": "REGENCE",
+  "regence -Y AFD if Usmani": "REGENCE"
 };
 const DG_INFUSION_COMBINED_DATE_FIELDS = [
   "Future IV Appt", "Next Infusion Appt", "Next Appt", "Last/Current Appt",
@@ -5013,13 +5015,24 @@ function dgInfusionCombinedData(r) {
   if (!r || r.sheetId !== "dg_infusion_other") return { ...(r?.data || {}) };
   const out = {};
   for (const [src, dst] of Object.entries(DG_INFUSION_OTHER_TO_COMBINED)) out[dst] = r.data?.[src] ?? "";
-  const regKey = Object.keys(r.data || {}).find((k) => String(k).trim().toLowerCase() === DIAG_REGENCE_FIELD.toLowerCase());
+  const regKey = Object.keys(r.data || {}).find((k) => clIsRegenceColumn(k));
   if (regKey) out[DIAG_REGENCE_FIELD] = r.data?.[regKey] ?? "";
   else out[DIAG_REGENCE_FIELD] = "";
+  const callKey = Object.keys(r.data || {}).find((k) => clIsCallStatusColumn(k));
+  if (callKey) out[PSA_CALL_STATUS_FIELD] = r.data?.[callKey] ?? "";
+  else out[PSA_CALL_STATUS_FIELD] = out[PSA_CALL_STATUS_FIELD] ?? "";
   return out;
 }
-function dgInfusionSourceField(sheetId, combinedField) {
+function dgInfusionSourceField(sheetId, combinedField, data = null) {
   if (sheetId !== "dg_infusion_other") return combinedField;
+  if (combinedField === PSA_CALL_STATUS_FIELD) {
+    const k = Object.keys(data || {}).find((x) => clIsCallStatusColumn(x));
+    if (k) return k;
+  }
+  if (combinedField === DIAG_REGENCE_FIELD) {
+    const k = Object.keys(data || {}).find((x) => clIsRegenceColumn(x));
+    if (k) return k;
+  }
   const hit = Object.entries(DG_INFUSION_OTHER_TO_COMBINED).find(([, dst]) => dst === combinedField);
   return hit ? hit[0] : combinedField;
 }
@@ -5294,12 +5307,26 @@ const CALL_ACTIONS = [
   { key: "progress", label: "In Progress", tone: "yellow" },
 ];
 const PSA_CALL_STATUS_FIELD = "Call Status";
+const DG_INFUSION_CALL_STATUS_ALIASES = [
+  "Call Status",
+  "scheduled y/n"
+];
+function clIsCallStatusColumn(col) {
+  const raw = String(col == null ? "" : col).trim().toLowerCase();
+  return DG_INFUSION_CALL_STATUS_ALIASES.some((x) => String(x).trim().toLowerCase() === raw);
+}
 // PSA data may come from CSV/Excel with harmless header differences such as
 // "Call Status " or different capitalization. Always save to the actual
 // source header when one exists, while presenting it to the user as Call Status.
 function psaCallStatusDataField(data) {
   const keys = Object.keys(data || {});
-  return keys.find((k) => String(k).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase()) || PSA_CALL_STATUS_FIELD;
+  const exact = keys.find((k) => String(k).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase());
+  if (exact) return exact;
+  if (clIsInfusion()) {
+    const alias = keys.find((k) => clIsCallStatusColumn(k));
+    if (alias) return alias;
+  }
+  return PSA_CALL_STATUS_FIELD;
 }
 function psaCallStatusValue(data) {
   const key = psaCallStatusDataField(data);
@@ -5307,7 +5334,13 @@ function psaCallStatusValue(data) {
 }
 function clCallStatusDataField(data) {
   const keys = Object.keys(data || {});
-  return keys.find((k) => String(k).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase()) || PSA_CALL_STATUS_FIELD;
+  const exact = keys.find((k) => String(k).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase());
+  if (exact) return exact;
+  if (clIsInfusion()) {
+    const alias = keys.find((k) => clIsCallStatusColumn(k));
+    if (alias) return alias;
+  }
+  return PSA_CALL_STATUS_FIELD;
 }
 function clCallStatusValue(data) {
   const key = clCallStatusDataField(data);
@@ -5869,7 +5902,7 @@ function clApply(uid, patch, opts = {}) {
   const changed = {};
   for (const [k, v] of Object.entries(normalizedPatch)) {
     if (String(rec.data[k] ?? "") !== String(v ?? "")) {
-      const sourceField = clIsCombinedInfusion() ? dgInfusionSourceField(rec.sheetId, k) : k;
+      const sourceField = clIsCombinedInfusion() ? dgInfusionSourceField(rec.sheetId, k, rec.data) : k;
       changed[sourceField] = v;
     }
   }
@@ -5960,7 +5993,7 @@ function clColumns(cfg, withHidden) {
     if (!withHidden) {
       const hid = new Set(cc.hidden || []);
       if (hid.size) {
-        all = all.filter((k) => !hid.has(k) || (cfg.id === "dg_pharmacy" && Object.values(DG_PHARMACY_FIELDS).includes(k)) || (clIsCombinedInfusion() && String(k).trim().toLowerCase() === DIAG_REGENCE_FIELD.toLowerCase()));
+        all = all.filter((k) => !hid.has(k) || (cfg.id === "dg_pharmacy" && Object.values(DG_PHARMACY_FIELDS).includes(k)) || (clIsCombinedInfusion() && (clIsRegenceColumn(k) || clIsCallStatusColumn(k))));
       }
     }
     const o = cc.order || [];
@@ -5978,7 +6011,8 @@ function clColumns(cfg, withHidden) {
 }
 function clColLabel(col) {
   if (CALL_SHEET_ID === "dg_pharmacy" && DG_PHARMACY_LABELS[col]) return DG_PHARMACY_LABELS[col];
-  if (CALL_SHEET_ID === "psa_and_psoriasis" && String(col).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase()) return "Call Status";
+  if ((CALL_SHEET_ID === "psa_and_psoriasis" || clIsInfusion()) && clIsCallStatusColumn(col)) return "Call Status";
+  if (clIsInfusion() && clIsRegenceColumn(col)) return "REGENCE";
   return clLabels()[col] || clBaseLabel(col);
 }
 function clDefaultWidth(cfg, col) {
@@ -6276,7 +6310,7 @@ function renderCallListPage(cfg) {
         <div class="page-title">${esc(clPageTitle(cfg))}</div>
         <div class="page-subtitle">${clIsGeneric() ? esc(sheetDescription(cfg)) : clIsOsteo() ? "Type JP or SU (or Justin / Putz, Sabahat / Usmani) in 50/50 TO JP AND SU to assign, or Cancelled to cancel. Unassigned patients with an appointment within " + CL.ATTN_DAYS + " days are flagged Needs Attention." : clIsAssignTab() ? (clAssignMeta() ? clAssignMeta().desc : `Enter a name in ${CL.TEAM} for each patient. Status follows ${CL.TEAM}: Assigned once someone is entered, Unassigned while it is blank.`) : clIsInfusion() ? "Assign each authorization to a Team Member. Status follows Team Member (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
       </div>
-      ${clIsInfusion() ? `<div style="margin-top:10px;padding:9px 12px;border-radius:8px;background:#fff7c2;border:1px solid #eadb78;color:#5c4b00;font-size:13px;font-weight:600;max-width:760px">Note: If the patient is assigned to AFD, do not assign the patient to Usmani.</div>` : ""}
+
       <div class="page-header-actions">
         ${clIsGeneric() && !cfg.isReference ? `<button class="btn" id="btn-completion-criteria">${gearIconSvg()} Completion Criteria</button>` : ""}
         ${clIsGeneric() && cfg.isReference ? "" : `<button class="btn" id="cl-add-row">+ Add Row</button>`} <button class="btn" id="cl-export">${downloadIconSvg()} Export</button>
@@ -6423,7 +6457,7 @@ function clRowHtml(cfg, r, cols) {
     if (cfg.id === "dg_pharmacy" && Object.values(DG_PHARMACY_FIELDS).includes(c)) return dgPharmacyCellHtml(cfg, r, c);
     if (clIsPrednisoneTab() && c === DIAG_PREDNISONE_FIELD) return diagPrednisoneCellHtml(r);
     if (isInfusionId(cfg.id) && clIsRegenceColumn(c)) return diagRegenceCellHtml(r, c);
-    if (clHasCallStatus() && String(c).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase()) {
+    if (clHasCallStatus() && clIsCallStatusColumn(c)) {
       const ps = psaCallStatusInfo(r.data);
       const label = ps.label || "Select status";
       const tone = ps.key ? ps.tone : "gray";
@@ -6502,7 +6536,7 @@ function clRefreshRow(uid) {
     });
   }
  if (clHasCallStatus()) {
-   const psTd = [...tr.children].find((td) => String(td.dataset.col || "").trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase());
+   const psTd = [...tr.children].find((td) => clIsCallStatusColumn(td.dataset.col));
    if (psTd) {
      const ps = psaCallStatusInfo(r.data);
      const label = ps.label || "Select status";
