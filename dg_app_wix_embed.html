@@ -1183,8 +1183,8 @@ td.cl-action-td { white-space: normal; }
 .dg-cal-foot button{border:none;border-radius:6px;background:transparent;color:var(--accent,#7a2233);font:inherit;font-size:12.5px;font-weight:600;padding:4px 8px;cursor:pointer}
 .dg-cal-foot button:hover{background:var(--accent-soft,#f3dde0)}
 
-.diag-prednisone-toggle{display:inline-flex;border:1px solid var(--border-subtle,#d9dce3);border-radius:7px;overflow:hidden;background:var(--bg-surface,#fff)}
-.diag-yn-btn{border:0;border-right:1px solid var(--border-subtle,#d9dce3);background:transparent;color:var(--text-secondary,#565c6a);font:inherit;font-size:11px;font-weight:600;padding:5px 11px;cursor:pointer;line-height:1.1}
+.diag-prednisone-toggle{display:inline-flex;align-items:stretch;border:1px solid var(--border-subtle,#d9dce3);border-radius:6px;overflow:hidden;background:var(--bg-surface,#fff);margin:0;padding:0}
+.diag-yn-btn{appearance:none;margin:0;border:0;border-right:1px solid var(--border-subtle,#d9dce3);background:transparent;color:var(--text-secondary,#565c6a);font:inherit;font-size:11px;font-weight:600;padding:4px 9px;cursor:pointer;line-height:1.1;min-width:38px;height:26px}
 .diag-yn-btn:last-child{border-right:0}
 .diag-yn-btn:hover{background:#f5f6f8}
 .diag-yn-btn.active.yes{background:#e5f5ec;color:#1e7d4b}
@@ -4998,9 +4998,11 @@ function clAssignMeta() { return ASSIGN_META[CALL_SHEET_ID] || null; }
 function clIsPsa() { return CALL_SHEET_ID === "psa_and_psoriasis"; }
 function psaInsuranceNote(data) {
   if (!clIsPsa()) return "";
-  const insurance = String(data?.["current insurance"] || "").trim();
-  if (/\bmedicare\b/i.test(insurance)) return "Note: Refer to Usmani";
-  if (/\bregence\b/i.test(insurance)) return "Note: DO NOT ASSIGN TO USMANI";
+  const insurance = String(data?.["current insurance"] || "").trim().replace(/\s+/g, " ");
+  // Medicare takes priority so Medicare Part B, Medicare Advantage,
+  // Medicare Part D, Medicare Supplement, etc. all show the Usmani note.
+  if (/\bmedicare\b/i.test(insurance)) return "Assign to Usmani";
+  if (/\bregence\b/i.test(insurance)) return "DO NOT ASSIGN TO USMANI";
   return "";
 }
 function clIsDays() { return !!(SHEET_BY_ID[CALL_SHEET_ID] && SHEET_BY_ID[CALL_SHEET_ID].dayGroups); }
@@ -5443,8 +5445,8 @@ function diagAssignmentNote(data) {
   if (!clIsPrednisoneTab()) return "";
   const pred = diagPrednisoneValue(data);
   if (!pred) return "";
-  if (pred === "Yes") return "Refer to APPS";
-  return clIsGca() ? "Refer to Usmani" : "Refer to PUTZ";
+  if (pred === "Yes") return "Assign to APPS";
+  return clIsGca() ? "Assign to Usmani" : "Assign to PUTZ";
 }
 function diagPrednisoneCellHtml(r) {
   const value = diagPrednisoneValue(r.data);
@@ -6301,9 +6303,8 @@ function clRowHtml(cfg, r, cols) {
       const val = r.data[c] || "";
       const note = diagAssignmentNote(r.data);
       return `<td class="inline-cell" data-col="${esc(c)}">
-        <div class="inline-cell-wrap diag-assigned-wrap" style="display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap">
-          <input type="text" class="inline-edit-input" data-uid="${esc(r.uid)}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" list="cl-team-list" style="min-width:80px;flex:0 0 90px" />
-          ${note ? `<span class="diag-assignment-note" title="${esc(note)}">${esc(note)}</span>` : ""}
+        <div class="inline-cell-wrap diag-assigned-wrap" style="display:flex;align-items:center;min-width:0;white-space:nowrap">
+          <input type="text" class="inline-edit-input diag-assignment-input" data-uid="${esc(r.uid)}" data-field="${esc(c)}" value="${esc(val)}" placeholder="${esc(note || "—")}" title="${esc(val || note || "")}" list="cl-team-list" style="min-width:0;width:100%;box-sizing:border-box" />
         </div>
       </td>`;
     }
