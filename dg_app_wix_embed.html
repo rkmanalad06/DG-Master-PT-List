@@ -1147,8 +1147,7 @@ td.cl-action-td { white-space: normal; }
 .cl-stat-bar{display:block;align-self:stretch;height:6px;margin-top:4px;border-radius:999px;background:var(--border-subtle,#e5e7eb);overflow:hidden}
 .cl-stat-bar-fill{display:block;height:100%;border-radius:999px;background:var(--t-fg);transition:width 300ms var(--ease-out,ease)}
 .dg-pharmacy-select{min-width:175px;cursor:pointer;background:var(--bg-surface,#fff)}
-.dg-pharmacy-afd{display:flex;align-items:center;gap:6px;margin:4px 0 0 7px;font-size:11px;font-weight:700;color:var(--status-attention,#b3312c);white-space:nowrap}
-.dg-pharmacy-afd input{margin:0;accent-color:var(--accent,#7a2233)}
+.dg-pharmacy-afd-check{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin:4px 0 0 6px;padding:0;border:1px solid var(--border-subtle,#d1d5db);border-radius:5px;background:var(--bg-surface,#fff);color:transparent;font-size:12px;font-weight:800;line-height:1;cursor:pointer;vertical-align:middle}.dg-pharmacy-afd-check:hover{border-color:var(--accent,#7a2233)}.dg-pharmacy-afd-check.is-checked{background:var(--accent,#7a2233);border-color:var(--accent,#7a2233);color:#fff}
 .dg-pharmacy-assigned-wrap .inline-edit-input{min-width:120px}
 .dg-cal{position:fixed;z-index:400;width:296px;padding:12px;background:var(--bg-surface,#fff);color:var(--text-primary,#1a1d23);border:1px solid var(--border-subtle,#e5e7eb);border-radius:var(--radius-md,10px);box-shadow:var(--shadow-md,0 12px 32px rgba(0,0,0,.18));font:inherit;font-size:13px}
 .dg-cal-head{display:flex;align-items:center;gap:6px;margin-bottom:8px}
@@ -1434,16 +1433,21 @@ const GROUPS = [
 
 const DG_PHARMACY_FIELDS = {
   status: "stable/ Unstable- Joint pain-recentflare",
-  reason: "Unstable Reason",
+  // Kept only for compatibility with older saved records. It is NOT displayed as a column.
+  legacyReason: "Unstable Reason",
   lastSeen: "last seen",
   prednisone: "Prednisone in the last one year -date",
   assigned: "Assigned To"
 };
-const DG_PHARMACY_STATUS_OPTIONS = ["Stable", "Unstable"];
-const DG_PHARMACY_REASON_OPTIONS = ["Joint Pain", "Recent Flare", "Joint Pain & Recent Flare"];
+const DG_PHARMACY_STATUS_OPTIONS = [
+  "",
+  "Stable",
+  "Unstable - Joint Pain",
+  "Unstable - Recent Flare",
+  "Unstable - Joint Pain & Recent Flare"
+];
 const DG_PHARMACY_LABELS = {
   "stable/ Unstable- Joint pain-recentflare": "Stable/Unstable",
-  "Unstable Reason": "Unstable Reason",
   "last seen": "Last Seen",
   "Prednisone in the last one year -date": "Prednisone — Last One Year",
   "Assigned To": "Assigned To"
@@ -1452,14 +1456,24 @@ function dgPharmacyIsUnstable(data) {
   const raw = String(data?.[DG_PHARMACY_FIELDS.status] || "").trim().toLowerCase();
   return raw === "unstable" || raw.startsWith("unstable -") || raw.startsWith("unstable—") || raw.startsWith("unstable –") || raw.startsWith("unstable/");
 }
-function dgPharmacyStatusValue(data) { return dgPharmacyIsUnstable(data) ? "Unstable" : "Stable"; }
-function dgPharmacyLegacyReason(data) {
-  const raw = String(data?.[DG_PHARMACY_FIELDS.status] || "").trim().toLowerCase();
-  if (!dgPharmacyIsUnstable(data)) return "";
-  if (raw.includes("joint pain") && (raw.includes("recent flare") || raw.includes("recentflare"))) return "Joint Pain & Recent Flare";
-  if (raw.includes("joint pain")) return "Joint Pain";
-  if (raw.includes("recent flare") || raw.includes("recentflare")) return "Recent Flare";
-  return String(data?.[DG_PHARMACY_FIELDS.reason] || "").trim();
+function dgPharmacyCombinedStatus(data) {
+  const raw = String(data?.[DG_PHARMACY_FIELDS.status] || "").trim();
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+  if (lower === "stable") return "Stable";
+  if (lower === "unstable - joint pain") return "Unstable - Joint Pain";
+  if (lower === "unstable - recent flare") return "Unstable - Recent Flare";
+  if (lower.includes("joint pain") && (lower.includes("recent flare") || lower.includes("recentflare"))) return "Unstable - Joint Pain & Recent Flare";
+  if (lower.includes("joint pain")) return "Unstable - Joint Pain";
+  if (lower.includes("recent flare") || lower.includes("recentflare")) return "Unstable - Recent Flare";
+  if (lower === "unstable") {
+    const legacy = String(data?.[DG_PHARMACY_FIELDS.legacyReason] || "").trim().toLowerCase();
+    if (legacy.includes("joint pain") && (legacy.includes("recent flare") || legacy.includes("recentflare"))) return "Unstable - Joint Pain & Recent Flare";
+    if (legacy.includes("joint pain")) return "Unstable - Joint Pain";
+    if (legacy.includes("recent flare") || legacy.includes("recentflare")) return "Unstable - Recent Flare";
+    return "Unstable";
+  }
+  return raw;
 }
 function dgPharmacyNeedsAfd(data) { return dgPharmacyIsUnstable(data) && !!String(data?.[DG_PHARMACY_FIELDS.prednisone] || "").trim(); }
 
@@ -1500,9 +1514,9 @@ const SHEET_CONFIG = [
     nameField: "Patient",
     dateFields: ["Submission Date/Time", "last seen", "Prednisone in the last one year -date"],
     completion: { field: "Assigned To", mode: "nonblank", label: "Assigned To is filled in" },
-    searchFields: ["Patient", "Medication", "stable/ Unstable- Joint pain-recentflare", "Unstable Reason", "last seen", "Prednisone in the last one year -date", "Assigned To"],
-    inlineFields: ["stable/ Unstable- Joint pain-recentflare", "Unstable Reason", "last seen", "Prednisone in the last one year -date", "Assigned To"],
-    defaultHeaders: ["Patient", "Medication", "Submission Date/Time", "stable/ Unstable- Joint pain-recentflare", "Unstable Reason", "last seen", "Prednisone in the last one year -date", "Assigned To"],
+    searchFields: ["Patient", "Medication", "stable/ Unstable- Joint pain-recentflare", "last seen", "Prednisone in the last one year -date", "Assigned To"],
+    inlineFields: ["stable/ Unstable- Joint pain-recentflare", "last seen", "Prednisone in the last one year -date", "Assigned To"],
+    defaultHeaders: ["Patient", "Medication", "Submission Date/Time", "stable/ Unstable- Joint pain-recentflare", "last seen", "Prednisone in the last one year -date", "Assigned To"],
   },
   {
     id: "dg_infusion_pas",
@@ -5675,7 +5689,9 @@ function clSaveCustomColumns(cols) {
 function clColumns(cfg, withHidden) {
   let all = (RAW_SHEETS[cfg.id]?.headers || []).slice();
   if (cfg.id === "dg_pharmacy") {
-    Object.values(DG_PHARMACY_FIELDS).forEach((f) => {
+    // The unstable reason is part of the status value, not a separate column.
+    all = all.filter((f) => f !== DG_PHARMACY_FIELDS.legacyReason);
+    [DG_PHARMACY_FIELDS.status, DG_PHARMACY_FIELDS.lastSeen, DG_PHARMACY_FIELDS.prednisone, DG_PHARMACY_FIELDS.assigned].forEach((f) => {
       if (!all.includes(f)) all.push(f);
     });
   }
@@ -6131,21 +6147,15 @@ function dgPharmacyCellHtml(cfg, r, c) {
   const d = r.data || {};
 
   if (c === DG_PHARMACY_FIELDS.status) {
-    const current = dgPharmacyStatusValue(d);
-    return `<td class="inline-cell" data-col="${esc(c)}"><select class="inline-edit-input dg-pharmacy-select" data-uid="${esc(r.uid)}" data-field="${esc(c)}" aria-label="Stable or Unstable">${DG_PHARMACY_STATUS_OPTIONS.map((x) => `<option value="${esc(x)}" ${current === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></td>`;
-  }
-
-  if (c === DG_PHARMACY_FIELDS.reason) {
-    if (!dgPharmacyIsUnstable(d)) return `<td class="inline-cell" data-col="${esc(c)}"><span class="text-muted">—</span></td>`;
-    const current = String(d[DG_PHARMACY_FIELDS.reason] || "").trim() || dgPharmacyLegacyReason(d);
-    return `<td class="inline-cell" data-col="${esc(c)}"><select class="inline-edit-input dg-pharmacy-select" data-uid="${esc(r.uid)}" data-field="${esc(c)}" aria-label="Unstable reason"><option value="">Select reason</option>${DG_PHARMACY_REASON_OPTIONS.map((x) => `<option value="${esc(x)}" ${current === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></td>`;
+    const current = dgPharmacyCombinedStatus(d);
+    return `<td class="inline-cell" data-col="${esc(c)}"><select class="inline-edit-input dg-pharmacy-select" data-uid="${esc(r.uid)}" data-field="${esc(c)}" aria-label="Stable or Unstable">${DG_PHARMACY_STATUS_OPTIONS.map((x) => `<option value="${esc(x)}" ${current === x ? "selected" : ""}>${x ? esc(x) : "Select status"}</option>`).join("")}</select></td>`;
   }
 
   if (c === DG_PHARMACY_FIELDS.assigned) {
     const assigned = String(d[DG_PHARMACY_FIELDS.assigned] || "").trim();
     const showAfd = dgPharmacyNeedsAfd(d);
     const isAfd = assigned.toUpperCase() === "AFD";
-    return `<td class="inline-cell" data-col="${esc(c)}"><div class="inline-cell-wrap dg-pharmacy-assigned-wrap"><input type="text" class="inline-edit-input" data-uid="${esc(r.uid)}" data-field="${esc(c)}" value="${esc(assigned)}" placeholder="—" title="${esc(assigned)}" /></div>${showAfd ? `<label class="dg-pharmacy-afd"><input type="checkbox" class="dg-pharmacy-afd-check" data-uid="${esc(r.uid)}" ${isAfd ? "checked" : ""} /><span>REFER TO AFD</span></label>` : ""}</td>`;
+    return `<td class="inline-cell" data-col="${esc(c)}"><div class="inline-cell-wrap dg-pharmacy-assigned-wrap"><input type="text" class="inline-edit-input" data-uid="${esc(r.uid)}" data-field="${esc(c)}" value="${esc(assigned)}" placeholder="—" title="${esc(assigned)}" /></div>${showAfd ? `<button type="button" class="dg-pharmacy-afd-check ${isAfd ? "is-checked" : ""}" data-uid="${esc(r.uid)}" aria-label="${isAfd ? "Uncheck" : "Check"} Refer to AFD" title="${isAfd ? "Uncheck Refer to AFD" : "Refer to AFD"}>✓</button>` : ""}</td>`;
   }
 
   if (c === DG_PHARMACY_FIELDS.lastSeen || c === DG_PHARMACY_FIELDS.prednisone) {
@@ -6345,6 +6355,16 @@ function wireCallListPage(cfg) {
  });
  document.getElementById("cl-note")?.addEventListener("blur", (e) => { if (e.target.value !== psaNote()) { psaSaveNote(e.target.value); toast("Note saved"); } });
  region.addEventListener("input", (e) => { if (e.target.classList && e.target.classList.contains("cl-wrap-input")) clGrow(e.target); });
+ region.addEventListener("click", (e) => {
+   const afd = e.target.closest && e.target.closest(".dg-pharmacy-afd-check");
+   if (!afd) return;
+   const rec = clRecord(afd.dataset.uid);
+   if (!rec) return;
+   const currentlyChecked = afd.classList.contains("is-checked");
+   updateRecord(rec.uid, { [DG_PHARMACY_FIELDS.assigned]: currentlyChecked ? "" : "AFD" });
+   toast(currentlyChecked ? "Refer to AFD unchecked" : "Assigned To set to AFD");
+   clRenderTable(cfg); clRefreshKpi(); renderSidebar();
+ });
  region.addEventListener("change", (e) => {
  const cb = e.target;
  if (!cb.classList || !cb.classList.contains) return;
@@ -6352,21 +6372,10 @@ function wireCallListPage(cfg) {
    const rec = clRecord(cb.dataset.uid);
    if (!rec) return;
    const patch = { [cb.dataset.field]: cb.value };
-   if (cb.dataset.field === DG_PHARMACY_FIELDS.status && cb.value === "Stable") patch[DG_PHARMACY_FIELDS.reason] = "";
+   // Keep the old reason field blank/unused; the selected status now contains the full reason.
+   if (cb.dataset.field === DG_PHARMACY_FIELDS.status) patch[DG_PHARMACY_FIELDS.legacyReason] = "";
    updateRecord(rec.uid, patch);
    toast(`Saved "${clColLabel(cb.dataset.field)}"`);
-   clRenderTable(cfg); clRefreshKpi(); renderSidebar();
-   return;
- }
- if (cb.classList.contains("dg-pharmacy-afd-check")) {
-   const rec = clRecord(cb.dataset.uid);
-   if (!rec) return;
-   if (cb.checked) {
-     updateRecord(rec.uid, { [DG_PHARMACY_FIELDS.assigned]: "AFD" });
-     toast("Assigned To set to AFD");
-   } else {
-     toast("REFER TO AFD unchecked");
-   }
    clRenderTable(cfg); clRefreshKpi(); renderSidebar();
    return;
  }
