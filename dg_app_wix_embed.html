@@ -5224,6 +5224,17 @@ const CALL_ACTIONS = [
   { key: "progress", label: "In Progress", tone: "yellow" },
 ];
 const PSA_CALL_STATUS_FIELD = "Call Status";
+// PSA data may come from CSV/Excel with harmless header differences such as
+// "Call Status " or different capitalization. Always save to the actual
+// source header when one exists, while presenting it to the user as Call Status.
+function psaCallStatusDataField(data) {
+  const keys = Object.keys(data || {});
+  return keys.find((k) => String(k).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase()) || PSA_CALL_STATUS_FIELD;
+}
+function psaCallStatusValue(data) {
+  const key = psaCallStatusDataField(data);
+  return String(data?.[key] || "").trim();
+}
 const PSA_CALL_STATUS_DEFAULTS = [
   { key: "call", label: "Call (upcoming appt)", tone: "blue" },
   { key: "confirmed", label: "Called & Confirmed", tone: "green" },
@@ -5237,7 +5248,7 @@ function psaCallStatusOptions() {
   return PSA_CALL_STATUS_DEFAULTS;
 }
 function psaCallStatusInfo(data) {
-  const raw = String(data?.[PSA_CALL_STATUS_FIELD] || "").trim();
+  const raw = psaCallStatusValue(data);
   if (!raw) return { key: "", label: "", tone: "gray" };
   const opts = psaCallStatusOptions();
   const found = opts.find((x) => String(x.label || "").trim().toLowerCase() === raw.toLowerCase());
@@ -5670,8 +5681,18 @@ function clStats(records) {
 function clApply(uid, patch, opts = {}) {
   const rec = clRecord(uid);
   if (!rec) return false;
+  const normalizedPatch = { ...patch };
+  // Save PSA Call Status against the actual imported header, even if the source
+  // uses "Call Status ", "call status", etc.
+  if (CALL_SHEET_ID === "psa_and_psoriasis" && Object.prototype.hasOwnProperty.call(normalizedPatch, PSA_CALL_STATUS_FIELD)) {
+    const actualField = psaCallStatusDataField(rec.data);
+    if (actualField !== PSA_CALL_STATUS_FIELD) {
+      normalizedPatch[actualField] = normalizedPatch[PSA_CALL_STATUS_FIELD];
+      delete normalizedPatch[PSA_CALL_STATUS_FIELD];
+    }
+  }
   const changed = {};
-  for (const [k, v] of Object.entries(patch)) if (String(rec.data[k] ?? "") !== String(v ?? "")) changed[k] = v;
+  for (const [k, v] of Object.entries(normalizedPatch)) if (String(rec.data[k] ?? "") !== String(v ?? "")) changed[k] = v;
   if (!Object.keys(changed).length) return false;
   updateRecord(uid, changed);
   if (opts.toast) toast(opts.toast);
@@ -5729,7 +5750,14 @@ function clColumns(cfg, withHidden) {
   }
   if (clIsGca()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti, 0, "__infusion"); else all.push("__infusion"); }
   if (clIsCallList() && !all.includes(CL.ACTION)) all.push(CL.ACTION);
-  if (cfg.id === "psa_and_psoriasis" && !all.includes(PSA_CALL_STATUS_FIELD)) all.push(PSA_CALL_STATUS_FIELD);
+  if (cfg.id === "psa_and_psoriasis") {
+    const actualCallStatus = all.find((h) => String(h).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase());
+    if (!actualCallStatus) {
+      const ai = all.indexOf("Assigned To");
+      if (ai >= 0) all.splice(ai + 1, 0, PSA_CALL_STATUS_FIELD);
+      else all.push(PSA_CALL_STATUS_FIELD);
+    }
+  }
   clCustomColumns().forEach((c) => { if (!all.includes(c.name)) all.push(c.name); });
   if (clIsAssignTab() || clIsOsteo() || clIsInfusion()) { const ti = all.indexOf(CL.TEAM); if (ti >= 0) all.splice(ti + 1, 0, "__status"); else all.push("__status"); } else if (!(clIsGeneric() && cfg.isReference)) all.push("__status");
   { const mc = clMonthCol(); if (mc) { const mi = all.indexOf(mc); if (mi >= 0) all.splice(mi + 1, 0, "__month"); else all.push("__month"); } }
@@ -5757,7 +5785,7 @@ function clColumns(cfg, withHidden) {
 }
 function clColLabel(col) {
   if (CALL_SHEET_ID === "dg_pharmacy" && DG_PHARMACY_LABELS[col]) return DG_PHARMACY_LABELS[col];
-  if (CALL_SHEET_ID === "psa_and_psoriasis" && col === PSA_CALL_STATUS_FIELD) return "Call Status";
+  if (CALL_SHEET_ID === "psa_and_psoriasis" && String(col).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase()) return "Call Status";
   return clLabels()[col] || clBaseLabel(col);
 }
 function clDefaultWidth(cfg, col) {
@@ -6198,7 +6226,7 @@ function clRowHtml(cfg, r, cols) {
     if (c === "__infusion") return `<td class="cl-inf-td" data-col="__infusion">${clInfusionCellHtml(r)}</td>`;
     if (c === "__month") { const m = clMonthInfo(r.data); return `<td data-col="__month">${m ? `<span class="cl-month-chip">${esc(m.label)}</span>` : `<span class="text-muted">\u2014</span>`}</td>`; }
     if (cfg.id === "dg_pharmacy" && Object.values(DG_PHARMACY_FIELDS).includes(c)) return dgPharmacyCellHtml(cfg, r, c);
-    if (cfg.id === "psa_and_psoriasis" && c === PSA_CALL_STATUS_FIELD) {
+    if (cfg.id === "psa_and_psoriasis" && String(c).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase()) {
       const ps = psaCallStatusInfo(r.data);
       const label = ps.label || "";
       return `<td class="cl-action-td" data-col="${esc(c)}"><div class="cl-action-cell"><button type="button" class="cl-pill cl-tone-${ps.tone}${label ? "" : " dashed"}" data-cl-open data-uid="${esc(r.uid)}" data-cl-psa="1" aria-haspopup="dialog" aria-label="Call Status: ${esc(label || "Select status")}. Change."><span class="cl-pill-text">${esc(label || "Select status")}</span>${chevronSmallSvg()}</button></div></td>`;
