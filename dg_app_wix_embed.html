@@ -6421,7 +6421,11 @@ function clRowHtml(cfg, r, cols) {
         </div>
       </td>`;
     }
-    if ((cfg.id === "psa_and_psoriasis" && c === "Assigned To") || ((clIsPmr() || clIsGca() || clIsRegenceTab()) && String(c).trim().toLowerCase() === String(CL.TEAM).trim().toLowerCase())) {
+    const isDiagAssignedCol =
+      (cfg.id === "psa_and_psoriasis" && String(c).trim().toLowerCase() === "assigned to") ||
+      ((clIsPmr() || clIsGca()) && String(c).trim().toLowerCase() === String(CL.TEAM).trim().toLowerCase()) ||
+      (clIsRegenceTab() && String(c).trim().toLowerCase() === "assigned to");
+    if (isDiagAssignedCol) {
       const val = r.data[c] || "";
       const note = diagAssignmentNote(r.data);
       return `<td class="inline-cell" data-col="${esc(c)}">
