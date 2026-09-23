@@ -5499,7 +5499,19 @@ function clIsPmr() { return CALL_SHEET_ID === "pmr"; }
 const DIAG_PREDNISONE_FIELD = "Prednisone";
 function clIsPrednisoneTab() { return clIsPmr() || clIsGca(); }
 const DIAG_REGENCE_FIELD = "REGENCE";
+const DIAG_REGENCE_SOURCE_ALIASES = [
+  "REGENCE",
+  "regence -Y AFD if Usmani"
+];
 function clIsRegenceTab() { return clIsInfusion(); }
+function clIsRegenceColumn(col) {
+  const raw = String(col == null ? "" : col).trim().toLowerCase();
+  return DIAG_REGENCE_SOURCE_ALIASES.some((x) => String(x).trim().toLowerCase() === raw);
+}
+function diagRegenceDataField(data) {
+  const keys = Object.keys(data || {});
+  return keys.find((k) => clIsRegenceColumn(k)) || DIAG_REGENCE_FIELD;
+}
 function diagFieldValue(data, field) {
   if (!data) return "";
   if (Object.prototype.hasOwnProperty.call(data, field)) return data[field];
@@ -5512,15 +5524,15 @@ function diagYesNoValue(data, field) {
   if (["no", "n", "false", "0"].includes(raw)) return "No";
   return "";
 }
-function diagRegenceValue(data) { return diagYesNoValue(data, DIAG_REGENCE_FIELD); }
+function diagRegenceValue(data) { return diagYesNoValue(data, diagRegenceDataField(data)); }
 function diagRegenceAssignmentNote(data) {
   const v = diagRegenceValue(data);
   if (!v) return "";
   return v === "Yes" ? "ASSIGN TO AFD" : "ASSIGN TO USMANI";
 }
-function diagRegenceCellHtml(r) {
+function diagRegenceCellHtml(r, columnKey = DIAG_REGENCE_FIELD) {
   const value = diagRegenceValue(r.data);
-  return `<td class="inline-cell diag-regence-td" data-col="${esc(DIAG_REGENCE_FIELD)}">
+  return `<td class="inline-cell diag-regence-td" data-col="${esc(columnKey)}">
     <div class="diag-prednisone-toggle" role="group" aria-label="REGENCE">
       <button type="button" class="diag-yn-btn${value === "Yes" ? " active yes" : ""}" data-diag-regence="Yes" data-uid="${esc(r.uid)}">Yes</button>
       <button type="button" class="diag-yn-btn${value === "No" ? " active no" : ""}" data-diag-regence="No" data-uid="${esc(r.uid)}">No</button>
@@ -5909,7 +5921,10 @@ function clColumns(cfg, withHidden) {
     if (!all.includes(DIAG_PREDNISONE_FIELD)) all.push(DIAG_PREDNISONE_FIELD);
   }
   if (clIsRegenceTab()) {
-    if (!all.some((h) => String(h).trim().toLowerCase() === DIAG_REGENCE_FIELD.toLowerCase())) all.push(DIAG_REGENCE_FIELD);
+    // The source workbook column is named "regence -Y AFD if Usmani",
+    // while Admin displays it as "REGENCE". Keep the original field so its
+    // existing data is preserved; only add REGENCE when neither name exists.
+    if (!all.some((h) => clIsRegenceColumn(h))) all.push(DIAG_REGENCE_FIELD);
   }
   if (cfg.id === "dg_pharmacy") {
     // Status and reason are one field. There is no separate Unstable Reason column.
@@ -6407,7 +6422,7 @@ function clRowHtml(cfg, r, cols) {
     if (c === "__month") { const m = clMonthInfo(r.data); return `<td data-col="__month">${m ? `<span class="cl-month-chip">${esc(m.label)}</span>` : `<span class="text-muted">\u2014</span>`}</td>`; }
     if (cfg.id === "dg_pharmacy" && Object.values(DG_PHARMACY_FIELDS).includes(c)) return dgPharmacyCellHtml(cfg, r, c);
     if (clIsPrednisoneTab() && c === DIAG_PREDNISONE_FIELD) return diagPrednisoneCellHtml(r);
-    if (clIsRegenceTab() && String(c).trim().toLowerCase() === DIAG_REGENCE_FIELD.toLowerCase()) return diagRegenceCellHtml(r);
+    if (isInfusionId(cfg.id) && clIsRegenceColumn(c)) return diagRegenceCellHtml(r, c);
     if (clHasCallStatus() && String(c).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase()) {
       const ps = psaCallStatusInfo(r.data);
       const label = ps.label || "Select status";
@@ -6424,7 +6439,7 @@ function clRowHtml(cfg, r, cols) {
     const isDiagAssignedCol =
       (cfg.id === "psa_and_psoriasis" && String(c).trim().toLowerCase() === "assigned to") ||
       ((clIsPmr() || clIsGca()) && String(c).trim().toLowerCase() === String(CL.TEAM).trim().toLowerCase()) ||
-      (clIsRegenceTab() && String(c).trim().toLowerCase() === "assigned to");
+      (isInfusionId(cfg.id) && String(c).trim().toLowerCase() === "assigned to");
     if (isDiagAssignedCol) {
       const val = r.data[c] || "";
       const note = diagAssignmentNote(r.data);
@@ -6681,12 +6696,13 @@ function wireCallListPage(cfg) {
       const rec = clRecord(uid);
       if (!rec) return;
       if (diagRegenceValue(rec.data) === value) return;
-      rec.data[DIAG_REGENCE_FIELD] = value;
-      clApply(uid, { [DIAG_REGENCE_FIELD]: value });
+      const actualField = diagRegenceDataField(rec.data);
+      rec.data[actualField] = value;
+      clApply(uid, { [actualField]: value });
       const tr = regenceBtn.closest("tr");
       if (tr) {
-        const cell = tr.querySelector(`td[data-col="${DIAG_REGENCE_FIELD}"]`);
-        if (cell) cell.outerHTML = diagRegenceCellHtml(rec);
+        const cell = tr.querySelector(`td[data-col="${actualField}"]`) || tr.querySelector(`td[data-col="${DIAG_REGENCE_FIELD}"]`);
+        if (cell) cell.outerHTML = diagRegenceCellHtml(rec, actualField);
         const assignedInput = tr.querySelector(".diag-assignment-input");
         if (assignedInput && !String(assignedInput.value || "").trim()) {
           assignedInput.placeholder = diagAssignmentNote(rec.data) || "—";
