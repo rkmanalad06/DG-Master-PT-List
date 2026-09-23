@@ -6478,6 +6478,21 @@ function wireCallListPage(cfg) {
   });
 
   // --- Table (delegated; the region itself persists across re-renders) ---
+  // PSA Call Status needs a direct pointer handler because the table has several
+  // delegated click/resize layers. Handle the status pill before those layers.
+  region.addEventListener("pointerdown", (e) => {
+    const psa = e.target.closest?.("[data-cl-open][data-psa=\"1\"]");
+    if (!psa) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (clPopover && clPopover.uid === psa.dataset.uid) {
+      clClosePopover();
+      clSuppressOpenUntil = Date.now() + 350;
+    } else {
+      clOpenActionPopover(psa.dataset.uid, psa);
+      clSuppressOpenUntil = Date.now() + 350;
+    }
+  }, true);
   region.addEventListener("click", (e) => {
     const t = e.target;
     const pager = t.closest(".pager-btns button[data-page]");
