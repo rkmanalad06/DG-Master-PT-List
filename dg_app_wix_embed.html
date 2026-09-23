@@ -1189,6 +1189,8 @@ td.cl-action-td { white-space: normal; }
 .diag-yn-btn:hover{background:#f5f6f8}
 .diag-yn-btn.active.yes{background:#e5f5ec;color:#1e7d4b}
 .diag-yn-btn.active.no{background:#fbe6e5;color:#b3312c}
+.diag-yn-btn.diag-clear-btn{font-size:5.5px;min-width:19px;padding:2px 4px;height:13px;line-height:1;border-right:0;color:var(--text-tertiary,#8b8b9a);font-weight:500;background:transparent}
+.diag-yn-btn.diag-clear-btn:hover{background:#f5f6f8;color:var(--text-secondary,#565c6a)}
 .diag-assignment-note{font-size:10.5px;line-height:1.2;color:#c2410c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;min-width:0;flex:1}
 .cl-stat-sub{display:block;font-size:11px;line-height:1.3;color:var(--text-tertiary,#8b8b9a);margin:2px 0 6px;font-weight:400}
 .cl-stat-static{cursor:default}
@@ -5461,6 +5463,7 @@ function diagPrednisoneCellHtml(r) {
     <div class="diag-prednisone-toggle" role="group" aria-label="Prednisone">
       <button type="button" class="diag-yn-btn${value === "Yes" ? " active yes" : ""}" data-diag-pred="Yes" data-uid="${esc(r.uid)}">Yes</button>
       <button type="button" class="diag-yn-btn${value === "No" ? " active no" : ""}" data-diag-pred="No" data-uid="${esc(r.uid)}">No</button>
+      ${value ? `<button type="button" class="diag-yn-btn diag-clear-btn" data-diag-pred="" data-uid="${esc(r.uid)}" title="Clear prednisone selection">Clear</button>` : ""}
     </div>
   </td>`;
 }
@@ -6563,26 +6566,26 @@ function wireCallListPage(cfg) {
       e.preventDefault();
       e.stopPropagation();
       const uid = predBtn.dataset.uid;
-      const value = predBtn.dataset.diagPred;
+      const value = predBtn.dataset.diagPred || "";
       const rec = clRecord(uid);
       if (!rec) return;
       if (String(rec.data[DIAG_PREDNISONE_FIELD] || "") === value) return;
-      // Update the visible toggle and assignment placeholder immediately; the
-      // normal save path still writes the value to the shared edited-row store.
+      // Update only this row; Clear intentionally writes a blank value.
       rec.data[DIAG_PREDNISONE_FIELD] = value;
       updateRecord(uid, { [DIAG_PREDNISONE_FIELD]: value });
       const tr = predBtn.closest("tr");
-      tr?.querySelectorAll("[data-diag-pred]").forEach((b) => {
-        b.classList.toggle("active", b.dataset.diagPred === value);
-        b.classList.toggle("yes", b.dataset.diagPred === "Yes");
-        b.classList.toggle("no", b.dataset.diagPred === "No");
-      });
-      const assignedInput = tr?.querySelector(".diag-assignment-input");
-      if (assignedInput && !String(assignedInput.value || "").trim()) {
-        assignedInput.placeholder = diagAssignmentNote(rec.data) || "—";
-        assignedInput.title = diagAssignmentNote(rec.data) || "";
+      if (tr) {
+        const cell = tr.querySelector(`td[data-col="${DIAG_PREDNISONE_FIELD}"]`);
+        if (cell) {
+          cell.innerHTML = diagPrednisoneCellHtml(rec).replace(/^<td[^>]*>|<\/td>$/g, "");
+        }
+        const assignedInput = tr.querySelector(".diag-assignment-input");
+        if (assignedInput && !String(assignedInput.value || "").trim()) {
+          assignedInput.placeholder = diagAssignmentNote(rec.data) || "—";
+          assignedInput.title = diagAssignmentNote(rec.data) || "";
+        }
       }
-      toast(`Prednisone: ${value}`);
+      toast(value ? `Prednisone: ${value}` : "Prednisone cleared");
       return;
     }
     const t = e.target;
@@ -6880,7 +6883,14 @@ function clOpenActionPopover(uid, anchor) {
       clPaintPopover();
     }
     else if (t.closest("[data-cl-cal]")) { clClosePopover(); clOpenReschedModal(uid); }
-    else if (t.closest("[data-cl-clear]")) { clApply(uid, { [CL.ACTION]: "", ...CL_CLEAR }, { toast: "Action cleared" }); clPaintPopover(); }
+    else if (t.closest("[data-cl-clear]")) {
+      if (clPopover?.psa) {
+        clApply(uid, { [PSA_CALL_STATUS_FIELD]: "", [CL.ATTEMPT]: "", [CL.NOTE]: "", [CL.REMIND]: "", [CL.RESCHED]: "" }, { toast: "Call Status cleared" });
+      } else {
+        clApply(uid, { [CL.ACTION]: "", ...CL_CLEAR }, { toast: "Action cleared" });
+      }
+      clPaintPopover();
+    }
   });
   el.addEventListener("change", (e) => {
     if (e.target.id === "cl-note") {
@@ -6962,7 +6972,8 @@ function clPaintPopover(initial) {
   h += `<div class="cl-opts" role="group" aria-label="${isPsa ? "Call Status" : "Action"}">${popOpts.map((a) => `
       <button type="button" class="cl-opt cl-tone-${a.tone}${a.key === stored ? " on" : ""}" data-cl-act="${a.key}" data-f="act-${a.key}" aria-pressed="${a.key === stored}">
         <span class="cl-dot"></span>${esc(a.label)}${a.key === stored ? check : ""}
-      </button>`).join("")}</div>`;
+      </button>`).join("")}</div>
+    ${isPsa && psaCallStatusValue(d) ? `<div class="cl-pop-foot"><button type="button" class="cl-link-btn muted" data-cl-clear data-f="clear">Clear action</button></div>` : ""}`;
   if (stored === "progress") {
     const n = d[CL.ATTEMPT] || "1";
     const note = d[CL.NOTE] || "";
