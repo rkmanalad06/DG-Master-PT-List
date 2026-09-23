@@ -6718,7 +6718,14 @@ let clSuppressOpenUntil = 0;
 const CL_CLEAR = { [CL.ATTEMPT]: "", [CL.NOTE]: "", [CL.REMIND]: "", [CL.RESCHED]: "" };
 
 function clFindPill(uid) {
-  return [...document.querySelectorAll("#cl-table-region .cl-pill[data-cl-open]")].find((b) => b.dataset.uid === uid && (b.dataset.psa === "1" || !b.classList.contains("dashed")) && b.closest(".cl-action-cell")?.firstElementChild === b) || null;
+  return [...document.querySelectorAll("#cl-table-region .cl-pill[data-cl-open]")].find((b) => {
+    if (b.dataset.uid !== uid) return false;
+    // PSA & Psoriasis Call Status pills live in .psa-call-status-td, not
+    // .cl-action-cell. The old lookup only recognized the generic Action
+    // pill, so the PSA popover was immediately closed after opening.
+    if (b.dataset.psa === "1") return true;
+    return b.closest(".cl-action-cell")?.firstElementChild === b;
+  }) || null;
 }
 function clClosePopover(restoreFocus) {
   if (!clPopover) return;
