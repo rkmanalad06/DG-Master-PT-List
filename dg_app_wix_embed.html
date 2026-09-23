@@ -1070,6 +1070,16 @@ table.cl-table tbody tr.cl-row-attn td:first-child { box-shadow: inset 3px 0 0 #
 .cl-pill .cl-pill-text { overflow: hidden; text-overflow: ellipsis; }
 .cl-pill svg { flex-shrink: 0; opacity: 0.75; }
 .cl-pill.dashed { background: transparent; border-style: dashed; }
+.psa-call-status-select {
+  min-width: 112px; max-width: 100%; box-sizing: border-box;
+  padding: 4px 24px 4px 9px; border: 1px solid var(--border-subtle); border-radius: 999px;
+  background: var(--bg-surface); color: var(--text-primary); font: inherit; font-size: 12px;
+  cursor: pointer; outline: none;
+}
+.psa-call-status-select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.psa-call-status-select:hover { border-color: var(--accent); }
+.psa-call-status-wrap { min-width: 112px; }
+.psa-insurance-note { color: var(--text-tertiary, #8b8b9a); font-weight: 500; }
 td.cl-action-td { white-space: normal; }
 .cl-action-cell { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
 .cl-badge {
@@ -6228,16 +6238,25 @@ function clRowHtml(cfg, r, cols) {
     if (cfg.id === "dg_pharmacy" && Object.values(DG_PHARMACY_FIELDS).includes(c)) return dgPharmacyCellHtml(cfg, r, c);
     if (cfg.id === "psa_and_psoriasis" && String(c).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase()) {
       const ps = psaCallStatusInfo(r.data);
-      const label = ps.label || "";
-      return `<td class="cl-action-td" data-col="${esc(c)}"><div class="cl-action-cell"><button type="button" class="cl-pill cl-tone-${ps.tone}${label ? "" : " dashed"}" data-cl-open data-uid="${esc(r.uid)}" data-cl-psa="1" aria-haspopup="dialog" aria-label="Call Status: ${esc(label || "Select status")}. Change."><span class="cl-pill-text">${esc(label || "Select status")}</span>${chevronSmallSvg()}</button></div></td>`;
+      const currentKey = ps.key || "";
+      const options = psaCallStatusOptions();
+      const optionRows = options.map((x) => `<option value="${esc(x.key)}" ${currentKey === x.key ? "selected" : ""}>${esc(x.label)}</option>`).join("");
+      return `<td class="inline-cell psa-call-status-td" data-col="${esc(c)}">
+        <div class="inline-cell-wrap psa-call-status-wrap">
+          <select class="psa-call-status-select" data-uid="${esc(r.uid)}" aria-label="Call Status">
+            <option value="" ${currentKey ? "" : "selected"}>Select status</option>
+            ${optionRows}
+          </select>
+        </div>
+      </td>`;
     }
     if (cfg.id === "psa_and_psoriasis" && c === "Assigned To") {
       const val = r.data[c] || "";
       const note = psaInsuranceNote(r.data);
       return `<td class="inline-cell" data-col="${esc(c)}">
-        <div class="inline-cell-wrap" style="display:flex;flex-direction:column;align-items:stretch;gap:4px">
-          ${note ? `<span class="text-muted" style="font-size:11px;line-height:1.25">${esc(note)}</span>` : ""}
+        <div class="inline-cell-wrap psa-assigned-wrap" style="display:flex;flex-direction:column;align-items:stretch;gap:4px">
           <input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" list="cl-team-list" />
+          ${note ? `<span class="psa-insurance-note" style="font-size:11px;line-height:1.25">${esc(note)}</span>` : ""}
         </div>
       </td>`;
     }
@@ -6432,6 +6451,22 @@ function wireCallListPage(cfg) {
    const patch = { [cb.dataset.field]: cb.value };
    updateRecord(rec.uid, patch);
    toast(`Saved "${clColLabel(cb.dataset.field)}"`);
+   clRenderTable(cfg); clRefreshKpi(); renderSidebar();
+   return;
+ }
+ if (cb.classList.contains("psa-call-status-select")) {
+   const uid = cb.dataset.uid;
+   const key = cb.value;
+   const rec = clRecord(uid);
+   if (!rec) return;
+   if (!key) return;
+   const before = psaCallStatusInfo(rec.data).key || "";
+   if (key === "resched") {
+     cb.value = before;
+     clOpenPsaReschedModal(uid);
+     return;
+   }
+   psaCallChooseStatus(uid, key);
    clRenderTable(cfg); clRefreshKpi(); renderSidebar();
    return;
  }
