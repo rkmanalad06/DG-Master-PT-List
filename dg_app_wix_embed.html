@@ -5012,29 +5012,56 @@ const DG_INFUSION_COMBINED_DATE_FIELDS = [
 ];
 function clIsCombinedInfusion() { return CALL_SHEET_ID === "dg_infusion_pas"; }
 function dgInfusionCombinedData(r) {
-  if (!r || r.sheetId !== "dg_infusion_other") return { ...(r?.data || {}) };
-  const out = {};
-  for (const [src, dst] of Object.entries(DG_INFUSION_OTHER_TO_COMBINED)) out[dst] = r.data?.[src] ?? "";
-  const regKey = Object.keys(r.data || {}).find((k) => clIsRegenceColumn(k));
-  if (regKey) out[DIAG_REGENCE_FIELD] = r.data?.[regKey] ?? "";
-  else out[DIAG_REGENCE_FIELD] = "";
-  const callKey = Object.keys(r.data || {}).find((k) => clIsCallStatusColumn(k));
-  if (callKey) out[PSA_CALL_STATUS_FIELD] = r.data?.[callKey] ?? "";
-  else out[PSA_CALL_STATUS_FIELD] = out[PSA_CALL_STATUS_FIELD] ?? "";
+  const src = r?.data || {};
+  // The visible combined Infusion view uses normalized display names, but the
+  // actual source rows may still use the original workbook headers. Preserve
+  // the original keys AND expose the normalized keys so the special controls
+  // render against the real data.
+  const out = { ...src };
+  if (!r) return out;
+
+  if (r.sheetId === "dg_infusion_other") {
+    for (const [source, display] of Object.entries(DG_INFUSION_OTHER_TO_COMBINED)) {
+      if (Object.prototype.hasOwnProperty.call(src, source)) out[display] = src[source];
+    }
+  }
+
+  const regKey = Object.keys(src).find((k) => clIsRegenceColumn(k));
+  if (regKey) out[DIAG_REGENCE_FIELD] = src[regKey];
+  else if (!Object.prototype.hasOwnProperty.call(out, DIAG_REGENCE_FIELD)) out[DIAG_REGENCE_FIELD] = "";
+
+  const callKey = Object.keys(src).find((k) => clIsCallStatusColumn(k));
+  if (callKey) out[PSA_CALL_STATUS_FIELD] = src[callKey];
+  else if (!Object.prototype.hasOwnProperty.call(out, PSA_CALL_STATUS_FIELD)) out[PSA_CALL_STATUS_FIELD] = "";
+
   return out;
 }
 function dgInfusionSourceField(sheetId, combinedField, data = null) {
-  if (sheetId !== "dg_infusion_other") return combinedField;
-  if (combinedField === PSA_CALL_STATUS_FIELD) {
-    const k = Object.keys(data || {}).find((x) => clIsCallStatusColumn(x));
+  const keys = Object.keys(data || {});
+
+  // When the visible combined view uses "Call Status", always save back to
+  // the real source column (for example "scheduled y/n") when that exists.
+  if (combinedField === PSA_CALL_STATUS_FIELD || clIsCallStatusColumn(combinedField)) {
+    const k = keys.find((x) => clIsCallStatusColumn(x) && String(x).trim().toLowerCase() !== PSA_CALL_STATUS_FIELD.toLowerCase());
     if (k) return k;
+    const exact = keys.find((x) => String(x).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase());
+    if (exact) return exact;
   }
-  if (combinedField === DIAG_REGENCE_FIELD) {
-    const k = Object.keys(data || {}).find((x) => clIsRegenceColumn(x));
+
+  // Likewise, "REGENCE" is only the display name. Save to the original
+  // "regence -Y AFD if Usmani" field when that is the source column.
+  if (combinedField === DIAG_REGENCE_FIELD || clIsRegenceColumn(combinedField)) {
+    const k = keys.find((x) => clIsRegenceColumn(x) && String(x).trim().toLowerCase() !== DIAG_REGENCE_FIELD.toLowerCase());
     if (k) return k;
+    const exact = keys.find((x) => String(x).trim().toLowerCase() === DIAG_REGENCE_FIELD.toLowerCase());
+    if (exact) return exact;
   }
-  const hit = Object.entries(DG_INFUSION_OTHER_TO_COMBINED).find(([, dst]) => dst === combinedField);
-  return hit ? hit[0] : combinedField;
+
+  if (sheetId === "dg_infusion_other") {
+    const hit = Object.entries(DG_INFUSION_OTHER_TO_COMBINED).find(([, dst]) => dst === combinedField);
+    return hit ? hit[0] : combinedField;
+  }
+  return combinedField;
 }
 function isInfusionId(id) { return id === "dg_infusion_pas" || id === "dg_infusion_other"; }
 function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming" || isInfusionId(id) || !!ASSIGN_TABS[id] || id === "dg_osteoporosis_pas"; }
@@ -5320,12 +5347,14 @@ function clIsCallStatusColumn(col) {
 // source header when one exists, while presenting it to the user as Call Status.
 function psaCallStatusDataField(data) {
   const keys = Object.keys(data || {});
-  const exact = keys.find((k) => String(k).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase());
-  if (exact) return exact;
   if (clIsInfusion()) {
-    const alias = keys.find((k) => clIsCallStatusColumn(k));
+    // In DG Infusion the display key is "Call Status", but the real source
+    // column is "scheduled y/n". Prefer the real source key.
+    const alias = keys.find((k) => clIsCallStatusColumn(k) && String(k).trim().toLowerCase() !== PSA_CALL_STATUS_FIELD.toLowerCase());
     if (alias) return alias;
   }
+  const exact = keys.find((k) => String(k).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase());
+  if (exact) return exact;
   return PSA_CALL_STATUS_FIELD;
 }
 function psaCallStatusValue(data) {
@@ -5334,12 +5363,12 @@ function psaCallStatusValue(data) {
 }
 function clCallStatusDataField(data) {
   const keys = Object.keys(data || {});
-  const exact = keys.find((k) => String(k).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase());
-  if (exact) return exact;
   if (clIsInfusion()) {
-    const alias = keys.find((k) => clIsCallStatusColumn(k));
+    const alias = keys.find((k) => clIsCallStatusColumn(k) && String(k).trim().toLowerCase() !== PSA_CALL_STATUS_FIELD.toLowerCase());
     if (alias) return alias;
   }
+  const exact = keys.find((k) => String(k).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase());
+  if (exact) return exact;
   return PSA_CALL_STATUS_FIELD;
 }
 function clCallStatusValue(data) {
@@ -5543,6 +5572,9 @@ function clIsRegenceColumn(col) {
 }
 function diagRegenceDataField(data) {
   const keys = Object.keys(data || {});
+  // Prefer the real workbook/source header over the normalized display key.
+  const source = keys.find((k) => clIsRegenceColumn(k) && String(k).trim().toLowerCase() !== DIAG_REGENCE_FIELD.toLowerCase());
+  if (source) return source;
   return keys.find((k) => clIsRegenceColumn(k)) || DIAG_REGENCE_FIELD;
 }
 function diagFieldValue(data, field) {
@@ -5572,12 +5604,6 @@ function diagRegenceCellHtml(r, columnKey = DIAG_REGENCE_FIELD) {
       ${value ? `<button type="button" class="diag-yn-btn diag-clear-btn" data-diag-regence="" data-uid="${esc(r.uid)}" title="Undo REGENCE selection" aria-label="Undo REGENCE selection">↶</button>` : ""}
     </div>
   </td>`;
-}
-function diagAssignmentNote(data) {
-  const raw = String(data?.[DIAG_PREDNISONE_FIELD] || "").trim().toLowerCase();
-  if (["yes", "y", "true", "1"].includes(raw)) return "Yes";
-  if (["no", "n", "false", "0"].includes(raw)) return "No";
-  return "";
 }
 function diagAssignmentNote(data) {
   if (clIsPsa()) return psaInsuranceNote(data);
@@ -6320,7 +6346,7 @@ function renderCallListPage(cfg) {
     ${clToggleHtml(cfg)}
     ${clIsDays() ? `<div class="cl-days" id="cl-days" role="group" aria-label="Filter by clinic day">${clDaysHtml()}</div>` : ""}
     ${clMonthCol() ? `<div class="cl-days cl-months" id="cl-months" role="group" aria-label="Filter by clinic month and year">${clMonthsHtml()}</div>` : ""}
-    ${clIsPsa() ? `<textarea class="cl-note" id="cl-note" rows="2" aria-label="General note" placeholder="Add a general note for this tab...">${esc(psaNote())}</textarea>` : ""}
+    ${clIsPsa() && CALL_SHEET_ID !== "dg_infusion_pas" ? `<textarea class="cl-note" id="cl-note" rows="2" aria-label="General note" placeholder="Add a general note for this tab...">${esc(psaNote())}</textarea>` : ""}
 
     ${dupGroups.length ? `<div class="card" style="padding:12px 16px;margin-bottom:20px;border-color:var(--status-attention-bg);background:var(--status-attention-bg)">
       <span style="color:var(--status-attention);font-weight:600;font-size:13px">⚠ ${dupUniqueCount(dupGroups)} record(s) in this tab are part of a duplicate group.</span>
