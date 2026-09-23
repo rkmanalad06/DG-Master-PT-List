@@ -1547,9 +1547,9 @@ const SHEET_CONFIG = [
     acctField: "Account #",
     dateFields: ["Future IV Appt", "Next Infusion Appt", "Next FU Appt"],
     completion: { field: "PA Initiated / Done", mode: "nonblank", label: "PA initiated/done is filled in" },
-    searchFields: ["Account #", "MEDICARE - Patient Name", "Current Provider", "CPT / Drug", "Assigned To", "PA Initiated / Done", "FU Provider", "Team member", "Corrections / Notes"],
-    inlineFields: ["PA Initiated / Done", "Assigned To", "Team member", "Corrections / Notes"],
-    defaultHeaders: ["Account #", "MEDICARE - Patient Name", "Current Provider", "CPT / Drug", "Future IV Appt", "Next Infusion Appt", "Assigned To", "PA Initiated / Done", "Next FU Appt", "FU Provider", "Team member", "Corrections / Notes"],
+    searchFields: ["Account #", "MEDICARE - Patient Name", "Current Provider", "CPT / Drug", "Assigned To", "PA Initiated / Done", "FU Provider", "Team member", "Corrections / Notes", "Call Status", "REGENCE"],
+    inlineFields: ["PA Initiated / Done", "Assigned To", "Team member", "Corrections / Notes", "Call Status"],
+    defaultHeaders: ["Account #", "MEDICARE - Patient Name", "Current Provider", "CPT / Drug", "Future IV Appt", "Next Infusion Appt", "Assigned To", "PA Initiated / Done", "Next FU Appt", "FU Provider", "Team member", "Corrections / Notes", "Call Status", "REGENCE"],
   },
   {
     id: "dg_infusion_other",
@@ -1558,6 +1558,7 @@ const SHEET_CONFIG = [
     adminLabel: "DG Infusion PAs – Other Insurance view",
     toggleLabel: "Other Insurance",
     subOf: "dg_infusion_pas",
+    tabHidden: true,
     // shown exactly as listed; the two columns every infusion tab shares stay in the data but are hidden here (Admin > Columns can show them)
     defaultHidden: ["PA Initiated / Done", "Corrections / Notes"],
     group: "work-queues",
@@ -1565,9 +1566,9 @@ const SHEET_CONFIG = [
     acctField: "Acc #",
     dateFields: ["Next Appt", "Last/Current Appt", "Follow-Up Date"],
     completion: { field: "PA Initiated / Done", mode: "nonblank", label: "PA initiated/done is filled in" },
-    searchFields: ["Acc #", "Patient Name", "Current Provider", "Drug", "Assigned To", "Insurance", "Provider Listed", "Team Member", "PA Initiated / Done", "Corrections / Notes"],
-    inlineFields: ["PA Initiated / Done", "Assigned To", "Team Member", "Corrections / Notes"],
-    defaultHeaders: ["Acc #", "Patient Name", "Current Provider", "Drug", "Next Appt", "Last/Current Appt", "Assigned To", "Insurance", "Follow-Up Date", "Provider Listed", "Team Member", "PA Initiated / Done", "Corrections / Notes"],
+    searchFields: ["Acc #", "Patient Name", "Current Provider", "Drug", "Assigned To", "Insurance", "Provider Listed", "Team Member", "PA Initiated / Done", "Corrections / Notes", "Call Status", "REGENCE"],
+    inlineFields: ["PA Initiated / Done", "Assigned To", "Team Member", "Corrections / Notes", "Call Status", "REGENCE"],
+    defaultHeaders: ["Acc #", "Patient Name", "Current Provider", "Drug", "Next Appt", "Last/Current Appt", "Assigned To", "Insurance", "Follow-Up Date", "Provider Listed", "Team Member", "PA Initiated / Done", "Corrections / Notes", "Call Status"],
   },
   {
     id: "dg_osteoporosis_pas",
@@ -2493,7 +2494,9 @@ function setManualStatus(uid, status) {
 // ---------------------------------------------------------------------------
 
 function getSheetStats(sheetId) {
-  const records = getAllRecords().filter((r) => r.sheetId === sheetId);
+  const records = sheetId === "dg_infusion_pas"
+    ? getAllRecords().filter((r) => r.sheetId === "dg_infusion_pas" || r.sheetId === "dg_infusion_other")
+    : getAllRecords().filter((r) => r.sheetId === sheetId);
   const total = records.length;
   const complete = records.filter((r) => r.status === "complete").length;
   const needsAttention = records.filter((r) => r.status === "needs-attention").length;
@@ -4966,8 +4969,9 @@ let CALL_SHEET_ID = "call_list_upcoming";
 let clLastSheet = "call_list_upcoming";
 function clPageTitle(cfg) { return cfg.subOf && SHEET_BY_ID[cfg.subOf] ? SHEET_BY_ID[cfg.subOf].label : cfg.label; }
 function clToggleIds(cfg) {
+  if (clIsCombinedInfusion()) return [];
   const root = cfg.subOf || cfg.id;
-  const ids = [root].concat(SHEET_CONFIG.filter((c) => c.subOf === root).map((c) => c.id));
+  const ids = [root].concat(SHEET_CONFIG.filter((c) => c.subOf === root && !c.tabHidden).map((c) => c.id));
   return ids.length > 1 ? ids : [];
 }
 function clToggleHtml(cfg) {
@@ -4976,6 +4980,47 @@ function clToggleHtml(cfg) {
   const counts = {};
   getAllRecords().forEach((r) => { counts[r.sheetId] = (counts[r.sheetId] || 0) + 1; });
   return `<div class="cl-days cl-view-toggle" id="cl-view-toggle" role="group" aria-label="Switch between insurance types">${ids.map((id) => `<button type="button" class="cl-day" data-view-sheet="${esc(id)}" aria-pressed="${id === cfg.id}"><span>${esc(SHEET_BY_ID[id].toggleLabel || SHEET_BY_ID[id].label)}</span><b>${fmtNum(counts[id] || 0)}</b></button>`).join("")}</div>`;
+}
+const DG_INFUSION_COMBINED_HEADERS = [
+  "Account #", "Patient Name", "Current Provider", "CPT / Drug", "Insurance",
+  "Future IV Appt", "Next Infusion Appt", "Next Appt", "Last/Current Appt",
+  "Assigned To", "PA Initiated / Done", "Next FU Appt", "Follow-Up Date",
+  "FU Provider", "Provider Listed", "Team member", "Corrections / Notes", "Call Status", "REGENCE"
+];
+const DG_INFUSION_OTHER_TO_COMBINED = {
+  "Acc #": "Account #",
+  "Patient Name": "Patient Name",
+  "Current Provider": "Current Provider",
+  "Drug": "CPT / Drug",
+  "Insurance": "Insurance",
+  "Next Appt": "Next Appt",
+  "Last/Current Appt": "Last/Current Appt",
+  "Assigned To": "Assigned To",
+  "PA Initiated / Done": "PA Initiated / Done",
+  "Follow-Up Date": "Follow-Up Date",
+  "Provider Listed": "Provider Listed",
+  "Team Member": "Team member",
+  "Corrections / Notes": "Corrections / Notes",
+  "Call Status": "Call Status",
+  "REGENCE": "REGENCE"
+};
+const DG_INFUSION_COMBINED_DATE_FIELDS = [
+  "Future IV Appt", "Next Infusion Appt", "Next Appt", "Last/Current Appt",
+  "Next FU Appt", "Follow-Up Date"
+];
+function clIsCombinedInfusion() { return CALL_SHEET_ID === "dg_infusion_pas"; }
+function dgInfusionCombinedData(r) {
+  if (!r || r.sheetId !== "dg_infusion_other") return { ...(r?.data || {}) };
+  const out = {};
+  for (const [src, dst] of Object.entries(DG_INFUSION_OTHER_TO_COMBINED)) out[dst] = r.data?.[src] ?? "";
+  const regKey = Object.keys(r.data || {}).find((k) => String(k).trim().toLowerCase() === DIAG_REGENCE_FIELD.toLowerCase());
+  if (regKey) out[DIAG_REGENCE_FIELD] = r.data?.[regKey] ?? "";
+  return out;
+}
+function dgInfusionSourceField(sheetId, combinedField) {
+  if (sheetId !== "dg_infusion_other") return combinedField;
+  const hit = Object.entries(DG_INFUSION_OTHER_TO_COMBINED).find(([, dst]) => dst === combinedField);
+  return hit ? hit[0] : combinedField;
 }
 function isInfusionId(id) { return id === "dg_infusion_pas" || id === "dg_infusion_other"; }
 function isCallSheet(id) { return id === "call_list_upcoming" || id === "call_list_no_upcoming" || isInfusionId(id) || !!ASSIGN_TABS[id] || id === "dg_osteoporosis_pas"; }
@@ -4998,6 +5043,7 @@ const ASSIGN_META = {
 };
 function clAssignMeta() { return ASSIGN_META[CALL_SHEET_ID] || null; }
 function clIsPsa() { return CALL_SHEET_ID === "psa_and_psoriasis"; }
+function clHasCallStatus() { return clIsPsa() || clIsInfusion(); }
 function psaInsuranceNote(data) {
   if (!clIsPsa()) return "";
   const insurance = String(data?.["current insurance"] || "").trim().replace(/\s+/g, " ");
@@ -5258,6 +5304,14 @@ function psaCallStatusValue(data) {
   const key = psaCallStatusDataField(data);
   return String(data?.[key] || "").trim();
 }
+function clCallStatusDataField(data) {
+  const keys = Object.keys(data || {});
+  return keys.find((k) => String(k).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase()) || PSA_CALL_STATUS_FIELD;
+}
+function clCallStatusValue(data) {
+  const key = clCallStatusDataField(data);
+  return String(data?.[key] || "").trim();
+}
 const PSA_CALL_STATUS_DEFAULTS = [
   { key: "confirmed", label: "Called & Confirmed", tone: "green" },
   { key: "refused", label: "Called & Refused", tone: "red" },
@@ -5443,7 +5497,31 @@ function clIsGca() { return CALL_SHEET_ID === "gca"; }
 function clIsPmr() { return CALL_SHEET_ID === "pmr"; }
 const DIAG_PREDNISONE_FIELD = "Prednisone";
 function clIsPrednisoneTab() { return clIsPmr() || clIsGca(); }
-function diagPrednisoneValue(data) {
+const DIAG_REGENCE_FIELD = "REGENCE";
+function clIsRegenceTab() { return clIsInfusion(); }
+function diagYesNoValue(data, field) {
+  const raw = String(data?.[field] || "").trim().toLowerCase();
+  if (["yes", "y", "true", "1"].includes(raw)) return "Yes";
+  if (["no", "n", "false", "0"].includes(raw)) return "No";
+  return "";
+}
+function diagRegenceValue(data) { return diagYesNoValue(data, DIAG_REGENCE_FIELD); }
+function diagRegenceAssignmentNote(data) {
+  const v = diagRegenceValue(data);
+  if (!v) return "";
+  return v === "Yes" ? "ASSIGN TO AFD" : "ASSIGN TO USMANI";
+}
+function diagRegenceCellHtml(r) {
+  const value = diagRegenceValue(r.data);
+  return `<td class="inline-cell diag-regence-td" data-col="${esc(DIAG_REGENCE_FIELD)}">
+    <div class="diag-prednisone-toggle" role="group" aria-label="REGENCE">
+      <button type="button" class="diag-yn-btn${value === "Yes" ? " active yes" : ""}" data-diag-regence="Yes" data-uid="${esc(r.uid)}">Yes</button>
+      <button type="button" class="diag-yn-btn${value === "No" ? " active no" : ""}" data-diag-regence="No" data-uid="${esc(r.uid)}">No</button>
+      ${value ? `<button type="button" class="diag-yn-btn diag-clear-btn" data-diag-regence="" data-uid="${esc(r.uid)}" title="Undo REGENCE selection" aria-label="Undo REGENCE selection">↶</button>` : ""}
+    </div>
+  </td>`;
+}
+function diagAssignmentNote(data) {
   const raw = String(data?.[DIAG_PREDNISONE_FIELD] || "").trim().toLowerCase();
   if (["yes", "y", "true", "1"].includes(raw)) return "Yes";
   if (["no", "n", "false", "0"].includes(raw)) return "No";
@@ -5451,6 +5529,7 @@ function diagPrednisoneValue(data) {
 }
 function diagAssignmentNote(data) {
   if (clIsPsa()) return psaInsuranceNote(data);
+  if (clIsRegenceTab()) return diagRegenceAssignmentNote(data);
   if (!clIsPrednisoneTab()) return "";
   const pred = diagPrednisoneValue(data);
   if (!pred) return "";
@@ -5727,8 +5806,18 @@ function clReminderChip(data, uid) {
 // ---------------------------------------------------------------------------
 // Data helpers
 // ---------------------------------------------------------------------------
-function clRecords() { return getAllRecords().filter((r) => r.sheetId === CALL_SHEET_ID); }
-function clRecord(uid) { return getAllRecords().find((r) => r.uid === uid); }
+function clRecords() {
+  const all = getAllRecords();
+  if (clIsCombinedInfusion()) {
+    return all.filter((r) => r.sheetId === "dg_infusion_pas" || r.sheetId === "dg_infusion_other").map((r) => ({ ...r, data: dgInfusionCombinedData(r) }));
+  }
+  return all.filter((r) => r.sheetId === CALL_SHEET_ID);
+}
+function clRecord(uid) {
+  const raw = getAllRecords().find((r) => r.uid === uid);
+  if (!raw) return null;
+  return clIsCombinedInfusion() ? { ...raw, data: dgInfusionCombinedData(raw) } : raw;
+}
 function clStats(records) {
   const s = { total: records.length, toCall: 0, remToday: 0, remOverdue: 0, remUpcoming: 0, scheduled: 0 };
   CALL_STATUSES.forEach((x) => { s[x.key] = 0; });
@@ -5751,15 +5840,20 @@ function clApply(uid, patch, opts = {}) {
   const normalizedPatch = { ...patch };
   // Save PSA Call Status against the actual imported header, even if the source
   // uses "Call Status ", "call status", etc.
-  if (CALL_SHEET_ID === "psa_and_psoriasis" && Object.prototype.hasOwnProperty.call(normalizedPatch, PSA_CALL_STATUS_FIELD)) {
-    const actualField = psaCallStatusDataField(rec.data);
+  if (clHasCallStatus() && Object.prototype.hasOwnProperty.call(normalizedPatch, PSA_CALL_STATUS_FIELD)) {
+    const actualField = clCallStatusDataField(rec.data);
     if (actualField !== PSA_CALL_STATUS_FIELD) {
       normalizedPatch[actualField] = normalizedPatch[PSA_CALL_STATUS_FIELD];
       delete normalizedPatch[PSA_CALL_STATUS_FIELD];
     }
   }
   const changed = {};
-  for (const [k, v] of Object.entries(normalizedPatch)) if (String(rec.data[k] ?? "") !== String(v ?? "")) changed[k] = v;
+  for (const [k, v] of Object.entries(normalizedPatch)) {
+    if (String(rec.data[k] ?? "") !== String(v ?? "")) {
+      const sourceField = clIsCombinedInfusion() ? dgInfusionSourceField(rec.sheetId, k) : k;
+      changed[sourceField] = v;
+    }
+  }
   if (!Object.keys(changed).length) return false;
   updateRecord(uid, changed);
   if (opts.toast) toast(opts.toast);
@@ -5803,9 +5897,12 @@ function clSaveCustomColumns(cols) {
   WixBridge.save("editedRow", { uid: CL.LAYOUT_UID, patch: Store.editedRows[CL.LAYOUT_UID] });
 }
 function clColumns(cfg, withHidden) {
-  let all = (RAW_SHEETS[cfg.id]?.headers || []).slice();
+  let all = clIsCombinedInfusion() ? DG_INFUSION_COMBINED_HEADERS.slice() : (RAW_SHEETS[cfg.id]?.headers || []).slice();
   if (clIsPrednisoneTab()) {
     if (!all.includes(DIAG_PREDNISONE_FIELD)) all.push(DIAG_PREDNISONE_FIELD);
+  }
+  if (clIsRegenceTab()) {
+    if (!all.some((h) => String(h).trim().toLowerCase() === DIAG_REGENCE_FIELD.toLowerCase())) all.push(DIAG_REGENCE_FIELD);
   }
   if (cfg.id === "dg_pharmacy") {
     // Status and reason are one field. There is no separate Unstable Reason column.
@@ -5944,6 +6041,7 @@ function clDefaultWidth(cfg, col) {
 function clWidth(cfg, col) { return clLayoutLoad().widths[col] || clDefaultWidth(cfg, col); }
 const CL_ACTIONS_COL_W = 132;
 function clIsDateCol(cfg, col) {
+  if (clIsCombinedInfusion() && DG_INFUSION_COMBINED_DATE_FIELDS.includes(col)) return true;
   return (cfg.dateFields || []).includes(col) || clCustomColumns().some((c) => c.name === col && c.type === "date");
 }
 function clMoveColumn(cfg, from, to, after) {
@@ -6156,6 +6254,7 @@ function renderCallListPage(cfg) {
         <div class="page-title">${esc(clPageTitle(cfg))}</div>
         <div class="page-subtitle">${clIsGeneric() ? esc(sheetDescription(cfg)) : clIsOsteo() ? "Type JP or SU (or Justin / Putz, Sabahat / Usmani) in 50/50 TO JP AND SU to assign, or Cancelled to cancel. Unassigned patients with an appointment within " + CL.ATTN_DAYS + " days are flagged Needs Attention." : clIsAssignTab() ? (clAssignMeta() ? clAssignMeta().desc : `Enter a name in ${CL.TEAM} for each patient. Status follows ${CL.TEAM}: Assigned once someone is entered, Unassigned while it is blank.`) : clIsInfusion() ? "Assign each authorization to a Team Member. Status follows Team Member (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
       </div>
+      ${clIsInfusion() ? `<div style="margin-top:10px;padding:9px 12px;border-radius:8px;background:#fff7c2;border:1px solid #eadb78;color:#5c4b00;font-size:13px;font-weight:600;max-width:760px">Note: If the patient is assigned to AFD, do not assign the patient to Usmani.</div>` : ""}
       <div class="page-header-actions">
         ${clIsGeneric() && !cfg.isReference ? `<button class="btn" id="btn-completion-criteria">${gearIconSvg()} Completion Criteria</button>` : ""}
         ${clIsGeneric() && cfg.isReference ? "" : `<button class="btn" id="cl-add-row">+ Add Row</button>`} <button class="btn" id="cl-export">${downloadIconSvg()} Export</button>
@@ -6301,7 +6400,8 @@ function clRowHtml(cfg, r, cols) {
     if (c === "__month") { const m = clMonthInfo(r.data); return `<td data-col="__month">${m ? `<span class="cl-month-chip">${esc(m.label)}</span>` : `<span class="text-muted">\u2014</span>`}</td>`; }
     if (cfg.id === "dg_pharmacy" && Object.values(DG_PHARMACY_FIELDS).includes(c)) return dgPharmacyCellHtml(cfg, r, c);
     if (clIsPrednisoneTab() && c === DIAG_PREDNISONE_FIELD) return diagPrednisoneCellHtml(r);
-    if (cfg.id === "psa_and_psoriasis" && String(c).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase()) {
+    if (clIsRegenceTab() && String(c).trim().toLowerCase() === DIAG_REGENCE_FIELD.toLowerCase()) return diagRegenceCellHtml(r);
+    if (clHasCallStatus() && String(c).trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase()) {
       const ps = psaCallStatusInfo(r.data);
       const label = ps.label || "Select status";
       const tone = ps.key ? ps.tone : "gray";
@@ -6314,7 +6414,7 @@ function clRowHtml(cfg, r, cols) {
         </div>
       </td>`;
     }
-    if ((cfg.id === "psa_and_psoriasis" && c === "Assigned To") || ((clIsPmr() || clIsGca()) && c === CL.TEAM)) {
+    if ((cfg.id === "psa_and_psoriasis" && c === "Assigned To") || ((clIsPmr() || clIsGca() || clIsRegenceTab()) && String(c).trim().toLowerCase() === String(CL.TEAM).trim().toLowerCase())) {
       const val = r.data[c] || "";
       const note = diagAssignmentNote(r.data);
       return `<td class="inline-cell" data-col="${esc(c)}">
@@ -6375,7 +6475,7 @@ function clRefreshRow(uid) {
       if (!on && chip) chip.remove();
     });
   }
- if (CALL_SHEET_ID === "psa_and_psoriasis") {
+ if (clHasCallStatus()) {
    const psTd = [...tr.children].find((td) => String(td.dataset.col || "").trim().toLowerCase() === PSA_CALL_STATUS_FIELD.toLowerCase());
    if (psTd) {
      const ps = psaCallStatusInfo(r.data);
@@ -6447,7 +6547,7 @@ function clRenderTable(cfg) {
   // PSA Call Status uses a dedicated direct listener. This avoids the generic
   // Action handler intercepting the click and makes the status button reliably
   // clickable even when the table is rebuilt.
-  if (cfg.id === "psa_and_psoriasis") {
+  if (clHasCallStatus()) {
     region.querySelectorAll("[data-psa-status-button=\"1\"]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.preventDefault();
@@ -6561,6 +6661,29 @@ function wireCallListPage(cfg) {
 
   // --- Table (delegated; the region itself persists across re-renders) ---
   region.addEventListener("click", (e) => {
+    const regenceBtn = e.target.closest("[data-diag-regence]");
+    if (regenceBtn && clIsRegenceTab()) {
+      e.preventDefault();
+      e.stopPropagation();
+      const uid = regenceBtn.dataset.uid;
+      const value = regenceBtn.dataset.diagRegence || "";
+      const rec = clRecord(uid);
+      if (!rec) return;
+      if (diagRegenceValue(rec.data) === value) return;
+      rec.data[DIAG_REGENCE_FIELD] = value;
+      clApply(uid, { [DIAG_REGENCE_FIELD]: value });
+      const tr = regenceBtn.closest("tr");
+      if (tr) {
+        const cell = tr.querySelector(`td[data-col="${DIAG_REGENCE_FIELD}"]`);
+        if (cell) cell.outerHTML = diagRegenceCellHtml(rec);
+        const assignedInput = tr.querySelector(".diag-assignment-input");
+        if (assignedInput && !String(assignedInput.value || "").trim()) {
+          assignedInput.placeholder = diagAssignmentNote(rec.data) || "—";
+          assignedInput.title = diagAssignmentNote(rec.data) || "";
+        }
+      }
+      return;
+    }
     const predBtn = e.target.closest("[data-diag-pred]");
     if (predBtn && clIsPrednisoneTab()) {
       e.preventDefault();
@@ -6864,7 +6987,7 @@ function clOpenActionPopover(uid, anchor) {
   window.addEventListener("resize", onScroll);
   window.addEventListener("scroll", onScroll, true);
   const anchorCol = String(anchor?.closest?.("td")?.dataset?.col || "").trim().toLowerCase();
-  const isPsaStatusAnchor = CALL_SHEET_ID === "psa_and_psoriasis" && (anchor?.dataset?.psa === "1" || anchorCol === PSA_CALL_STATUS_FIELD.toLowerCase());
+  const isPsaStatusAnchor = clHasCallStatus() && (anchor?.dataset?.psa === "1" || anchorCol === PSA_CALL_STATUS_FIELD.toLowerCase());
   clPopover = { el, uid, onDoc, onKey, onScroll, psa: isPsaStatusAnchor };
 
   el.addEventListener("click", (e) => {
@@ -7615,7 +7738,7 @@ function acSlug(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g,
 function acToneSel(attrs, cur) { return `<select class="ac-in ac-sm" ${attrs}>${AC_TONES.map(([v, l]) => `<option value="${v}" ${cur === v ? "selected" : ""}>${l}</option>`).join("")}</select>`; }
 function acTabList() {
   // every tab (built-in and new) in display order, with its base name/group
-  return SHEET_CONFIG.filter((c) => !c.isReference).map((c) => ({ id: c.id, cfg: c, base: c.__base || { label: c.label, shortLabel: c.shortLabel, group: c.group } }));
+  return SHEET_CONFIG.filter((c) => !c.isReference && !c.tabHidden).map((c) => ({ id: c.id, cfg: c, base: c.__base || { label: c.label, shortLabel: c.shortLabel, group: c.group } }));
 }
 function acSheetOptions(cur) { return acTabList().map((t) => `<option value="${esc(t.id)}" ${cur === t.id ? "selected" : ""}>${esc(t.cfg.adminLabel || t.cfg.label)}</option>`).join(""); }
 function acEnsureSheet() {
