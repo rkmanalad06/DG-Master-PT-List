@@ -1548,7 +1548,7 @@ const SHEET_CONFIG = [
     dateFields: ["Future IV Appt", "Next Infusion Appt", "Next FU Appt"],
     completion: { field: "PA Initiated / Done", mode: "nonblank", label: "PA initiated/done is filled in" },
     searchFields: ["Account #", "MEDICARE - Patient Name", "Current Provider", "CPT / Drug", "Assigned To", "PA Initiated / Done", "FU Provider", "Team member", "Corrections / Notes", "Call Status", "REGENCE"],
-    inlineFields: ["PA Initiated / Done", "Assigned To", "Team member", "Corrections / Notes", "Call Status"],
+    inlineFields: ["PA Initiated / Done", "Assigned To", "Team member", "Corrections / Notes", "Call Status", "REGENCE"],
     defaultHeaders: ["Account #", "MEDICARE - Patient Name", "Current Provider", "CPT / Drug", "Future IV Appt", "Next Infusion Appt", "Assigned To", "PA Initiated / Done", "Next FU Appt", "FU Provider", "Team member", "Corrections / Notes", "Call Status", "REGENCE"],
   },
   {
@@ -1568,7 +1568,7 @@ const SHEET_CONFIG = [
     completion: { field: "PA Initiated / Done", mode: "nonblank", label: "PA initiated/done is filled in" },
     searchFields: ["Acc #", "Patient Name", "Current Provider", "Drug", "Assigned To", "Insurance", "Provider Listed", "Team Member", "PA Initiated / Done", "Corrections / Notes", "Call Status", "REGENCE"],
     inlineFields: ["PA Initiated / Done", "Assigned To", "Team Member", "Corrections / Notes", "Call Status", "REGENCE"],
-    defaultHeaders: ["Acc #", "Patient Name", "Current Provider", "Drug", "Next Appt", "Last/Current Appt", "Assigned To", "Insurance", "Follow-Up Date", "Provider Listed", "Team Member", "PA Initiated / Done", "Corrections / Notes", "Call Status"],
+    defaultHeaders: ["Acc #", "Patient Name", "Current Provider", "Drug", "Next Appt", "Last/Current Appt", "Assigned To", "Insurance", "Follow-Up Date", "Provider Listed", "Team Member", "PA Initiated / Done", "Corrections / Notes", "Call Status", "REGENCE"],
   },
   {
     id: "dg_osteoporosis_pas",
@@ -5015,6 +5015,7 @@ function dgInfusionCombinedData(r) {
   for (const [src, dst] of Object.entries(DG_INFUSION_OTHER_TO_COMBINED)) out[dst] = r.data?.[src] ?? "";
   const regKey = Object.keys(r.data || {}).find((k) => String(k).trim().toLowerCase() === DIAG_REGENCE_FIELD.toLowerCase());
   if (regKey) out[DIAG_REGENCE_FIELD] = r.data?.[regKey] ?? "";
+  else out[DIAG_REGENCE_FIELD] = "";
   return out;
 }
 function dgInfusionSourceField(sheetId, combinedField) {
@@ -5499,8 +5500,14 @@ const DIAG_PREDNISONE_FIELD = "Prednisone";
 function clIsPrednisoneTab() { return clIsPmr() || clIsGca(); }
 const DIAG_REGENCE_FIELD = "REGENCE";
 function clIsRegenceTab() { return clIsInfusion(); }
+function diagFieldValue(data, field) {
+  if (!data) return "";
+  if (Object.prototype.hasOwnProperty.call(data, field)) return data[field];
+  const key = Object.keys(data).find((k) => String(k).trim().toLowerCase() === String(field).trim().toLowerCase());
+  return key ? data[key] : "";
+}
 function diagYesNoValue(data, field) {
-  const raw = String(data?.[field] || "").trim().toLowerCase();
+  const raw = String(diagFieldValue(data, field) || "").trim().toLowerCase();
   if (["yes", "y", "true", "1"].includes(raw)) return "Yes";
   if (["no", "n", "false", "0"].includes(raw)) return "No";
   return "";
@@ -5938,7 +5945,7 @@ function clColumns(cfg, withHidden) {
     if (!withHidden) {
       const hid = new Set(cc.hidden || []);
       if (hid.size) {
-        all = all.filter((k) => !hid.has(k) || (cfg.id === "dg_pharmacy" && Object.values(DG_PHARMACY_FIELDS).includes(k)));
+        all = all.filter((k) => !hid.has(k) || (cfg.id === "dg_pharmacy" && Object.values(DG_PHARMACY_FIELDS).includes(k)) || (clIsCombinedInfusion() && String(k).trim().toLowerCase() === DIAG_REGENCE_FIELD.toLowerCase()));
       }
     }
     const o = cc.order || [];
