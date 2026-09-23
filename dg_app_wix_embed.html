@@ -1146,6 +1146,10 @@ td.cl-action-td { white-space: normal; }
 .cl-stat{gap:3px}
 .cl-stat-bar{display:block;align-self:stretch;height:6px;margin-top:4px;border-radius:999px;background:var(--border-subtle,#e5e7eb);overflow:hidden}
 .cl-stat-bar-fill{display:block;height:100%;border-radius:999px;background:var(--t-fg);transition:width 300ms var(--ease-out,ease)}
+.dg-pharmacy-select{min-width:175px;cursor:pointer;background:var(--bg-surface,#fff)}
+.dg-pharmacy-afd{display:flex;align-items:center;gap:6px;margin:4px 0 0 7px;font-size:11px;font-weight:700;color:var(--status-attention,#b3312c);white-space:nowrap}
+.dg-pharmacy-afd input{margin:0;accent-color:var(--accent,#7a2233)}
+.dg-pharmacy-assigned-wrap .inline-edit-input{min-width:120px}
 .dg-cal{position:fixed;z-index:400;width:296px;padding:12px;background:var(--bg-surface,#fff);color:var(--text-primary,#1a1d23);border:1px solid var(--border-subtle,#e5e7eb);border-radius:var(--radius-md,10px);box-shadow:var(--shadow-md,0 12px 32px rgba(0,0,0,.18));font:inherit;font-size:13px}
 .dg-cal-head{display:flex;align-items:center;gap:6px;margin-bottom:8px}
 .dg-cal-head select{flex:1;min-width:0;padding:5px 6px;border:1px solid var(--border-subtle,#e5e7eb);border-radius:6px;background:var(--bg-surface,#fff);color:inherit;font:inherit;font-size:13px;font-weight:600}
@@ -1428,6 +1432,12 @@ const GROUPS = [
   { id: "data-management", label: "Data Management" },
 ];
 
+const DG_PHARMACY_FIELDS = { status: "Stable/Unstable", reason: "Unstable Reason", lastSeen: "Last Seen", prednisone: "Prednisone — Last One Year", assigned: "Assigned To" };
+const DG_PHARMACY_STATUS_OPTIONS = ["Stable", "Unstable"];
+const DG_PHARMACY_REASON_OPTIONS = ["Joint Pain", "Recent Flare", "Joint Pain & Recent Flare"];
+function dgPharmacyIsUnstable(data) { return String(data?.[DG_PHARMACY_FIELDS.status] || "").trim().toLowerCase() === "unstable"; }
+function dgPharmacyNeedsAfd(data) { return dgPharmacyIsUnstable(data) && !!String(data?.[DG_PHARMACY_FIELDS.prednisone] || "").trim(); }
+
 const SHEET_CONFIG = [
   {
     id: "call_list_upcoming",
@@ -1463,11 +1473,11 @@ const SHEET_CONFIG = [
     shortLabel: "Pharmacy",
     group: "work-queues",
     nameField: "Patient",
-    dateFields: ["Submission Date/Time"],
+    dateFields: ["Submission Date/Time", "Last Seen", "Prednisone — Last One Year"],
     completion: { field: "Assigned To", mode: "nonblank", label: "Assigned To is filled in" },
-    searchFields: ["Patient", "Medication", "Assigned To"],
-    inlineFields: ["Assigned To"],
-    defaultHeaders: ["Patient", "Medication", "Submission Date/Time", "Assigned To"],
+    searchFields: ["Patient", "Medication", "Stable/Unstable", "Unstable Reason", "Last Seen", "Prednisone — Last One Year", "Assigned To"],
+    inlineFields: ["Stable/Unstable", "Unstable Reason", "Last Seen", "Prednisone — Last One Year", "Assigned To"],
+    defaultHeaders: ["Patient", "Medication", "Submission Date/Time", "Stable/Unstable", "Unstable Reason", "Last Seen", "Prednisone — Last One Year", "Assigned To"],
   },
   {
     id: "dg_infusion_pas",
@@ -5639,6 +5649,7 @@ function clSaveCustomColumns(cols) {
 }
 function clColumns(cfg, withHidden) {
   let all = (RAW_SHEETS[cfg.id]?.headers || []).slice();
+  if (cfg.id === "dg_pharmacy") Object.values(DG_PHARMACY_FIELDS).forEach((f) => { if (!all.includes(f)) all.push(f); });
   if (clIsAssignTab() || clIsOsteo()) {
     // Status is always derived from the assignment column, so any stored "Status" header is replaced by the computed column.
     all = all.filter((h) => !/^(pa )?status$/i.test(String(h).trim()));
@@ -6079,12 +6090,25 @@ function clRowClass(r) {
   const h = acRowHl(r.data);
   return (h.row ? "cl-hl cl-hl-" + (h.row.tone || "red") + " " : "") + (h.bar ? "cl-hlbar cl-hlbar-" + (h.bar.tone || "orange") + " " : "") + (clSel.has(r.uid) ? "cl-row-sel" : "");
 }
+function dgPharmacyCellHtml(cfg, r, c) {
+  const d = r.data || {}, status = String(d[DG_PHARMACY_FIELDS.status] || "").trim(), reason = String(d[DG_PHARMACY_FIELDS.reason] || "").trim();
+  if (c === DG_PHARMACY_FIELDS.status) return `<td class="inline-cell" data-col="${esc(c)}"><select class="inline-edit-input dg-pharmacy-select" data-uid="${r.uid}" data-field="${esc(c)}"><option value="">—</option>${DG_PHARMACY_STATUS_OPTIONS.map((o) => `<option value="${esc(o)}" ${status === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></td>`;
+  if (c === DG_PHARMACY_FIELDS.reason) {
+    if (!dgPharmacyIsUnstable(d)) return `<td class="inline-cell" data-col="${esc(c)}"><span class="text-muted">—</span></td>`;
+    return `<td class="inline-cell" data-col="${esc(c)}"><select class="inline-edit-input dg-pharmacy-select" data-uid="${r.uid}" data-field="${esc(c)}"><option value="">— Select reason —</option>${DG_PHARMACY_REASON_OPTIONS.map((o) => `<option value="${esc(o)}" ${reason === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></td>`;
+  }
+  if (c === DG_PHARMACY_FIELDS.assigned) return `<td class="inline-cell" data-col="${esc(c)}"><div class="inline-cell-wrap dg-pharmacy-assigned-wrap"><input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(d[c] || "")}" placeholder="—" title="${esc(d[c] || "")}" /></div>${dgPharmacyNeedsAfd(d) ? `<label class="dg-pharmacy-afd"><input type="checkbox" class="dg-pharmacy-afd-check" data-uid="${r.uid}" /> <span>REFER TO AFD</span></label>` : ""}</td>`;
+  const val = d[c] || "", isDate = c === DG_PHARMACY_FIELDS.lastSeen || c === DG_PHARMACY_FIELDS.prednisone || clIsDateCol(cfg, c);
+  return `<td class="inline-cell" data-col="${esc(c)}"><div class="inline-cell-wrap"><input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" />${isDate ? `<button type="button" class="cal-btn" data-uid="${r.uid}" data-field="${esc(c)}" title="Pick a date" aria-label="Pick a date for ${esc(c)}">${calendarIconSvg()}</button>` : ""}</div></td>`;
+}
+
 function clRowHtml(cfg, r, cols) {
   const isExpanded = expandedRows.has(r.uid);
   const cells = cols.map((c) => {
     if (c === "__status") return `<td data-col="__status">${clStatusBadge(r.data, r)}</td>`;
     if (c === "__infusion") return `<td class="cl-inf-td" data-col="__infusion">${clInfusionCellHtml(r)}</td>`;
     if (c === "__month") { const m = clMonthInfo(r.data); return `<td data-col="__month">${m ? `<span class="cl-month-chip">${esc(m.label)}</span>` : `<span class="text-muted">\u2014</span>`}</td>`; }
+    if (cfg.id === "dg_pharmacy" && Object.values(DG_PHARMACY_FIELDS).includes(c)) return dgPharmacyCellHtml(cfg, r, c);
     if (c === CL.ACTION && clIsCallList()) return `<td class="cl-action-td" data-col="${esc(c)}">${clActionCellHtml(r)}</td>`;
  if (clIsInfusion() && clIsWrapCol(c) && !clIsDateCol(cfg, c)) return clWrapCellHtml(cfg, r, c);
     const val = r.data[c] || "";
@@ -6270,6 +6294,23 @@ function wireCallListPage(cfg) {
  region.addEventListener("change", (e) => {
  const cb = e.target;
  if (!cb.classList || !cb.classList.contains) return;
+ if (cb.classList.contains("dg-pharmacy-select")) {
+   const rec = clRecord(cb.dataset.uid);
+   if (!rec) return;
+   const patch = { [cb.dataset.field]: cb.value };
+   if (cb.dataset.field === DG_PHARMACY_FIELDS.status && cb.value !== "Unstable") patch[DG_PHARMACY_FIELDS.reason] = "";
+   updateRecord(rec.uid, patch);
+   toast(`Saved "${cb.dataset.field}"`);
+   clRenderTable(cfg); clRefreshKpi(); renderSidebar();
+   return;
+ }
+ if (cb.classList.contains("dg-pharmacy-afd-check")) {
+   const rec = clRecord(cb.dataset.uid);
+   if (!rec) return;
+   if (cb.checked) { updateRecord(rec.uid, { [DG_PHARMACY_FIELDS.assigned]: "AFD" }); toast("Assigned to AFD"); }
+   clRenderTable(cfg); clRefreshKpi(); renderSidebar();
+   return;
+ }
  if (cb.classList.contains("cl-sel-all")) { clSelectAll(cfg, cb.checked); return; }
  if (!cb.classList.contains("cl-sel")) return;
  if (cb.checked) clSel.add(cb.dataset.uid); else clSel.delete(cb.dataset.uid);
@@ -6349,7 +6390,11 @@ function wireCallListPage(cfg) {
     updateRecord(uid, { [field]: input.value });
     if (clIsGeneric() && SHEET_BY_ID[CALL_SHEET_ID].completion?.field === field && Store.statusOverrides[uid]) setManualStatus(uid, null);
     toast(`Saved "${field}"`);
-    clRefreshRow(uid);
+    if (CALL_SHEET_ID === "dg_pharmacy" && (field === DG_PHARMACY_FIELDS.lastSeen || field === DG_PHARMACY_FIELDS.prednisone || field === DG_PHARMACY_FIELDS.assigned)) {
+      clRenderTable(SHEET_BY_ID[CALL_SHEET_ID]); clRefreshKpi(); renderSidebar();
+    } else {
+      clRefreshRow(uid);
+    }
     clRefreshKpi();
     renderSidebar();
   }, true);
