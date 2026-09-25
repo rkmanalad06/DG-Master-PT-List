@@ -7213,14 +7213,41 @@ function clApplyFreezeSettings(cfg) {
   const region = document.getElementById("cl-table-region");
   if (!region) return;
   const { cols, header } = clFreezeConfig();
+  const table = region.querySelector("table.cl-table");
+  if (!table) return;
+
+  // Clear every previous user-freeze state, including inline styles.
   region.classList.add("cl-user-freeze-reset");
   region.classList.toggle("cl-user-freeze-header", header);
   region.querySelectorAll(".cl-user-freeze-col").forEach(el => {
     el.classList.remove("cl-user-freeze-col");
     el.style.removeProperty("--freeze-left");
+    el.style.removeProperty("position");
+    el.style.removeProperty("left");
+    el.style.removeProperty("z-index");
+    el.style.removeProperty("background");
+    el.style.removeProperty("box-shadow");
   });
-  const table = region.querySelector("table.cl-table");
-  if (!table) return;
+
+  // Freeze the ENTIRE column-header row when the user checks Freeze Table Header.
+  // Use inline styles as the final authority so older sticky/static rules cannot
+  // override the user's setting.
+  const headerCells = [...table.querySelectorAll("thead th")];
+  headerCells.forEach(th => {
+    th.style.removeProperty("position");
+    th.style.removeProperty("top");
+    th.style.removeProperty("z-index");
+    th.style.removeProperty("background");
+  });
+  if (header) {
+    headerCells.forEach(th => {
+      th.style.setProperty("position", "sticky", "important");
+      th.style.setProperty("top", "0px", "important");
+      th.style.setProperty("z-index", "60", "important");
+      th.style.setProperty("background", "var(--bg-sunken)", "important");
+    });
+  }
+
   const headCells = [...table.querySelectorAll("thead th[data-col]")];
   let left = 0;
   for (const col of cols.filter(c => c && !String(c).startsWith("__"))) {
@@ -7231,6 +7258,11 @@ function clApplyFreezeSettings(cfg) {
       if (el.classList.contains("cl-sel-th") || el.classList.contains("cl-sel-td")) return;
       el.classList.add("cl-user-freeze-col");
       el.style.setProperty("--freeze-left", `${left}px`);
+      el.style.setProperty("position", "sticky", "important");
+      el.style.setProperty("left", `${left}px`, "important");
+      el.style.setProperty("z-index", header ? "70" : "30", "important");
+      el.style.setProperty("background", "var(--freeze-bg, var(--bg-surface))", "important");
+      el.style.setProperty("box-shadow", "1px 0 0 var(--border-subtle)", "important");
     });
     left += width;
   }
