@@ -992,13 +992,14 @@ table.dup-cmp td .inline-edit-input { width: 140px; min-width: 0; }
 
 /* --- Table --- */
 .cl-table-wrap { max-height: 60vh; }
-/* User-controlled Freeze Panes */
+/* User-controlled Freeze Panes. Headers are NOT sticky unless enabled. */
+table.cl-table th { position: static; }
 .cl-table-freeze-header th {
   position: sticky !important; top: 0 !important; z-index: 12 !important;
+  background: var(--bg-sunken) !important;
 }
 .cl-table-freeze-col {
   position: sticky !important; z-index: 8 !important;
-  background: var(--bg-surface) !important;
 }
 .cl-table-freeze-header th.cl-table-freeze-col { z-index: 14 !important; }
 .cl-freeze-list { display:grid; gap:7px; max-height:52vh; overflow:auto; padding:4px 2px; }
@@ -1006,8 +1007,22 @@ table.dup-cmp td .inline-edit-input { width: 140px; min-width: 0; }
 .cl-freeze-item:hover { background:var(--bg-sunken); }
 .cl-freeze-item input { width:16px; height:16px; margin:0; accent-color:var(--accent); }
 
+/* Full-screen table view */
+#cl-table-region.cl-table-maximized {
+  position: fixed; inset: 0; z-index: 1000; background: var(--bg-app);
+  padding: 12px; box-sizing: border-box; overflow: hidden;
+}
+#cl-table-region.cl-table-maximized .cl-table-wrap {
+  max-height: none; height: calc(100vh - 56px); overflow: auto;
+}
+#cl-table-region.cl-table-maximized .pagination { margin-bottom: 0; }
+.cl-maximize-close {
+  position: absolute; top: 10px; right: 12px; z-index: 1020;
+}
+body.cl-table-maximized-open { overflow: hidden; }
+
 table.cl-table { table-layout: fixed; min-width: 100%; }
-table.cl-table th { position: sticky; padding-right: 14px; overflow: hidden; text-overflow: ellipsis; }
+table.cl-table th { position: static; padding-right: 14px; overflow: hidden; text-overflow: ellipsis; }
 table.cl-table th.cl-dragging { opacity: 0.4; }
 .cl-th-note { display: block; font-size: 10px; font-weight: 600; line-height: 1.25; text-transform: none; letter-spacing: 0; color: #b45309; white-space: normal; }
 td.cl-inf-td { text-align: center; }
@@ -5939,12 +5954,20 @@ function clApply(uid, patch, opts = {}) {
 // ---------------------------------------------------------------------------
 function clFreezeKey() { return `dg_freeze_panes#${CALL_SHEET_ID}`; }
 function clFreezeLoad() {
-  const s = lsGet(clFreezeKey(), {});
-  return { header: !!s.header, cols: Array.isArray(s.cols) ? s.cols.slice() : [] };
+  const key = clFreezeKey();
+  const memory = window.__dgFreezePanes?.[key];
+  const s = memory || lsGet(key, {});
+  return { header: !!s.header, cols: Array.isArray(s.cols) ? [...new Set(s.cols.filter(Boolean))] : [] };
 }
 function clFreezeSave(state) {
-  lsSet(clFreezeKey(), { header: !!state.header, cols: Array.isArray(state.cols) ? state.cols.slice() : [] });
+  const normalized = { header: !!state.header, cols: Array.isArray(state.cols) ? [...new Set(state.cols.filter(Boolean))] : [] };
+  lsSet(clFreezeKey(), normalized);
+  // Keep an in-memory copy too. This makes the setting survive any iframe/storage
+  // restriction during the current session, while localStorage preserves it across reloads.
+  window.__dgFreezePanes = window.__dgFreezePanes || {};
+  window.__dgFreezePanes[clFreezeKey()] = normalized;
 }
+
 function clFreezeColumnOptions(cfg) {
   return clColumns(cfg).filter((c) => c && c !== '__status' && c !== '__infusion' && c !== '__month' && c !== CL.ACTION);
 }
@@ -5952,37 +5975,80 @@ function clFreezeApply() {
   const region = document.getElementById('cl-table-region');
   const table = region?.querySelector('table.cl-table');
   if (!table) return;
+
   const state = clFreezeLoad();
-  table.classList.toggle('cl-table-freeze-header', state.header);
-  // Clear previous sticky-column styles/classes.
+  table.classList.toggle('cl-table-freeze-header', !!state.header);
+
+  // Always clear the previous column-freeze styles first.
   table.querySelectorAll('.cl-table-freeze-col').forEach((el) => {
     el.classList.remove('cl-table-freeze-col');
     el.style.left = '';
     el.style.backgroundColor = '';
     el.style.zIndex = '';
   });
-  const selected = state.cols.filter(Boolean);
+
+  const selected = [...new Set((state.cols || []).filter(Boolean))];
   if (!selected.length) return;
+
   const heads = [...table.querySelectorAll('thead th[data-col]')];
-  let left = 0;
+  // The checkbox/select column is deliberately not offered as a freeze option,
+  // but frozen data columns must begin AFTER it so they do not cover the checkbox.
+  const selectTh = table.querySelector('thead th.cl-sel-th');
+  let left = selectTh ? selectTh.getBoundingClientRect().width : 0;
+
   selected.forEach((colKey, idx) => {
     const th = heads.find((h) => h.dataset.col === colKey);
     if (!th) return;
+
     const width = th.getBoundingClientRect().width;
-    const cells = table.querySelectorAll(`th[data-col="${CSS.escape(colKey)}"], td[data-col="${CSS.escape(colKey)}"]`);
-    cells.forEach((cell) => {
+    const selector = `[data-col="${CSS.escape(colKey)}"]`;
+    table.querySelectorAll(selector).forEach((cell) => {
       cell.classList.add('cl-table-freeze-col');
       cell.style.left = `${left}px`;
       cell.style.zIndex = cell.tagName === 'TH' ? '14' : '8';
-      const tr = cell.closest('tr');
-      if (cell.tagName !== 'TH' && tr) {
-        const bg = getComputedStyle(tr).backgroundColor;
-        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') cell.style.backgroundColor = bg;
+
+      // Preserve the exact background/highlight of the corresponding row.
+      // Row highlight rules are applied to TDs, so reading the TR background
+      // would often return transparent. Read an unfrozen cell from the same row.
+      if (cell.tagName !== 'TH') {
+        const tr = cell.closest('tr');
+        const source = tr ? [...tr.children].find((td) => !td.classList.contains('cl-table-freeze-col')) : null;
+        const bg = source ? getComputedStyle(source).backgroundColor : '';
+        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+          cell.style.backgroundColor = bg;
+        } else {
+          cell.style.backgroundColor = getComputedStyle(table).backgroundColor || 'var(--bg-surface)';
+        }
       }
     });
     left += width;
   });
 }
+function clMaximizeTable() {
+  const region = document.getElementById('cl-table-region');
+  if (!region) return;
+  const open = !region.classList.contains('cl-table-maximized');
+  region.classList.toggle('cl-table-maximized', open);
+  document.body.classList.toggle('cl-table-maximized-open', open);
+  let close = region.querySelector('.cl-maximize-close');
+  if (open) {
+    if (!close) {
+      close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'btn sm cl-maximize-close';
+      close.textContent = '✕ Exit Maximize';
+      close.title = 'Return to normal table view';
+      close.addEventListener('click', clMaximizeTable);
+      region.appendChild(close);
+    }
+    close.style.display = '';
+    requestAnimationFrame(() => { clFreezeApply(); clGrowAll(); });
+  } else if (close) {
+    close.style.display = 'none';
+    requestAnimationFrame(() => { clFreezeApply(); clGrowAll(); });
+  }
+}
+
 function clOpenFreezePanesModal(cfg) {
   const state = clFreezeLoad();
   const cols = clFreezeColumnOptions(cfg);
@@ -6436,6 +6502,7 @@ function renderCallListPage(cfg) {
       <button class="btn sm ghost" id="cl-reset" title="Clear search, filters and sorting">${resetIconSvg()} Reset</button>
       <button class="btn sm" id="cl-add-col" title="Add an editable column">${plusIconSvg()} Add Column</button>
       <button class="btn sm" id="cl-freeze-panes" title="Freeze the table header or selected columns">❄ Freeze Panes</button>
+      <button class="btn sm" id="cl-maximize-table" title="Maximize this table">⛶ Maximize Table</button>
  <label class="cl-selall" title="Select every record that matches the current filters"><input type="checkbox" id="cl-selall" /> Select all</label>
  <button class="btn sm danger" id="cl-del-sel" disabled title="Delete the selected records">${trashIconSvg()} Delete selected<span class="cl-del-n"></span></button>
       ${clIsDays() ? `<button class="btn sm" id="cl-setday" title="Move the ticked patients to a clinic day">Set Clinic Day</button>` : ""}
@@ -6758,6 +6825,7 @@ function wireCallListPage(cfg) {
   });
   document.getElementById("cl-add-col").addEventListener("click", () => clOpenAddColumnModal(cfg));
   document.getElementById("cl-freeze-panes").addEventListener("click", () => clOpenFreezePanesModal(cfg));
+  document.getElementById("cl-maximize-table")?.addEventListener("click", clMaximizeTable);
   document.getElementById("btn-completion-criteria")?.addEventListener("click", () => openCompletionCriteriaModal(cfg));
  document.getElementById("cl-selall").addEventListener("change", (e) => clSelectAll(cfg, e.target.checked));
  document.getElementById("cl-del-sel").addEventListener("click", () => clDeleteSelected(cfg));
