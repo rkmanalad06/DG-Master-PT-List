@@ -7385,7 +7385,9 @@ function clApplyFreezeSettings(cfg) {
   table.style.setProperty("border-spacing", "0", "important");
 
   const headCells = [...table.querySelectorAll("thead th[data-col]")];
-  let left = 0;
+  // The selection checkbox column is the first 46px of the table and is NEVER frozen.
+  // Start frozen data columns after it so Patient Name does not overlap the checkbox/header.
+  let left = CL_SEL_COL_W;
   const lastSelected = selectedCols[selectedCols.length - 1];
 
   for (const col of selectedCols) {
