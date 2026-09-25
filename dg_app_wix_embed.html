@@ -267,7 +267,7 @@ a.link-inline:hover { color: var(--accent-hover); }
 .nav-item.active .nav-count { background: rgba(255,255,255,0.18); color: white; }
 .nav-item .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 
-/* Desktop navigation collapse: keeps the icon rail visible so users can reclaim horizontal space. */
+/* Desktop navigation collapse: lets users reclaim horizontal workspace. */
 .sidebar-collapse-btn {
   margin-left: auto;
   width: 30px;
@@ -284,14 +284,8 @@ a.link-inline:hover { color: var(--accent-hover); }
 }
 .sidebar-collapse-btn:hover { background: rgba(255,255,255,0.10); color: white; }
 .sidebar-collapse-btn svg { width: 15px; height: 15px; }
-
-body.sidebar-collapsed #app-shell {
-  grid-template-columns: var(--sidebar-collapsed-w) 1fr;
-}
-body.sidebar-collapsed .sidebar-brand {
-  justify-content: center;
-  padding: 0 8px;
-}
+body.sidebar-collapsed #app-shell { grid-template-columns: var(--sidebar-collapsed-w) 1fr; }
+body.sidebar-collapsed .sidebar-brand { justify-content: center; padding: 0 8px; }
 body.sidebar-collapsed .sidebar-brand > div:nth-child(2) { display: none; }
 body.sidebar-collapsed .sidebar-collapse-btn { margin-left: 0; }
 body.sidebar-collapsed .sidebar-scroll { padding-left: 8px; padding-right: 8px; }
@@ -302,6 +296,7 @@ body.sidebar-collapsed .nav-item .nav-label,
 body.sidebar-collapsed .nav-item .nav-count { display: none; }
 body.sidebar-collapsed .nav-item .nav-icon { margin: 0; }
 body.sidebar-collapsed .nav-item .status-dot { width: 7px; height: 7px; }
+
 
 main.content {
   grid-area: main;
@@ -935,8 +930,8 @@ table.dup-cmp td .inline-edit-input { width: 140px; min-width: 0; }
 .sidebar-backdrop{display:none}
 @media (max-width:1000px){
   #app-shell{grid-template-columns:1fr;grid-template-areas:"topbar" "main"}
-  body.sidebar-collapsed #app-shell{grid-template-columns:1fr}
   .sidebar-collapse-btn{display:none}
+  body.sidebar-collapsed #app-shell{grid-template-columns:1fr}
   body.sidebar-collapsed .sidebar-brand > div:nth-child(2){display:block}
   body.sidebar-collapsed .sidebar-scroll{padding-left:var(--space-3);padding-right:var(--space-3)}
   body.sidebar-collapsed .nav-group-label{display:block}
@@ -1039,10 +1034,11 @@ table.dup-cmp td .inline-edit-input { width: 140px; min-width: 0; }
 /* --- Table --- */
 .cl-table-wrap { max-height: 60vh; }
 table.cl-table { table-layout: fixed; min-width: 100%; }
+table.cl-table th { position: sticky; top: 0; padding-right: 14px; overflow: hidden; text-overflow: ellipsis; }
 
-/* Excel-style freeze panes for the three main authorization work queues.
-   The selection checkbox column and the patient/name column stay visible while
-   users scroll horizontally and the header stays visible while scrolling vertically. */
+/* Excel-style freeze panes for the three authorization work queues.
+   Only the patient/name column is frozen horizontally. The selection checkbox
+   column scrolls normally. The header remains visible vertically. */
 table.cl-freeze-table {
   border-collapse: separate;
   border-spacing: 0;
@@ -1053,54 +1049,31 @@ table.cl-freeze-table thead th {
   z-index: 20;
   background: var(--bg-sunken);
 }
-table.cl-freeze-table thead th.cl-sel-th {
-  left: 0;
-  z-index: 40;
-}
 table.cl-freeze-table thead th.cl-freeze-name {
-  left: 46px;
+  left: 0;
   z-index: 35;
   box-shadow: 1px 0 0 var(--border-subtle);
 }
-table.cl-freeze-table tbody td.cl-sel-td {
-  position: sticky;
-  left: 0;
-  z-index: 15;
-  background: var(--bg-surface);
-}
 table.cl-freeze-table tbody td.cl-freeze-name {
   position: sticky;
-  left: 46px;
+  left: 0;
   z-index: 14;
   background: var(--bg-surface);
   box-shadow: 1px 0 0 var(--border-subtle);
 }
-table.cl-freeze-table tbody tr:hover td.cl-sel-td,
 table.cl-freeze-table tbody tr:hover td.cl-freeze-name { background: var(--bg-sunken); }
-table.cl-freeze-table tbody tr.cl-row-y td.cl-sel-td,
 table.cl-freeze-table tbody tr.cl-row-y td.cl-freeze-name { background: #fff8d6; }
-table.cl-freeze-table tbody tr.cl-row-y:hover td.cl-sel-td,
 table.cl-freeze-table tbody tr.cl-row-y:hover td.cl-freeze-name { background: #fff1b0; }
-table.cl-freeze-table tbody tr.cl-row-hi td.cl-sel-td,
 table.cl-freeze-table tbody tr.cl-row-hi td.cl-freeze-name { background: #ffe1dc; }
-table.cl-freeze-table tbody tr.cl-row-sel td.cl-sel-td,
 table.cl-freeze-table tbody tr.cl-row-sel td.cl-freeze-name { background: var(--accent-soft, #f3dde0); }
-table.cl-freeze-table tbody tr.cl-hl td.cl-sel-td,
 table.cl-freeze-table tbody tr.cl-hl td.cl-freeze-name,
-table.cl-freeze-table tbody tr.cl-hl-orange td.cl-sel-td,
 table.cl-freeze-table tbody tr.cl-hl-orange td.cl-freeze-name,
-table.cl-freeze-table tbody tr.cl-hl-yellow td.cl-sel-td,
 table.cl-freeze-table tbody tr.cl-hl-yellow td.cl-freeze-name,
-table.cl-freeze-table tbody tr.cl-hl-green td.cl-sel-td,
 table.cl-freeze-table tbody tr.cl-hl-green td.cl-freeze-name,
-table.cl-freeze-table tbody tr.cl-hl-blue td.cl-sel-td,
 table.cl-freeze-table tbody tr.cl-hl-blue td.cl-freeze-name,
-table.cl-freeze-table tbody tr.cl-hl-violet td.cl-sel-td,
 table.cl-freeze-table tbody tr.cl-hl-violet td.cl-freeze-name,
-table.cl-freeze-table tbody tr.cl-hl-gray td.cl-sel-td,
 table.cl-freeze-table tbody tr.cl-hl-gray td.cl-freeze-name { background: var(--hl-bg); }
 
-table.cl-table th.cl-dragging { opacity: 0.4; }
 table.cl-table th.cl-dragging { opacity: 0.4; }
 .cl-th-note { display: block; font-size: 10px; font-weight: 600; line-height: 1.25; text-transform: none; letter-spacing: 0; color: #b45309; white-space: normal; }
 td.cl-inf-td { text-align: center; }
@@ -6710,9 +6683,9 @@ function clRenderTable(cfg) {
   const widths = cols.map((c) => clWidth(cfg, c));
   const tableW = widths.reduce((a, b) => a + b, 0) + CL_ACTIONS_COL_W + CL_SEL_COL_W;
   const teams = [...new Set([...(clIsOsteo() ? ["JP", "SU", "Cancelled"] : []), ...(clAssignMeta() ? clAssignMeta().suggest : []), ...everything.map((r) => String(r.data[CL.TEAM] || "").trim()).filter(Boolean)])].sort();
-
   const freezeTable = clFreezeEnabled(cfg);
   const freezeNameCol = clFreezeNameColumn(cfg);
+
   const th = (c) => `<th data-col="${esc(c)}" class="${freezeTable && c === freezeNameCol ? "cl-freeze-name" : ""}" draggable="true" title="Drag to reorder · drag the edge to resize · click to sort">
       <span class="cl-th-label">${esc(clColLabel(c))}</span>${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}${customNames.has(c) ? `<button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Remove this column" aria-label="Remove column ${esc(c)}">×</button>` : ""}
       <span class="cl-resize" data-col="${esc(c)}" role="separator" aria-orientation="vertical" aria-label="Resize ${esc(clColLabel(c))} column"></span>
