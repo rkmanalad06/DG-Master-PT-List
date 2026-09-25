@@ -1117,7 +1117,7 @@ table.cl-table tbody tr.cl-hl.cl-row-sel { --freeze-bg: var(--accent-soft, #f3dd
 .cl-infusion-freeze table.cl-table tbody tr:hover td:nth-child(2) {
   background: var(--freeze-bg, var(--bg-sunken));
 }
-/* User-configurable freeze panes: overrides built-in tab-specific freeze rules. */
+/* User-configurable freeze panes: any number of columns + optional whole header. */
 .cl-user-freeze-reset table.cl-table thead th,
 .cl-user-freeze-reset table.cl-table tbody td.name-col,
 .cl-user-freeze-reset table.cl-table tbody td:nth-child(2) {
@@ -1128,7 +1128,7 @@ table.cl-table tbody tr.cl-hl.cl-row-sel { --freeze-bg: var(--accent-soft, #f3dd
 }
 .cl-user-freeze-col {
   position: sticky !important;
-  left: 0 !important;
+  left: var(--freeze-left, 0px) !important;
   z-index: 30 !important;
   background: var(--freeze-bg, var(--bg-surface)) !important;
   box-shadow: 1px 0 0 var(--border-subtle) !important;
@@ -1139,10 +1139,7 @@ table.cl-table tbody tr.cl-hl.cl-row-sel { --freeze-bg: var(--accent-soft, #f3dd
   z-index: 20 !important;
   background: var(--bg-sunken) !important;
 }
-.cl-user-freeze-header table.cl-table thead th.cl-user-freeze-col {
-  z-index: 40 !important;
-  left: 0 !important;
-}
+.cl-user-freeze-header table.cl-table thead th.cl-user-freeze-col { z-index: 40 !important; }
 .cl-user-freeze-col:hover { filter: brightness(.98); }
 table.cl-table { table-layout: fixed; min-width: 100%; }
 table.cl-table th { position: sticky; padding-right: 14px; overflow: hidden; text-overflow: ellipsis; }
@@ -6568,7 +6565,7 @@ function renderCallListPage(cfg) {
       <button class="btn sm ghost" id="cl-reset" title="Clear search, filters and sorting">${resetIconSvg()} Reset</button>
       <button class="btn sm" id="cl-add-col" title="Add an editable column">${plusIconSvg()} Add Column</button>
       <button class="btn sm ghost" id="cl-manage-cols" title="Show, restore, or remove built-in or added columns">⚙ Manage Columns</button>
-      <button class="btn sm ghost" id="cl-freeze-panes" title="Choose which column and whether the table header should stay frozen">❄ Freeze Panes</button>
+      <button class="btn sm ghost" id="cl-freeze-panes" title="Choose any columns and whether the whole table header should stay frozen">❄ Freeze Panes</button>
       <button class="btn sm primary" id="cl-fullscreen" title="Maximize the table to the full screen">⛶ Maximize Table</button>
  <label class="cl-selall" title="Select every record that matches the current filters"><input type="checkbox" id="cl-selall" /> Select all</label>
  <button class="btn sm danger" id="cl-del-sel" disabled title="Delete the selected records">${trashIconSvg()} Delete selected<span class="cl-del-n"></span></button>
@@ -7213,37 +7210,57 @@ function clExport(cfg) {
 // ---------------------------------------------------------------------------
 function clFreezeConfig() {
   const l = clLayoutLoad();
-  return { col: l.freezeCol || "", header: !!l.freezeHeader };
+  let cols = Array.isArray(l.freezeCols) ? l.freezeCols.slice() : [];
+  if (!cols.length && l.freezeCol) cols = [l.freezeCol];
+  return { cols, header: !!l.freezeHeader };
 }
 function clApplyFreezeSettings(cfg) {
   const region = document.getElementById("cl-table-region");
   if (!region) return;
-  const { col, header } = clFreezeConfig();
+  const { cols, header } = clFreezeConfig();
   region.classList.add("cl-user-freeze-reset");
   region.classList.toggle("cl-user-freeze-header", header);
-  region.querySelectorAll(".cl-user-freeze-col").forEach(el => el.classList.remove("cl-user-freeze-col"));
-  if (col) {
-    region.querySelectorAll(`th[data-col="${CSS.escape(col)}"], td[data-col="${CSS.escape(col)}"]`).forEach(el => el.classList.add("cl-user-freeze-col"));
+  region.querySelectorAll(".cl-user-freeze-col").forEach(el => {
+    el.classList.remove("cl-user-freeze-col");
+    el.style.removeProperty("--freeze-left");
+  });
+  const table = region.querySelector("table.cl-table");
+  if (!table) return;
+  const headCells = [...table.querySelectorAll("thead th[data-col]")];
+  let left = 0;
+  for (const col of cols.filter(c => c && !String(c).startsWith("__"))) {
+    const th = headCells.find(h => h.dataset.col === col);
+    if (!th || th.classList.contains("cl-sel-th")) continue;
+    const width = Math.ceil(th.getBoundingClientRect().width || th.offsetWidth || 0);
+    region.querySelectorAll(`th[data-col="${CSS.escape(col)}"], td[data-col="${CSS.escape(col)}"]`).forEach(el => {
+      if (el.classList.contains("cl-sel-th") || el.classList.contains("cl-sel-td")) return;
+      el.classList.add("cl-user-freeze-col");
+      el.style.setProperty("--freeze-left", `${left}px`);
+    });
+    left += width;
   }
 }
 function clOpenFreezePanesModal(cfg) {
   const cols = clColumns(cfg).filter(c => !String(c).startsWith("__"));
   const current = clFreezeConfig();
-  const options = [`<option value="">No frozen column</option>`, ...cols.map(c => `<option value="${esc(c)}" ${current.col === c ? "selected" : ""}>${esc(clColLabel(c))}</option>`)].join("");
+  const selected = new Set(current.cols);
+  const rows = cols.map(c => `<label class="cl-col-manage-row"><input type="checkbox" class="cl-freeze-col-check" value="${esc(c)}" ${selected.has(c) ? "checked" : ""}/> <span>${esc(clColLabel(c))}</span></label>`).join("");
   const modal = openModal(`
-    <div class="modal-header"><div><h3>Freeze panes</h3><p>Choose a column to keep visible while scrolling left/right. You can also freeze the table header while scrolling up/down.</p></div></div>
+    <div class="modal-header"><div><h3>Freeze panes</h3><p>Choose which columns stay visible while scrolling left/right.</p></div></div>
     <div class="modal-body">
-      <div class="form-group"><label for="cl-freeze-col-select">Column to freeze</label><select class="ac-in" id="cl-freeze-col-select">${options}</select><div class="form-hint">The selected column is frozen at the left edge. The selection checkbox column is never frozen.</div></div>
-      <label class="cl-col-manage-row" style="margin-top:12px"><input type="checkbox" id="cl-freeze-header-check" ${current.header ? "checked" : ""}/> <span>Freeze table header</span></label>
+      <label class="cl-col-manage-row" style="margin-bottom:10px"><input type="checkbox" id="cl-freeze-header-check" ${current.header ? "checked" : ""}/> <span><strong>Freeze Table Header</strong></span></label>
+      <div class="form-hint" style="margin-bottom:10px">Freezes the entire table header while scrolling up/down.</div>
+      <div class="form-group"><label><strong>Freeze Columns</strong></label><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px 14px;max-height:45vh;overflow:auto;padding:4px 2px">${rows || '<span class="form-hint">No data columns available.</span>'}</div><div class="form-hint">Select any number of columns. The selection checkbox column is never frozen.</div></div>
     </div>
     <div class="modal-footer"><button class="btn" id="cl-freeze-cancel">Cancel</button><button class="btn ghost" id="cl-freeze-clear">Unfreeze all</button><button class="btn primary" id="cl-freeze-save">Save</button></div>`);
   modal.querySelector("#cl-freeze-cancel").addEventListener("click", closeModal);
   modal.querySelector("#cl-freeze-clear").addEventListener("click", () => {
-    const l = clLayoutLoad(); l.freezeCol = ""; l.freezeHeader = false; clLayoutSave(l); closeModal(); clRenderTable(cfg); toast("Freeze panes cleared");
+    const l = clLayoutLoad(); l.freezeCols = []; l.freezeCol = ""; l.freezeHeader = false; clLayoutSave(l); closeModal(); clRenderTable(cfg); toast("Freeze panes cleared");
   });
   modal.querySelector("#cl-freeze-save").addEventListener("click", () => {
     const l = clLayoutLoad();
-    l.freezeCol = modal.querySelector("#cl-freeze-col-select").value || "";
+    l.freezeCols = [...modal.querySelectorAll(".cl-freeze-col-check:checked")].map(x => x.value);
+    l.freezeCol = "";
     l.freezeHeader = !!modal.querySelector("#cl-freeze-header-check").checked;
     clLayoutSave(l); closeModal(); clRenderTable(cfg); toast("Freeze panes saved");
   });
