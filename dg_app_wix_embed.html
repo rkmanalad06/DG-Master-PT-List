@@ -1060,6 +1060,12 @@ body.cl-table-is-fullscreen { overflow: hidden; }
 .cl-freeze-target table.cl-table thead th.cl-freeze-name-th {
   position: sticky; left: 46px; z-index: 15; background: var(--bg-sunken); box-shadow: 1px 0 0 var(--border-subtle);
 }
+.cl-freeze-target table.cl-table thead th.cl-sel-th,
+.cl-freeze-target table.cl-table tbody td.cl-sel-td {
+  position: static !important;
+  left: auto !important;
+  z-index: auto !important;
+}
 .cl-freeze-target table.cl-table tbody td.name-col {
   position: sticky; left: 46px; z-index: 14; background: var(--bg-surface); box-shadow: 1px 0 0 var(--border-subtle);
 }
@@ -6487,8 +6493,8 @@ function renderCallListPage(cfg) {
       </select>
       <button class="btn sm ghost" id="cl-reset" title="Clear search, filters and sorting">${resetIconSvg()} Reset</button>
       <button class="btn sm" id="cl-add-col" title="Add an editable column">${plusIconSvg()} Add Column</button>
-      <button class="btn sm" id="cl-manage-cols" title="Show, restore, or remove columns">⚙ Columns</button>
-      <button class="btn sm" id="cl-fullscreen" title="Maximize the table">⛶ Maximize Table</button>
+      <button class="btn sm ghost" id="cl-manage-cols" title="Show, restore, or remove built-in or added columns">⚙ Manage Columns</button>
+      <button class="btn sm primary" id="cl-fullscreen" title="Maximize the table to the full screen">⛶ Maximize Table</button>
  <label class="cl-selall" title="Select every record that matches the current filters"><input type="checkbox" id="cl-selall" /> Select all</label>
  <button class="btn sm danger" id="cl-del-sel" disabled title="Delete the selected records">${trashIconSvg()} Delete selected<span class="cl-del-n"></span></button>
       ${clIsDays() ? `<button class="btn sm" id="cl-setday" title="Move the ticked patients to a clinic day">Set Clinic Day</button>` : ""}
@@ -6634,7 +6640,9 @@ function clRowHtml(cfg, r, cols) {
     const val = r.data[c] || "";
     const isDate = clIsDateCol(cfg, c);
     const dexa = clIsDexaCol(c) && clDexaYes(val);
-    const freezeNameCell = c === cfg.nameField || (cfg.group === "diagnosis" && !cfg.nameField && c === cols.find((x) => !String(x).startsWith("__")));
+    const freezeNameCell = cfg.group === "diagnosis"
+      ? String(c).trim().toLowerCase() === String((cfg.nameField || "Patient Name")).trim().toLowerCase() || ["patient name", "medicare - patient name", "patient", "name"].includes(String(c).trim().toLowerCase()) && cols.some((x) => String(x).trim().toLowerCase() === String(c).trim().toLowerCase())
+      : c === cfg.nameField;
     return `<td class="inline-cell${freezeNameCell ? " name-col" : ""}${dexa ? " cl-dexa-yes" : ""}" data-col="${esc(c)}">
       <div class="inline-cell-wrap">
         <input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" ${c === CL.TEAM ? 'list="cl-team-list"' : clIsDays() && c === DAY_FIELD ? 'list="cl-day-list"' : ""} />
@@ -6719,7 +6727,13 @@ function clRenderTable(cfg) {
   const tableW = widths.reduce((a, b) => a + b, 0) + CL_ACTIONS_COL_W + CL_SEL_COL_W;
   const teams = [...new Set([...(clIsOsteo() ? ["JP", "SU", "Cancelled"] : []), ...(clAssignMeta() ? clAssignMeta().suggest : []), ...everything.map((r) => String(r.data[CL.TEAM] || "").trim()).filter(Boolean)])].sort();
 
-  const freezeNameCol = (c) => c === cfg.nameField || (cfg.group === "diagnosis" && !cfg.nameField && c === cols.find((x) => !String(x).startsWith("__")));
+  const freezeNameKey = cfg.group === "diagnosis" ? (
+    [cfg.nameField, "Patient Name", "MEDICARE - Patient Name", "Patient", "Name"]
+      .filter(Boolean)
+      .find((k) => cols.some((c) => String(c).trim().toLowerCase() === String(k).trim().toLowerCase()))
+      || cols.find((x) => !String(x).startsWith("__"))
+  ) : cfg.nameField;
+  const freezeNameCol = (c) => !!freezeNameKey && String(c).trim().toLowerCase() === String(freezeNameKey).trim().toLowerCase();
   const th = (c) => `<th class="${freezeNameCol(c) ? "cl-freeze-name-th" : ""}" data-col="${esc(c)}" draggable="true" title="Drag to reorder · drag the edge to resize · click to sort">
       <span class="cl-th-label">${esc(clColLabel(c))}</span>${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}${c.startsWith("__") ? "" : `<button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Remove this column from your view" aria-label="Remove column ${esc(clColLabel(c))}">×</button>`}
       <span class="cl-resize" data-col="${esc(c)}" role="separator" aria-orientation="vertical" aria-label="Resize ${esc(clColLabel(c))} column"></span>
