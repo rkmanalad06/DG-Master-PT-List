@@ -1038,7 +1038,7 @@ body.cl-table-is-fullscreen { overflow: hidden; }
 .sheet-freeze-target table.data-table { border-collapse: separate; border-spacing: 0; }
 .sheet-freeze-target table.data-table thead th { position: static; }
 .sheet-freeze-target table.data-table tbody td.name-col {
-  position: sticky; left: 0; z-index: 8; background: var(--bg-surface);
+  position: sticky; left: 0; z-index: 8; background: var(--freeze-bg, var(--bg-surface));
   box-shadow: 1px 0 0 var(--border-subtle);
 }
 .sheet-freeze-target table.data-table tbody tr:hover td.name-col { background: var(--bg-sunken); }
@@ -1067,7 +1067,7 @@ body.cl-table-is-fullscreen { overflow: hidden; }
   z-index: auto !important;
 }
 .cl-freeze-target table.cl-table tbody td.name-col {
-  position: sticky; left: 0; z-index: 14; background: var(--bg-surface); box-shadow: 1px 0 0 var(--border-subtle);
+  position: sticky; left: 0; z-index: 14; background: var(--freeze-bg, var(--bg-surface)); box-shadow: 1px 0 0 var(--border-subtle);
 }
 .cl-freeze-target table.cl-table tbody tr:hover td.name-col { background: var(--bg-sunken); }
 /* DG Infusion PAs: freeze the FIRST DATA COLUMN (the column immediately after
@@ -1086,7 +1086,7 @@ body.cl-table-is-fullscreen { overflow: hidden; }
 }
 .cl-infusion-freeze table.cl-table tbody td:nth-child(2) {
   z-index: 14 !important;
-  background: var(--bg-surface);
+  background: var(--freeze-bg, var(--bg-surface));
 }
 .cl-infusion-freeze table.cl-table tbody tr:hover td:nth-child(2) {
   background: var(--bg-sunken);
@@ -1101,6 +1101,22 @@ body.cl-table-is-fullscreen { overflow: hidden; }
   position: static !important;
   left: auto !important;
   z-index: auto !important;
+}
+/* Keep the frozen patient cell visually synchronized with its row highlight. */
+table.cl-table tbody tr.cl-row-y { --freeze-bg: #fff8d6; }
+table.cl-table tbody tr.cl-row-hi { --freeze-bg: #ffe1dc; }
+table.cl-table tbody tr.cl-row-progress { --freeze-bg: #fffbe8; }
+table.cl-table tbody tr.cl-row-y.cl-row-sel,
+table.cl-table tbody tr.cl-row-hi.cl-row-sel { --freeze-bg: var(--accent-soft, #f3dde0); }
+table.cl-table tbody tr.cl-hl { --freeze-bg: var(--hl-bg); }
+table.cl-table tbody tr.cl-hl.cl-row-sel { --freeze-bg: var(--accent-soft, #f3dde0); }
+.cl-freeze-target table.cl-table tbody td.name-col,
+.cl-infusion-freeze table.cl-table tbody td:nth-child(2) {
+  background: var(--freeze-bg, var(--bg-surface));
+}
+.cl-freeze-target table.cl-table tbody tr:hover td.name-col,
+.cl-infusion-freeze table.cl-table tbody tr:hover td:nth-child(2) {
+  background: var(--freeze-bg, var(--bg-sunken));
 }
 table.cl-table { table-layout: fixed; min-width: 100%; }
 table.cl-table th { position: sticky; padding-right: 14px; overflow: hidden; text-overflow: ellipsis; }
