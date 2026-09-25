@@ -1070,26 +1070,32 @@ body.cl-table-is-fullscreen { overflow: hidden; }
   position: sticky; left: 0; z-index: 14; background: var(--bg-surface); box-shadow: 1px 0 0 var(--border-subtle);
 }
 .cl-freeze-target table.cl-table tbody tr:hover td.name-col { background: var(--bg-sunken); }
-/* DG Infusion PAs uses a combined data source. Its Patient Name cell must be
-   frozen by the rendered column key as well as the generic name-col class. */
-.cl-infusion-freeze table.cl-table th[data-col="Patient Name"],
-.cl-infusion-freeze table.cl-table td[data-col="Patient Name"] {
+/* DG Infusion PAs: freeze the FIRST DATA COLUMN (the column immediately after
+   the selection checkbox column). The selection column itself scrolls normally.
+   At rest, the frozen data column sits beside the checkbox; after horizontal
+   scrolling begins, it moves to the left edge and stays visible. */
+.cl-infusion-freeze table.cl-table thead th:nth-child(2),
+.cl-infusion-freeze table.cl-table tbody td:nth-child(2) {
   position: sticky !important;
-  left: 0 !important;
+  left: 46px !important;
   box-shadow: 1px 0 0 var(--border-subtle);
 }
-.cl-infusion-freeze table.cl-table th[data-col="Patient Name"] {
+.cl-infusion-freeze table.cl-table thead th:nth-child(2) {
   z-index: 15 !important;
   background: var(--bg-sunken);
 }
-.cl-infusion-freeze table.cl-table td[data-col="Patient Name"] {
+.cl-infusion-freeze table.cl-table tbody td:nth-child(2) {
   z-index: 14 !important;
   background: var(--bg-surface);
 }
-.cl-infusion-freeze table.cl-table tbody tr:hover td[data-col="Patient Name"] {
+.cl-infusion-freeze table.cl-table tbody tr:hover td:nth-child(2) {
   background: var(--bg-sunken);
 }
-/* The selection column must scroll normally. */
+.cl-infusion-freeze.cl-has-hscroll table.cl-table thead th:nth-child(2),
+.cl-infusion-freeze.cl-has-hscroll table.cl-table tbody td:nth-child(2) {
+  left: 0 !important;
+}
+/* The selection column is never sticky. */
 .cl-infusion-freeze table.cl-table th.cl-sel-th,
 .cl-infusion-freeze table.cl-table td.cl-sel-td {
   position: static !important;
@@ -6797,6 +6803,19 @@ function clRenderTable(cfg) {
       </div>
     </div>`}
   `;
+
+  // DG Infusion PAs: the first DATA column (not the selection checkbox) is the
+  // frozen pane. Move it to the left edge only after horizontal scrolling starts.
+  if (CALL_SHEET_ID === "dg_infusion_pas") {
+    const wrap = region.querySelector(".cl-table-wrap");
+    if (wrap) {
+      const syncFrozenFirstCol = () => {
+        region.classList.toggle("cl-has-hscroll", wrap.scrollLeft > 0);
+      };
+      wrap.addEventListener("scroll", syncFrozenFirstCol, { passive: true });
+      syncFrozenFirstCol();
+    }
+  }
 
   // PSA Call Status uses a dedicated direct listener. This avoids the generic
   // Action handler intercepting the click and makes the status button reliably
