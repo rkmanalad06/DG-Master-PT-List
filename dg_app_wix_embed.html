@@ -1070,6 +1070,32 @@ body.cl-table-is-fullscreen { overflow: hidden; }
   position: sticky; left: 0; z-index: 14; background: var(--bg-surface); box-shadow: 1px 0 0 var(--border-subtle);
 }
 .cl-freeze-target table.cl-table tbody tr:hover td.name-col { background: var(--bg-sunken); }
+/* DG Infusion PAs uses a combined data source. Its Patient Name cell must be
+   frozen by the rendered column key as well as the generic name-col class. */
+.cl-infusion-freeze table.cl-table th[data-col="Patient Name"],
+.cl-infusion-freeze table.cl-table td[data-col="Patient Name"] {
+  position: sticky !important;
+  left: 0 !important;
+  box-shadow: 1px 0 0 var(--border-subtle);
+}
+.cl-infusion-freeze table.cl-table th[data-col="Patient Name"] {
+  z-index: 15 !important;
+  background: var(--bg-sunken);
+}
+.cl-infusion-freeze table.cl-table td[data-col="Patient Name"] {
+  z-index: 14 !important;
+  background: var(--bg-surface);
+}
+.cl-infusion-freeze table.cl-table tbody tr:hover td[data-col="Patient Name"] {
+  background: var(--bg-sunken);
+}
+/* The selection column must scroll normally. */
+.cl-infusion-freeze table.cl-table th.cl-sel-th,
+.cl-infusion-freeze table.cl-table td.cl-sel-td {
+  position: static !important;
+  left: auto !important;
+  z-index: auto !important;
+}
 table.cl-table { table-layout: fixed; min-width: 100%; }
 table.cl-table th { position: sticky; padding-right: 14px; overflow: hidden; text-overflow: ellipsis; }
 table.cl-table th.cl-dragging { opacity: 0.4; }
@@ -6711,6 +6737,7 @@ function clRenderTable(cfg) {
   const region = document.getElementById("cl-table-region");
   if (!region) return;
   region.classList.toggle("cl-freeze-target", ["dg_pharmacy", "dg_infusion_pas", "dg_osteoporosis_pas"].includes(CALL_SHEET_ID) || SHEET_BY_ID[CALL_SHEET_ID]?.group === "diagnosis");
+  region.classList.toggle("cl-infusion-freeze", CALL_SHEET_ID === "dg_infusion_pas");
   const cols = clColumns(cfg);
   const customNames = new Set(clCustomColumns().map((c) => c.name));
   const everything = clRecords();
