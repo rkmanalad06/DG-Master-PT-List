@@ -6163,7 +6163,13 @@ function clLayoutLoad() {
     widths = w2;
   }
   if ((l.rev || 0) !== (acColCfg(CALL_SHEET_ID).rev || 0)) order = [];
-  return { order, widths, hidden };
+  // Keep freeze-pane preferences independent of column-layout revisions.
+  // A revision may reset saved column order/widths, but it must never
+  // silently uncheck the user's Freeze Columns / Freeze Header selections.
+  const freezeCols = Array.isArray(l.freezeCols) ? l.freezeCols.slice() : (l.freezeCol ? [l.freezeCol] : []);
+  const freezeCol = l.freezeCol || "";
+  const freezeHeader = !!l.freezeHeader;
+  return { order, widths, hidden, freezeCols, freezeCol, freezeHeader, rev: l.rev || 0 };
 }
 function clLayoutSave(l) { l.rev = acColCfg(CALL_SHEET_ID).rev || 0; lsSet(CL.LS_LAYOUT, l); }
 function clCustomColumns() {
