@@ -1209,8 +1209,15 @@ table.cl-table tbody tr.cl-hlbar-gray { --hlb: #667085; }
 table.cl-table tbody tr.cl-hlbar td:first-child { box-shadow: inset 4px 0 0 var(--hlb); }
 .cl-auto-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: #ffe7a8; color: #7a4b00; }
 .cl-month-chip { display: inline-block; font-size: 12.5px; font-weight: 600; padding: 2px 10px; border-radius: 999px; background: var(--ink-100, #eef0f4); color: var(--text-secondary); white-space: nowrap; }
+.cl-osteo-pending .cl-stat-sub { margin-bottom: 3px; }
+.cl-osteo-pa-breakdown { display: flex; flex-direction: column; gap: 2px; font-size: 11px; line-height: 1.25; margin: 2px 0 5px; color: inherit; opacity: .9; }
+.cl-osteo-pa-breakdown b { font-weight: 700; }
 .cl-note { display: block; width: 100%; box-sizing: border-box; margin: 0 0 14px; padding: 9px 12px; font: inherit; font-size: 13px; line-height: 1.4; color: #5c4300; background: #fff8d6; border: 1px solid #efd766; border-radius: 8px; resize: vertical; min-height: 38px; }
 .cl-note:focus { outline: 2px solid #efd766; outline-offset: 1px; background: #fffbe8; }
+.cl-general-note { margin: 10px 0 16px; padding: 10px 12px 8px; background: #fff8d6; border: 1px solid #efd766; border-radius: 8px; box-sizing: border-box; }
+.cl-general-note-label { margin: 0 0 5px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #7a5a00; }
+.cl-general-note .cl-note { margin: 0; width: 100%; border: 0; background: transparent; padding: 2px 0 4px; min-height: 38px; color: #5c4300; }
+.cl-general-note .cl-note:focus { background: transparent; outline: none; }
 .cl-days { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
 .cl-day { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-secondary); background: var(--bg-surface, #fff); border: 1px solid var(--border-subtle, #d9dce4); border-radius: 999px; cursor: pointer; }
 .cl-day b { font-size: 11.5px; padding: 1px 7px; border-radius: 999px; background: var(--ink-100, #eef0f4); color: var(--text-secondary); }
@@ -5440,15 +5447,19 @@ function psaAetna(data) {
   return Object.keys(data || {}).some((k) => /insurance/i.test(k) && biMatch("psa", "aetna", "has", data[k]));
 }
 const PSA_NOTE_DEFAULT = "Note: also have them Stelara and Aetna in yellow sticky in the chart.";
-function psaNote() {
+function clGeneralNote() {
   const n = Store.editedRows[CL.LAYOUT_UID] && Store.editedRows[CL.LAYOUT_UID].note;
-  return n == null ? PSA_NOTE_DEFAULT : String(n);
+  // Preserve the existing PSA note for that tab; all other tabs start blank.
+  return n == null ? (clIsPsa() ? PSA_NOTE_DEFAULT : "") : String(n);
 }
-function psaSaveNote(text) {
+function clSaveGeneralNote(text) {
   Store.editedRows[CL.LAYOUT_UID] = { ...(Store.editedRows[CL.LAYOUT_UID] || {}), note: text };
   saveEditedRows();
   WixBridge.save("editedRow", { uid: CL.LAYOUT_UID, patch: Store.editedRows[CL.LAYOUT_UID] });
 }
+// Backward-compatible aliases for the existing PSA note behavior.
+function psaNote() { return clGeneralNote(); }
+function psaSaveNote(text) { clSaveGeneralNote(text); }
 // Who a PSA row is assigned to: AFD and/or APPS (typed loosely).
 function psaWho(v) {
   const t = String(v || "");
@@ -5647,7 +5658,12 @@ const CALL_STATUSES = [
 function clStatusMatch(data, key) {
   if (clIsOsteo()) {
     const i = callInfo(data);
-    if (key === "pending") return !i.assigned && !i.cancelled;
+    if (key === "pending") return !String(data?.[CL.TEAM] || "").trim();
+    if (key === "assigned") return !!String(data?.[CL.TEAM] || "").trim();
+    if (key === "pa-no-pa") return osteoPaStatus(data?.[OP.PA]) === "no-pa";
+    if (key === "pa-pending") { const pa = osteoPaStatus(data?.[OP.PA]); return pa === "sent" || pa === "resubmit"; }
+    if (key === "pa-approved") return osteoPaStatus(data?.[OP.PA]) === "approved";
+    if (key === "pa-others") return osteoPaStatus(data?.[OP.PA]) === "others";
     if (key === "jp") return i.key === "jp" || i.key === "both";
     if (key === "su") return i.key === "su" || i.key === "both";
     if (key === "pa") return i.paPending;
@@ -6473,39 +6489,57 @@ function clGenericKpiHtml() {
       ${kpiCard({ label: "Duplicates", value: fmtNum(stats.dupCount), icon: "copy", sub: stats.dupCount ? "Review duplicates in this tab" : "None found", cls: stats.dupCount ? "warn" : "positive" })}
     </div>`;
 }
+function osteoPaStatus(raw) {
+  const v = String(raw == null ? "" : raw).trim().toLowerCase().replace(/\s+/g, " ");
+  if (/\bno\s*pa\b/.test(v)) return "no-pa";
+  if (/\bresubmit(?:ted|ting|s)?\b/.test(v) || /\bresubmission\b/.test(v) || /\bneeds?\s+(?:to\s+)?be\s+resubmit(?:ted|ted)\b/.test(v)) return "resubmit";
+  if (/\bapprov(?:ed|es?|al)\b/.test(v) || /\balready\s+approved\b/.test(v)) return "approved";
+  if (/\bsent\b/.test(v) || /\bsending\b/.test(v) || /\bsubmitted\b/.test(v) || /\bsubmission\b/.test(v) || /\bpa\s*(?:sent|submitted)\b/.test(v)) return "sent";
+  return "others";
+}
 function clOsteoKpiHtml() {
   const recs = clDayScoped(clRecords());
-  const c = { total: recs.length, pending: 0, jp: 0, su: 0, pa: 0, attn: 0, cancelled: 0 };
+  const c = { total: recs.length, unassigned: 0, assigned: 0, noPa: 0, sent: 0, resubmit: 0, approved: 0, others: 0 };
   recs.forEach((r) => {
-    const i = callInfo(r.data);
-    if (i.cancelled) c.cancelled++;
-    else if (!i.assigned) c.pending++;
-    if (i.key === "jp" || i.key === "both") c.jp++;
-    if (i.key === "su" || i.key === "both") c.su++;
-    if (i.paPending) c.pa++;
-    if (i.flagged) c.attn++;
+    const rawAssign = String(r.data?.[CL.TEAM] || "").trim();
+    if (rawAssign) c.assigned++; else c.unassigned++;
+    const pa = osteoPaStatus(r.data?.[OP.PA]);
+    if (pa === "no-pa") c.noPa++;
+    else if (pa === "sent") c.sent++;
+    else if (pa === "resubmit") c.resubmit++;
+    else if (pa === "approved") c.approved++;
+    else c.others++;
   });
-  const pctOf = (n) => (c.total ? Math.round((n / c.total) * 100) : 0);
+  const pending = c.sent + c.resubmit;
+  const pct = (n) => c.total ? ((n / c.total) * 100).toFixed(2) : "0.00";
   const bar = (label, p) => `<span class="cl-stat-bar" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p}"><span class="cl-stat-bar-fill" style="width:${p}%"></span></span>`;
   const tile = (t) => {
-    const p = t.nopct ? (c.total ? 100 : 0) : pctOf(t.n);
-    return `<button type="button" class="cl-stat cl-tone-${t.tone}" data-cl-status="${t.key}" aria-pressed="${t.key !== "" && clState.statusFilter === t.key}" title="${esc(t.sub)} · click to show these records">
-      <span class="cl-stat-count">${fmtNum(t.n)}${t.nopct ? "" : `<span class="cl-stat-pct" title="Share of all records">${p}%</span>`}</span>
+    const p = t.nopct ? "100.00" : pct(t.n);
+    const pendingBreakdown = t.key === "pa-pending"
+      ? `<div class="cl-osteo-pa-breakdown"><span>Sent / Submitted: <b>${fmtNum(c.sent)}</b></span><span>Resubmit: <b>${fmtNum(c.resubmit)}</b></span></div>`
+      : "";
+    return `<button type="button" class="cl-stat cl-tone-${t.tone}${t.key === "pa-pending" ? " cl-osteo-pending" : ""}" data-cl-status="${t.key}" aria-pressed="${t.key !== "" && clState.statusFilter === t.key}" title="${esc(t.sub)}">
+      <span class="cl-stat-count">${fmtNum(t.n)}${t.nopct ? "" : `<span class="cl-stat-pct" title="Share of all patients">${p}%</span>`}</span>
       <span class="cl-stat-label"><span class="cl-dot"></span>${esc(t.label)}</span>
       <span class="cl-stat-sub">${esc(t.sub)}</span>
+      ${pendingBreakdown}
       ${bar(t.label + " share of total", p)}
     </button>`;
   };
-  const tiles = [
-    { key: "", tone: "gray", label: "Total", n: c.total, sub: "All records in this tab", nopct: true },
-    { key: "pending", tone: "red", label: "Unassigned", n: c.pending, sub: "Nothing in 50/50 TO JP AND SU" },
-    { key: "jp", tone: "blue", label: "Assigned to JP", n: c.jp, sub: "Justin Putz" },
-    { key: "su", tone: "violet", label: "Assigned to SU", n: c.su, sub: "Sabahat Usmani" },
-    { key: "pa", tone: "yellow", label: "Pending PA", n: c.pa, sub: "No data in the PA column" },
-    { key: "attention", tone: "orange", label: "Needs Attention", n: c.attn, sub: "Unassigned, appt within " + CL.ATTN_DAYS + " days" },
-    { key: "cancelled", tone: "gray", label: "Cancelled", n: c.cancelled, sub: "No assignment needed" },
+  const row1 = [
+    { key: "", tone: "gray", label: "Total Patients", n: c.total, sub: "All patients in DG Osteoporosis PAs", nopct: true },
+    { key: "pending", tone: "red", label: "Unassigned", n: c.unassigned, sub: "Assigned To is blank" },
+    { key: "assigned", tone: "green", label: "Assigned", n: c.assigned, sub: "Assigned To has a value" },
   ];
-  return `<div class="cl-stats cl-stats-4" role="group" aria-label="Osteoporosis PA summary">${tiles.map(tile).join("")}</div>`;
+  const row2 = [
+    { key: "pa-no-pa", tone: "gray", label: "NO PA", n: c.noPa, sub: "PA column says NO PA" },
+    { key: "pa-pending", tone: "yellow", label: "PENDING", n: pending, sub: "Sent / Submitted + Resubmit" },
+    { key: "pa-approved", tone: "green", label: "APPROVED", n: c.approved, sub: "PA indicates Approved" },
+    { key: "pa-others", tone: "gray", label: "OTHERS", n: c.others, sub: "Anything else, including blank PA" },
+  ];
+  return `<div class="cl-stats cl-stats-3" role="group" aria-label="DG Osteoporosis patient assignment summary">${row1.map(tile).join("")}</div>
+    <div class="cl-kpi-heading">Prior Auth Status</div>
+    <div class="cl-stats cl-stats-4" role="group" aria-label="DG Osteoporosis prior auth status summary">${row2.map(tile).join("")}</div>`;
 }
 function clKpiHtml() { return acKpiWrap(clKpiHtmlBase()); }
 function clKpiHtmlBase() {
@@ -6568,7 +6602,6 @@ function renderCallListPage(cfg) {
     <div class="page-header">
       <div>
         <div class="page-title">${esc(clPageTitle(cfg))}</div>
-        <div class="page-subtitle">${clIsGeneric() ? esc(sheetDescription(cfg)) : clIsOsteo() ? "Type JP or SU (or Justin / Putz, Sabahat / Usmani) in 50/50 TO JP AND SU to assign, or Cancelled to cancel. Unassigned patients with an appointment within " + CL.ATTN_DAYS + " days are flagged Needs Attention." : clIsAssignTab() ? (clAssignMeta() ? clAssignMeta().desc : `Enter a name in ${CL.TEAM} for each patient. Status follows ${CL.TEAM}: Assigned once someone is entered, Unassigned while it is blank.`) : clIsInfusion() ? "Assign each authorization to a Team Member. Status follows Team Member (Assigned or Unassigned). Track Prior Auth as Sent, Resubmit, Approved or Others (add notes), and mark each correction In progress or Resolved." : clIsTransition() ? "Enter a Team Member for each patient. Status follows Team Member: Assigned once someone is entered, Not yet assigned until then. Action shows Scheduled as soon as a Next Scheduled Visit date is entered." : `Assign a team member, then record each call. Patients with a visit in the next ${CL.ATTN_DAYS} days and no outcome are flagged Needs Attention automatically.`}</div>
       </div>
 
       <div class="page-header-actions">
@@ -6580,7 +6613,10 @@ function renderCallListPage(cfg) {
     ${clToggleHtml(cfg)}
     ${clIsDays() ? `<div class="cl-days" id="cl-days" role="group" aria-label="Filter by clinic day">${clDaysHtml()}</div>` : ""}
     ${clMonthCol() ? `<div class="cl-days cl-months" id="cl-months" role="group" aria-label="Filter by clinic month and year">${clMonthsHtml()}</div>` : ""}
-    ${clIsPsa() ? `<textarea class="cl-note" id="cl-note" rows="2" aria-label="General note" placeholder="Add a general note for this tab...">${esc(psaNote())}</textarea>` : ""}
+    <div class="cl-general-note" aria-label="General note">
+      <div class="cl-general-note-label">General Note</div>
+      <textarea class="cl-note" id="cl-note" rows="2" aria-label="General note" placeholder="Add a general note for this tab...">${esc(clGeneralNote())}</textarea>
+    </div>
 
     ${dupGroups.length ? `<div class="card" style="padding:12px 16px;margin-bottom:20px;border-color:var(--status-attention-bg);background:var(--status-attention-bg)">
       <span style="color:var(--status-attention);font-weight:600;font-size:13px">⚠ ${dupUniqueCount(dupGroups)} record(s) in this tab are part of a duplicate group.</span>
@@ -6987,7 +7023,7 @@ function wireCallListPage(cfg) {
    clSel.clear();
    clSyncFilters(cfg);
  });
- document.getElementById("cl-note")?.addEventListener("blur", (e) => { if (e.target.value !== psaNote()) { psaSaveNote(e.target.value); toast("Note saved"); } });
+ document.getElementById("cl-note")?.addEventListener("blur", (e) => { if (e.target.value !== clGeneralNote()) { clSaveGeneralNote(e.target.value); toast("General note saved"); } });
  region.addEventListener("input", (e) => { if (e.target.classList && e.target.classList.contains("cl-wrap-input")) clGrow(e.target); });
  region.addEventListener("change", (e) => {
  const cb = e.target;
