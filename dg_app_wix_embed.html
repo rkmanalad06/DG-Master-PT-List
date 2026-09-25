@@ -217,6 +217,31 @@ a.link-inline:hover { color: var(--accent-hover); }
 .sidebar-brand .name { font-weight: 600; font-size: 14.5px; color: white; letter-spacing: -0.01em; }
 .sidebar-brand .subname { font-size: 11px; color: var(--ink-400); }
 
+.sidebar-collapse-btn {
+  margin-left: auto;
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 8px;
+  background: rgba(255,255,255,.04);
+  color: var(--ink-300);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.sidebar-collapse-btn:hover { background: rgba(255,255,255,.10); color: white; }
+.sidebar-collapse-btn svg { width: 15px; height: 15px; }
+body.sidebar-collapsed #app-shell { grid-template-columns: var(--sidebar-collapsed-w) 1fr; }
+body.sidebar-collapsed .sidebar-brand { justify-content: center; padding: 0 8px; }
+body.sidebar-collapsed .sidebar-brand > div:nth-child(2) { display: none; }
+body.sidebar-collapsed .sidebar-collapse-btn { margin-left: 0; }
+body.sidebar-collapsed .sidebar-scroll { padding-left: 8px; padding-right: 8px; }
+body.sidebar-collapsed .nav-group-label { display: none; }
+body.sidebar-collapsed .nav-group { margin-top: 8px; }
+body.sidebar-collapsed .nav-item { justify-content: center; gap: 0; padding: 9px 6px; }
+body.sidebar-collapsed .nav-item .nav-label,
+body.sidebar-collapsed .nav-item .nav-count { display: none; }
+body.sidebar-collapsed .nav-item .nav-icon { margin: 0; }
+
 .sidebar-scroll {
   flex: 1;
   overflow-y: auto;
@@ -266,26 +291,6 @@ a.link-inline:hover { color: var(--accent-hover); }
 }
 .nav-item.active .nav-count { background: rgba(255,255,255,0.18); color: white; }
 .nav-item .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-
-/* Desktop navigation collapse */
-.sidebar-collapse-btn {
-  margin-left: auto; width: 30px; height: 30px; display: grid; place-items: center;
-  flex: 0 0 30px; border: 1px solid rgba(255,255,255,.10); border-radius: 8px;
-  background: rgba(255,255,255,.04); color: var(--ink-300); cursor: pointer;
-}
-.sidebar-collapse-btn:hover { background: rgba(255,255,255,.10); color: white; }
-.sidebar-collapse-btn svg { width: 15px; height: 15px; }
-body.sidebar-collapsed #app-shell { grid-template-columns: var(--sidebar-collapsed-w) 1fr; }
-body.sidebar-collapsed .sidebar-brand { justify-content: center; padding: 0 8px; }
-body.sidebar-collapsed .sidebar-brand > div:nth-child(2) { display: none; }
-body.sidebar-collapsed .sidebar-collapse-btn { margin-left: 0; }
-body.sidebar-collapsed .sidebar-scroll { padding-left: 8px; padding-right: 8px; }
-body.sidebar-collapsed .nav-group-label { display: none; }
-body.sidebar-collapsed .nav-group { margin-top: 8px; }
-body.sidebar-collapsed .nav-item { justify-content: center; gap: 0; padding: 9px 6px; }
-body.sidebar-collapsed .nav-item .nav-label,
-body.sidebar-collapsed .nav-item .nav-count { display: none; }
-body.sidebar-collapsed .nav-item .nav-icon { margin: 0; }
 
 main.content {
   grid-area: main;
@@ -919,8 +924,6 @@ table.dup-cmp td .inline-edit-input { width: 140px; min-width: 0; }
 .sidebar-backdrop{display:none}
 @media (max-width:1000px){
   #app-shell{grid-template-columns:1fr;grid-template-areas:"topbar" "main"}
-  .sidebar-collapse-btn{display:none}
-
   .sidebar{position:fixed;top:60px;left:10px;bottom:auto;width:min(280px,calc(100vw - 56px));height:auto;max-height:min(68vh,560px);border-radius:14px;overflow:hidden;z-index:60;box-shadow:0 12px 40px rgba(0,0,0,.35);opacity:0;visibility:hidden;transform:translateY(-8px) scale(.98);transform-origin:top left;transition:opacity 160ms ease,transform 160ms ease,visibility 0s linear 160ms}
   body.sidebar-open .sidebar{opacity:1;visibility:visible;transform:none;transition:opacity 160ms ease,transform 160ms ease}
   .sidebar .sidebar-scroll{flex:1 1 auto;min-height:0;overflow-y:auto}
@@ -1015,17 +1018,22 @@ table.dup-cmp td .inline-edit-input { width: 140px; min-width: 0; }
 
 /* --- Table --- */
 .cl-table-wrap { max-height: 60vh; }
+/* Excel-style freeze panes for the three requested work queues.
+   The patient/name column stays visible horizontally; the header stays visible vertically.
+   The selection checkbox column is intentionally NOT frozen. */
+.cl-freeze-target table.cl-table { border-collapse: separate; border-spacing: 0; }
+.cl-freeze-target table.cl-table thead th { position: sticky; top: 0; z-index: 20; background: var(--bg-sunken); }
+.cl-freeze-target table.cl-table thead th[data-col="Patient"],
+.cl-freeze-target table.cl-table thead th[data-col="MEDICARE - Patient Name"],
+.cl-freeze-target table.cl-table thead th[data-col="Patient Name"] {
+  left: 0; z-index: 35; box-shadow: 1px 0 0 var(--border-subtle);
+}
+.cl-freeze-target table.cl-table tbody td.name-col {
+  position: sticky; left: 0; z-index: 14; background: var(--bg-surface); box-shadow: 1px 0 0 var(--border-subtle);
+}
+.cl-freeze-target table.cl-table tbody tr:hover td.name-col { background: var(--bg-sunken); }
 table.cl-table { table-layout: fixed; min-width: 100%; }
-table.cl-table th { position: sticky; top: 0; padding-right: 14px; overflow: hidden; text-overflow: ellipsis; }
-
-/* Excel-style freeze panes for DG Pharmacy, DG Infusion PAs and DG Osteoporosis PAs.
-   Only the patient/name column freezes horizontally; the selection column scrolls. */
-table.cl-freeze-table { border-collapse: separate; border-spacing: 0; }
-table.cl-freeze-table thead th { position: sticky; top: 0; z-index: 20; background: var(--bg-sunken); }
-table.cl-freeze-table thead th.cl-freeze-name { left: 0; z-index: 35; box-shadow: 1px 0 0 var(--border-subtle); }
-table.cl-freeze-table tbody td.cl-freeze-name { position: sticky; left: 0; z-index: 14; background: var(--bg-surface); box-shadow: 1px 0 0 var(--border-subtle); }
-table.cl-freeze-table tbody tr:hover td.cl-freeze-name { background: var(--bg-sunken); }
-
+table.cl-table th { position: sticky; padding-right: 14px; overflow: hidden; text-overflow: ellipsis; }
 table.cl-table th.cl-dragging { opacity: 0.4; }
 .cl-th-note { display: block; font-size: 10px; font-weight: 600; line-height: 1.25; text-transform: none; letter-spacing: 0; color: #b45309; white-space: normal; }
 td.cl-inf-td { text-align: center; }
@@ -3168,7 +3176,6 @@ function initSidebarCollapse() {
   const btn = document.getElementById("sidebar-collapse-btn");
   if (btn) btn.addEventListener("click", () => setSidebarCollapsed(!document.body.classList.contains("sidebar-collapsed")));
 }
-
 function renderSidebar() {
   const { view, param } = parseHash();
   const stats = getDashboardStats();
@@ -6481,13 +6488,6 @@ function clRowClass(r) {
   const h = acRowHl(r.data);
   return (h.row ? "cl-hl cl-hl-" + (h.row.tone || "red") + " " : "") + (h.bar ? "cl-hlbar cl-hlbar-" + (h.bar.tone || "orange") + " " : "") + (clSel.has(r.uid) ? "cl-row-sel" : "");
 }
-function clFreezeEnabled(cfg) {
-  return ["dg_pharmacy", "dg_infusion_pas", "dg_osteoporosis_pas"].includes(CALL_SHEET_ID);
-}
-function clFreezeNameColumn(cfg) {
-  return clIsCombinedInfusion() ? "Patient Name" : cfg.nameField;
-}
-
 function dgPharmacyCellHtml(cfg, r, c) {
   const d = r.data || {};
 
@@ -6495,18 +6495,18 @@ function dgPharmacyCellHtml(cfg, r, c) {
     const current = dgPharmacyCombinedStatus(d);
     const options = dgPharmacyStatusOptions();
     const currentOption = current && !options.includes(current) ? [current] : [];
-    return `<td class="inline-cell${c === cfg.nameField ? " cl-freeze-name" : ""}" data-col="${esc(c)}"><select class="inline-edit-input dg-pharmacy-select" data-uid="${esc(r.uid)}" data-field="${esc(c)}" aria-label="Stable or Unstable"><option value="">Select status</option>${[...options, ...currentOption].map((x) => `<option value="${esc(x)}" ${current === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></td>`;
+    return `<td class="inline-cell" data-col="${esc(c)}"><select class="inline-edit-input dg-pharmacy-select" data-uid="${esc(r.uid)}" data-field="${esc(c)}" aria-label="Stable or Unstable"><option value="">Select status</option>${[...options, ...currentOption].map((x) => `<option value="${esc(x)}" ${current === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></td>`;
   }
 
   if (c === DG_PHARMACY_FIELDS.assigned) {
     const assigned = String(d[DG_PHARMACY_FIELDS.assigned] || "").trim();
     const showAfdNote = dgPharmacyNeedsAfd(d);
-    return `<td class="inline-cell${c === cfg.nameField ? " cl-freeze-name" : ""}" data-col="${esc(c)}"><div class="inline-cell-wrap dg-pharmacy-assigned-wrap"><input type="text" class="inline-edit-input" data-uid="${esc(r.uid)}" data-field="${esc(c)}" value="${esc(assigned)}" placeholder="—" title="${esc(assigned)}" />${showAfdNote ? `<div class="dg-pharmacy-afd-note">Note: REFER TO AFD</div>` : ""}</div></td>`;
+    return `<td class="inline-cell" data-col="${esc(c)}"><div class="inline-cell-wrap dg-pharmacy-assigned-wrap"><input type="text" class="inline-edit-input" data-uid="${esc(r.uid)}" data-field="${esc(c)}" value="${esc(assigned)}" placeholder="—" title="${esc(assigned)}" />${showAfdNote ? `<div class="dg-pharmacy-afd-note">Note: REFER TO AFD</div>` : ""}</div></td>`;
   }
 
   if (c === DG_PHARMACY_FIELDS.lastSeen || c === DG_PHARMACY_FIELDS.prednisone) {
     const val = d[c] || "";
-    return `<td class="inline-cell${c === cfg.nameField ? " cl-freeze-name" : ""}" data-col="${esc(c)}"><div class="inline-cell-wrap"><input type="text" class="inline-edit-input" data-uid="${esc(r.uid)}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" /><button type="button" class="cal-btn" data-uid="${esc(r.uid)}" data-field="${esc(c)}" title="Pick a date" aria-label="Pick a date for ${esc(clColLabel(c))}">${calendarIconSvg()}</button></div></td>`;
+    return `<td class="inline-cell" data-col="${esc(c)}"><div class="inline-cell-wrap"><input type="text" class="inline-edit-input" data-uid="${esc(r.uid)}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" /><button type="button" class="cal-btn" data-uid="${esc(r.uid)}" data-field="${esc(c)}" title="Pick a date" aria-label="Pick a date for ${esc(clColLabel(c))}">${calendarIconSvg()}</button></div></td>`;
   }
 
   return null;
@@ -6514,8 +6514,6 @@ function dgPharmacyCellHtml(cfg, r, c) {
 
 function clRowHtml(cfg, r, cols) {
   const isExpanded = expandedRows.has(r.uid);
-  const freezeTable = clFreezeEnabled(cfg);
-  const freezeNameCol = clFreezeNameColumn(cfg);
   const cells = cols.map((c) => {
     if (c === "__status") return `<td data-col="__status">${clStatusBadge(r.data, r)}</td>`;
     if (c === "__infusion") return `<td class="cl-inf-td" data-col="__infusion">${clInfusionCellHtml(r)}</td>`;
@@ -6543,7 +6541,7 @@ function clRowHtml(cfg, r, cols) {
     if (isDiagAssignedCol) {
       const val = r.data[c] || "";
       const note = diagAssignmentNote(r.data);
-      return `<td class="inline-cell${c === cfg.nameField ? " cl-freeze-name" : ""}" data-col="${esc(c)}">
+      return `<td class="inline-cell" data-col="${esc(c)}">
         <div class="inline-cell-wrap diag-assigned-wrap" style="display:flex;align-items:center;min-width:0;white-space:nowrap">
           <input type="text" class="inline-edit-input diag-assignment-input" data-uid="${esc(r.uid)}" data-field="${esc(c)}" value="${esc(val)}" placeholder="${esc(note || "—")}" title="${esc(val || note || "")}" list="cl-team-list" style="min-width:0;width:100%;box-sizing:border-box" />
         </div>
@@ -6554,7 +6552,7 @@ function clRowHtml(cfg, r, cols) {
     const val = r.data[c] || "";
     const isDate = clIsDateCol(cfg, c);
     const dexa = clIsDexaCol(c) && clDexaYes(val);
-    return `<td class="inline-cell${c === cfg.nameField ? " name-col" : ""}${freezeTable && c === freezeNameCol ? " cl-freeze-name" : ""}${dexa ? " cl-dexa-yes" : ""}" data-col="${esc(c)}">
+    return `<td class="inline-cell${c === cfg.nameField ? " name-col" : ""}${dexa ? " cl-dexa-yes" : ""}" data-col="${esc(c)}">
       <div class="inline-cell-wrap">
         <input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" ${c === CL.TEAM ? 'list="cl-team-list"' : clIsDays() && c === DAY_FIELD ? 'list="cl-day-list"' : ""} />
         ${dexa ? '<span class="cl-dexa">' + esc(biText("dexa", "chip")) + '</span>' : ""}
@@ -6619,6 +6617,7 @@ function clRefreshRow(uid) {
 function clRenderTable(cfg) {
   const region = document.getElementById("cl-table-region");
   if (!region) return;
+  region.classList.toggle("cl-freeze-target", ["dg_pharmacy", "dg_infusion_pas", "dg_osteoporosis_pas"].includes(CALL_SHEET_ID));
   const cols = clColumns(cfg);
   const customNames = new Set(clCustomColumns().map((c) => c.name));
   const everything = clRecords();
@@ -6636,10 +6635,8 @@ function clRenderTable(cfg) {
   const widths = cols.map((c) => clWidth(cfg, c));
   const tableW = widths.reduce((a, b) => a + b, 0) + CL_ACTIONS_COL_W + CL_SEL_COL_W;
   const teams = [...new Set([...(clIsOsteo() ? ["JP", "SU", "Cancelled"] : []), ...(clAssignMeta() ? clAssignMeta().suggest : []), ...everything.map((r) => String(r.data[CL.TEAM] || "").trim()).filter(Boolean)])].sort();
-  const freezeTable = clFreezeEnabled(cfg);
-  const freezeNameCol = clFreezeNameColumn(cfg);
 
-  const th = (c) => `<th data-col="${esc(c)}" class="${freezeTable && c === freezeNameCol ? "cl-freeze-name" : ""}" draggable="true" title="Drag to reorder · drag the edge to resize · click to sort">
+  const th = (c) => `<th data-col="${esc(c)}" draggable="true" title="Drag to reorder · drag the edge to resize · click to sort">
       <span class="cl-th-label">${esc(clColLabel(c))}</span>${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}${customNames.has(c) ? `<button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Remove this column" aria-label="Remove column ${esc(c)}">×</button>` : ""}
       <span class="cl-resize" data-col="${esc(c)}" role="separator" aria-orientation="vertical" aria-label="Resize ${esc(clColLabel(c))} column"></span>
     </th>`;
@@ -6652,7 +6649,7 @@ function clRenderTable(cfg) {
     ${clIsDays() ? `<datalist id="cl-day-list">${clDayList().days.map((d) => `<option value="${esc(d.label)}"></option>`).join("")}</datalist>` : ""}
     <datalist id="cl-team-list">${teams.map((t) => `<option value="${esc(t)}"></option>`).join("")}</datalist>
     <div class="data-table-wrap cl-table-wrap">
-      <table class="data-table cl-table${clIsInfusion() ? " cl-wrapmode" : ""}${freezeTable ? " cl-freeze-table" : ""}" style="width:${tableW}px">
+      <table class="data-table cl-table${clIsInfusion() ? " cl-wrapmode" : ""}" style="width:${tableW}px">
         <colgroup><col style="width:${CL_SEL_COL_W}px">${cols.map((c, i) => `<col data-col="${esc(c)}" style="width:${widths[i]}px">`).join("")}<col style="width:${CL_ACTIONS_COL_W}px"></colgroup>
         <thead><tr><th class="cl-sel-th" style="cursor:default"><input type="checkbox" class="cl-sel-all" aria-label="Select all" title="Select all" /></th>${cols.map(th).join("")}<th style="cursor:default">Actions</th></tr></thead>
         <tbody>
