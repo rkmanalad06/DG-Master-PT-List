@@ -6582,7 +6582,7 @@ function renderCallListPage(cfg) {
     <div id="cl-table-region"></div>
     </div>
   `;
-  clApplyFreezeSettings(cfg);
+
 }
 
 function clSortValue(r, col) {
@@ -6845,18 +6845,13 @@ function clRenderTable(cfg) {
     </div>`}
   `;
 
-  // DG Infusion PAs: the first DATA column (not the selection checkbox) is the
-  // frozen pane. Move it to the left edge only after horizontal scrolling starts.
-  if (CALL_SHEET_ID === "dg_infusion_pas") {
-    const wrap = region.querySelector(".cl-table-wrap");
-    if (wrap) {
-      const syncFrozenFirstCol = () => {
-        region.classList.toggle("cl-has-hscroll", wrap.scrollLeft > 0);
-      };
-      wrap.addEventListener("scroll", syncFrozenFirstCol, { passive: true });
-      syncFrozenFirstCol();
-    }
-  }
+  // Apply the user's freeze settings only after the table exists in the DOM.
+  // This is intentionally after innerHTML so every selected column/header cell
+  // can be measured and made sticky.
+  clApplyFreezeSettings(cfg);
+
+  // Freeze behavior is fully user-configurable now; no tab has a hard-coded
+  // frozen column. The selection checkbox column remains excluded.
 
   // PSA Call Status uses a dedicated direct listener. This avoids the generic
   // Action handler intercepting the click and makes the status button reliably
