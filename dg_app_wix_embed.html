@@ -1133,13 +1133,25 @@ table.cl-table tbody tr.cl-hl.cl-row-sel { --freeze-bg: var(--accent-soft, #f3dd
   background: var(--freeze-bg, var(--bg-surface)) !important;
   box-shadow: 1px 0 0 var(--border-subtle) !important;
 }
+.cl-user-freeze-header .cl-table-wrap {
+  position: relative;
+}
+.cl-user-freeze-header table.cl-table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+.cl-user-freeze-header table.cl-table thead {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 55 !important;
+}
 .cl-user-freeze-header table.cl-table thead th {
   position: sticky !important;
   top: 0 !important;
-  z-index: 20 !important;
+  z-index: 60 !important;
   background: var(--bg-sunken) !important;
 }
-.cl-user-freeze-header table.cl-table thead th.cl-user-freeze-col { z-index: 40 !important; }
+.cl-user-freeze-header table.cl-table thead th.cl-user-freeze-col { z-index: 70 !important; }
 .cl-user-freeze-col:hover { filter: brightness(.98); }
 table.cl-table { table-layout: fixed; min-width: 100%; }
 table.cl-table th { position: sticky; padding-right: 14px; overflow: hidden; text-overflow: ellipsis; }
@@ -7239,13 +7251,29 @@ function clApplyFreezeSettings(cfg) {
     th.style.removeProperty("z-index");
     th.style.removeProperty("background");
   });
+  const thead = table.querySelector("thead");
+  if (thead) {
+    thead.style.removeProperty("position");
+    thead.style.removeProperty("top");
+    thead.style.removeProperty("z-index");
+    thead.style.setProperty("position", header ? "sticky" : "static", "important");
+    if (header) {
+      thead.style.setProperty("top", "0px", "important");
+      thead.style.setProperty("z-index", "55", "important");
+    }
+  }
   if (header) {
+    table.style.setProperty("border-collapse", "separate", "important");
+    table.style.setProperty("border-spacing", "0", "important");
     headerCells.forEach(th => {
       th.style.setProperty("position", "sticky", "important");
       th.style.setProperty("top", "0px", "important");
       th.style.setProperty("z-index", "60", "important");
       th.style.setProperty("background", "var(--bg-sunken)", "important");
     });
+  } else {
+    table.style.removeProperty("border-collapse");
+    table.style.removeProperty("border-spacing");
   }
 
   const headCells = [...table.querySelectorAll("thead th[data-col]")];
