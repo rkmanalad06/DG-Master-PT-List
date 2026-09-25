@@ -1126,24 +1126,18 @@ table.cl-table tbody tr.cl-hl.cl-row-sel { --freeze-bg: var(--accent-soft, #f3dd
   z-index: auto !important;
   box-shadow: none !important;
 }
-/* IMPORTANT: frozen cells are an opaque layer. Without a real background,
-   horizontally scrolling cells can paint through the frozen columns. */
+/* Frozen columns are an opaque layer. The actual rendered row background is
+   applied inline so highlighted rows keep their own color while scrolling
+   cells disappear completely underneath the frozen cells. */
 .cl-user-freeze-col {
   position: sticky !important;
   left: var(--freeze-left, 0px) !important;
   z-index: 30 !important;
-  background: var(--freeze-bg, var(--bg-surface, #fff)) !important;
-  background-color: var(--freeze-bg, var(--bg-surface, #fff)) !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
   background-clip: padding-box !important;
+  opacity: 1 !important;
   box-shadow: 1px 0 0 var(--border-subtle) !important;
-}
-.cl-user-freeze-col::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: inherit;
-  pointer-events: none;
 }
 .cl-user-freeze-header .cl-table-wrap {
   position: relative;
@@ -7233,51 +7227,95 @@ function clExport(cfg) {
 // ---------------------------------------------------------------------------
 // User-configurable freeze panes
 // ---------------------------------------------------------------------------
+// Freeze-pane settings are SHARED across all users through the existing Wix
+// editedRows collection. They are stored separately from each user's local
+// column layout, so a refresh on another computer/browser receives the same
+// freeze configuration.
+const CL_GLOBAL_FREEZE_UID = "__freeze#global";
+
+function clGlobalFreezeState() {
+  const root = Store.editedRows?.[CL_GLOBAL_FREEZE_UID];
+  const tabs = root && root.tabs && typeof root.tabs === "object" ? root.tabs : {};
+  const v = tabs[CALL_SHEET_ID];
+  return v && typeof v === "object" ? v : null;
+}
+
 function clFreezeConfig() {
+  const shared = clGlobalFreezeState();
   const l = clLayoutLoad();
-  let cols = Array.isArray(l.freezeCols) ? l.freezeCols.slice() : [];
+  let cols = shared && Array.isArray(shared.freezeCols)
+    ? shared.freezeCols.slice()
+    : (Array.isArray(l.freezeCols) ? l.freezeCols.slice() : []);
+  if (!cols.length && shared?.freezeCol) cols = [shared.freezeCol];
   if (!cols.length && l.freezeCol) cols = [l.freezeCol];
-  return { cols, header: !!l.freezeHeader };
+
+  // If no shared preference exists yet, make Patient Name the default frozen
+  // data column whenever the current tab has one. This also makes its header
+  // cell freeze horizontally with the column.
+  if (!shared) {
+    const available = clColumns(SHEET_BY_ID[CALL_SHEET_ID] || {}).filter(c => !String(c).startsWith("__"));
+    const patientName = available.find(c => /^(patient|patient name|medicare - patient name)$/i.test(String(c).trim()));
+    if (patientName && !cols.includes(patientName)) cols.unshift(patientName);
+  }
+
+  return {
+    cols: [...new Set(cols)],
+    header: shared ? !!shared.freezeHeader : !!l.freezeHeader
+  };
+}
+
+function clSaveGlobalFreezeConfig(cols, header) {
+  const root = Store.editedRows[CL_GLOBAL_FREEZE_UID] || {};
+  const tabs = root.tabs && typeof root.tabs === "object" ? { ...root.tabs } : {};
+  tabs[CALL_SHEET_ID] = {
+    freezeCols: [...new Set((cols || []).filter(c => c && !String(c).startsWith("__")))],
+    freezeHeader: !!header,
+    updatedAt: new Date().toISOString()
+  };
+  const patch = { ...root, tabs };
+  Store.editedRows[CL_GLOBAL_FREEZE_UID] = patch;
+  saveEditedRows();
+  WixBridge.save("editedRow", { uid: CL_GLOBAL_FREEZE_UID, patch });
 }
 function clFreezeOpaqueBackground(tr, el, table) {
   if (!tr || !el) return;
 
-  const trStyle = getComputedStyle(tr);
-  const tableStyle = getComputedStyle(table);
-  let bg = '';
+  // Keep the actual rendered row/cell color, but make the frozen cell itself
+  // an opaque layer so scrolling columns cannot visually bleed through it.
+  const cells = [...tr.children].filter(td =>
+    td.tagName === "TD" &&
+    !td.classList.contains("cl-user-freeze-col") &&
+    !td.classList.contains("cl-sel-td")
+  );
 
-  // Match the existing row-highlighting rules first.
-  if (tr.classList.contains('cl-row-sel')) {
-    bg = tableStyle.getPropertyValue('--accent-soft').trim() || '#f3dde0';
-  } else if (tr.classList.contains('cl-row-hi')) {
-    bg = '#ffe1dc';
-  } else if (tr.classList.contains('cl-row-y')) {
-    bg = '#fff8d6';
-  } else if (tr.classList.contains('cl-row-progress')) {
-    bg = '#fffbe8';
-  } else if (tr.classList.contains('cl-hl')) {
-    bg = trStyle.getPropertyValue('--hl-bg').trim();
-  }
-
-  // Preserve any custom row background already produced by the table.
-  if (!bg) {
-    const source = [...tr.children].find(td =>
-      td.tagName === 'TD' && !td.classList.contains('cl-user-freeze-col') && !td.classList.contains('cl-sel-td')
-    );
-    if (source) {
-      const sourceBg = getComputedStyle(source).backgroundColor;
-      if (sourceBg && sourceBg !== 'transparent' && sourceBg !== 'rgba(0, 0, 0, 0)') bg = sourceBg;
+  let bg = "";
+  for (const cell of cells) {
+    const c = getComputedStyle(cell).backgroundColor;
+    if (c && c !== "transparent" && c !== "rgba(0, 0, 0, 0)") {
+      bg = c;
+      break;
     }
   }
 
-  // Final fallback is always opaque. Never leave a frozen cell transparent.
-  if (!bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') {
-    bg = tableStyle.getPropertyValue('--bg-surface').trim() || '#fff';
+  // If the row itself carries the highlight, use that rendered value.
+  if (!bg) {
+    const trBg = getComputedStyle(tr).backgroundColor;
+    if (trBg && trBg !== "transparent" && trBg !== "rgba(0, 0, 0, 0)") bg = trBg;
   }
 
-  el.style.setProperty('background', bg, 'important');
-  el.style.setProperty('background-color', bg, 'important');
-  el.style.setProperty('background-clip', 'padding-box', 'important');
+  // Normal table background.
+  if (!bg) {
+    const tableBg = getComputedStyle(table).backgroundColor;
+    bg = (tableBg && tableBg !== "transparent" && tableBg !== "rgba(0, 0, 0, 0)")
+      ? tableBg
+      : "#ffffff";
+  }
+
+  el.style.setProperty("background", bg, "important");
+  el.style.setProperty("background-color", bg, "important");
+  el.style.setProperty("background-image", "none", "important");
+  el.style.setProperty("background-clip", "padding-box", "important");
+  el.style.setProperty("opacity", "1", "important");
 }
 
 function clApplyFreezeSettings(cfg) {
@@ -7299,6 +7337,8 @@ function clApplyFreezeSettings(cfg) {
     el.style.removeProperty("background");
     el.style.removeProperty("background-color");
     el.style.removeProperty("background-clip");
+    el.style.removeProperty("background-image");
+    el.style.removeProperty("opacity");
     el.style.removeProperty("box-shadow");
   });
 
@@ -7359,6 +7399,9 @@ function clApplyFreezeSettings(cfg) {
       el.style.setProperty("position", "sticky", "important");
       el.style.setProperty("left", `${left}px`, "important");
       el.style.setProperty("z-index", header ? "70" : "30", "important");
+      if (el.tagName === "TH" && header) {
+        el.style.setProperty("top", "0px", "important");
+      }
 
       if (el.tagName === "TH") {
         // Header remains an opaque header layer.
@@ -7385,7 +7428,7 @@ function clOpenFreezePanesModal(cfg) {
   const selected = new Set(current.cols);
   const rows = cols.map(c => `<label class="cl-col-manage-row"><input type="checkbox" class="cl-freeze-col-check" value="${esc(c)}" ${selected.has(c) ? "checked" : ""}/> <span>${esc(clColLabel(c))}</span></label>`).join("");
   const modal = openModal(`
-    <div class="modal-header"><div><h3>Freeze panes</h3><p>Choose which columns stay visible while scrolling left/right.</p></div></div>
+    <div class="modal-header"><div><h3>Freeze panes</h3><p>Choose which columns stay visible while scrolling left/right. If Freeze Table Header is enabled, the column headers (including Patient Name) stay visible while scrolling up/down.</p></div></div>
     <div class="modal-body">
       <label class="cl-col-manage-row" style="margin-bottom:10px"><input type="checkbox" id="cl-freeze-header-check" ${current.header ? "checked" : ""}/> <span><strong>Freeze Table Header</strong></span></label>
       <div class="form-hint" style="margin-bottom:10px">Freezes the entire table header while scrolling up/down and keeps it visible while moving left/right.</div>
@@ -7394,14 +7437,30 @@ function clOpenFreezePanesModal(cfg) {
     <div class="modal-footer"><button class="btn" id="cl-freeze-cancel">Cancel</button><button class="btn ghost" id="cl-freeze-clear">Unfreeze all</button><button class="btn primary" id="cl-freeze-save">Save</button></div>`);
   modal.querySelector("#cl-freeze-cancel").addEventListener("click", closeModal);
   modal.querySelector("#cl-freeze-clear").addEventListener("click", () => {
-    const l = clLayoutLoad(); l.freezeCols = []; l.freezeCol = ""; l.freezeHeader = false; clLayoutSave(l); closeModal(); clRenderTable(cfg); toast("Freeze panes cleared");
+    // Clear the SHARED configuration so every user gets the same result after
+    // refresh. The selection checkbox column is never part of this list.
+    clSaveGlobalFreezeConfig([], false);
+    closeModal();
+    clRenderTable(cfg);
+    toast("Freeze panes cleared for everyone");
   });
   modal.querySelector("#cl-freeze-save").addEventListener("click", () => {
-    const l = clLayoutLoad();
-    l.freezeCols = [...modal.querySelectorAll(".cl-freeze-col-check:checked")].map(x => x.value);
-    l.freezeCol = "";
-    l.freezeHeader = !!modal.querySelector("#cl-freeze-header-check").checked;
-    clLayoutSave(l); closeModal(); clRenderTable(cfg); toast("Freeze panes saved");
+    let selectedCols = [...modal.querySelectorAll(".cl-freeze-col-check:checked")].map(x => x.value);
+
+    // Patient Name uses the same sticky-header behavior as every other frozen
+    // column. When Freeze Table Header is enabled, its header stays visible
+    // while scrolling up/down and remains aligned with the frozen column.
+    const available = clColumns(cfg).filter(c => !String(c).startsWith("__"));
+    const patientName = available.find(c => /^(patient|patient name|medicare - patient name)$/i.test(String(c).trim()));
+    if (patientName && selectedCols.includes(patientName)) {
+      selectedCols = [...new Set(selectedCols)];
+    }
+
+    const freezeHeader = !!modal.querySelector("#cl-freeze-header-check").checked;
+    clSaveGlobalFreezeConfig(selectedCols, freezeHeader);
+    closeModal();
+    clRenderTable(cfg);
+    toast("Freeze panes saved for everyone");
   });
 }
 
