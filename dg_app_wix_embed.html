@@ -6640,9 +6640,11 @@ function clRowHtml(cfg, r, cols) {
     const val = r.data[c] || "";
     const isDate = clIsDateCol(cfg, c);
     const dexa = clIsDexaCol(c) && clDexaYes(val);
-    const freezeNameCell = cfg.group === "diagnosis"
-      ? String(c).trim().toLowerCase() === String((cfg.nameField || "Patient Name")).trim().toLowerCase() || ["patient name", "medicare - patient name", "patient", "name"].includes(String(c).trim().toLowerCase()) && cols.some((x) => String(x).trim().toLowerCase() === String(c).trim().toLowerCase())
-      : c === cfg.nameField;
+    const freezeNameCell = clIsCombinedInfusion()
+      ? String(c).trim().toLowerCase() === "patient name"
+      : cfg.group === "diagnosis"
+        ? String(c).trim().toLowerCase() === String((cfg.nameField || "Patient Name")).trim().toLowerCase() || ["patient name", "medicare - patient name", "patient", "name"].includes(String(c).trim().toLowerCase()) && cols.some((x) => String(x).trim().toLowerCase() === String(c).trim().toLowerCase())
+        : String(c).trim().toLowerCase() === String(cfg.nameField || "").trim().toLowerCase();
     return `<td class="inline-cell${freezeNameCell ? " name-col" : ""}${dexa ? " cl-dexa-yes" : ""}" data-col="${esc(c)}">
       <div class="inline-cell-wrap">
         <input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" ${c === CL.TEAM ? 'list="cl-team-list"' : clIsDays() && c === DAY_FIELD ? 'list="cl-day-list"' : ""} />
@@ -6727,12 +6729,14 @@ function clRenderTable(cfg) {
   const tableW = widths.reduce((a, b) => a + b, 0) + CL_ACTIONS_COL_W + CL_SEL_COL_W;
   const teams = [...new Set([...(clIsOsteo() ? ["JP", "SU", "Cancelled"] : []), ...(clAssignMeta() ? clAssignMeta().suggest : []), ...everything.map((r) => String(r.data[CL.TEAM] || "").trim()).filter(Boolean)])].sort();
 
-  const freezeNameKey = cfg.group === "diagnosis" ? (
-    [cfg.nameField, "Patient Name", "MEDICARE - Patient Name", "Patient", "Name"]
-      .filter(Boolean)
-      .find((k) => cols.some((c) => String(c).trim().toLowerCase() === String(k).trim().toLowerCase()))
-      || cols.find((x) => !String(x).startsWith("__"))
-  ) : cfg.nameField;
+  const freezeNameKey = clIsCombinedInfusion()
+    ? (cols.find((c) => String(c).trim().toLowerCase() === "patient name") || "Patient Name")
+    : cfg.group === "diagnosis" ? (
+      [cfg.nameField, "Patient Name", "MEDICARE - Patient Name", "Patient", "Name"]
+        .filter(Boolean)
+        .find((k) => cols.some((c) => String(c).trim().toLowerCase() === String(k).trim().toLowerCase()))
+        || cols.find((x) => !String(x).startsWith("__"))
+    ) : cfg.nameField;
   const freezeNameCol = (c) => !!freezeNameKey && String(c).trim().toLowerCase() === String(freezeNameKey).trim().toLowerCase();
   const th = (c) => `<th class="${freezeNameCol(c) ? "cl-freeze-name-th" : ""}" data-col="${esc(c)}" draggable="true" title="Drag to reorder · drag the edge to resize · click to sort">
       <span class="cl-th-label">${esc(clColLabel(c))}</span>${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}${c.startsWith("__") ? "" : `<button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Remove this column from your view" aria-label="Remove column ${esc(clColLabel(c))}">×</button>`}
