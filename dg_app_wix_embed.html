@@ -82,6 +82,7 @@
   --space-10: 40px;
 
   --sidebar-w: 280px;
+  --sidebar-collapsed-w: 72px;
   --topbar-h: 60px;
 }
 
@@ -215,6 +216,31 @@ a.link-inline:hover { color: var(--accent-hover); }
 }
 .sidebar-brand .name { font-weight: 600; font-size: 14.5px; color: white; letter-spacing: -0.01em; }
 .sidebar-brand .subname { font-size: 11px; color: var(--ink-400); }
+
+.sidebar-collapse-btn {
+  margin-left: auto;
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 8px;
+  background: rgba(255,255,255,.04);
+  color: var(--ink-300);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.sidebar-collapse-btn:hover { background: rgba(255,255,255,.10); color: white; }
+.sidebar-collapse-btn svg { width: 15px; height: 15px; }
+body.sidebar-collapsed #app-shell { grid-template-columns: var(--sidebar-collapsed-w) 1fr; }
+body.sidebar-collapsed .sidebar-brand { justify-content: center; padding: 0 8px; }
+body.sidebar-collapsed .sidebar-brand > div:nth-child(2) { display: none; }
+body.sidebar-collapsed .sidebar-collapse-btn { margin-left: 0; }
+body.sidebar-collapsed .sidebar-scroll { padding-left: 8px; padding-right: 8px; }
+body.sidebar-collapsed .nav-group-label { display: none; }
+body.sidebar-collapsed .nav-group { margin-top: 8px; }
+body.sidebar-collapsed .nav-item { justify-content: center; gap: 0; padding: 9px 6px; }
+body.sidebar-collapsed .nav-item .nav-label,
+body.sidebar-collapsed .nav-item .nav-count { display: none; }
+body.sidebar-collapsed .nav-item .nav-icon { margin: 0; }
 
 .sidebar-scroll {
   flex: 1;
@@ -992,37 +1018,155 @@ table.dup-cmp td .inline-edit-input { width: 140px; min-width: 0; }
 
 /* --- Table --- */
 .cl-table-wrap { max-height: 60vh; }
-/* User-controlled Freeze Panes. Headers are NOT sticky unless enabled. */
-table.cl-table th { position: static; }
-.cl-table-freeze-header th {
-  position: sticky !important; top: 0 !important; z-index: 12 !important;
+.cl-table-workspace { position: relative; }
+.cl-table-workspace.cl-fullscreen {
+  position: fixed; inset: 0; z-index: 10000; box-sizing: border-box;
+  padding: 14px; background: var(--bg-page, #f6f7f9); overflow: auto;
+}
+.cl-table-workspace.cl-fullscreen .cl-table-wrap {
+  max-height: calc(100vh - 92px); height: calc(100vh - 92px);
+}
+.cl-table-workspace.cl-fullscreen .cl-toolbar { margin-top: 0; }
+body.cl-table-is-fullscreen { overflow: hidden; }
+.cl-col-manage-list { display: grid; gap: 7px; max-height: 55vh; overflow: auto; }
+.cl-col-manage-row { display:flex; align-items:center; gap:9px; padding:8px 10px; border:1px solid var(--border-subtle); border-radius:8px; background:var(--bg-surface); font-size:13px; }
+.cl-col-manage-row .badge { margin-left:auto; }
+.cl-col-remove { margin-left:7px; border:0; background:transparent; color:var(--text-tertiary); cursor:pointer; font-size:15px; line-height:1; padding:0 2px; border-radius:4px; }
+.cl-col-remove:hover { color:var(--status-danger, #c92a2a); background:var(--ink-100); }
+/* Diagnosis tabs: keep only the patient/name column visible during horizontal scrolling.
+   The table header is NOT frozen vertically. */
+.sheet-freeze-target table.data-table { border-collapse: separate; border-spacing: 0; }
+.sheet-freeze-target table.data-table thead th { position: static; }
+.sheet-freeze-target table.data-table tbody td.name-col {
+  position: sticky; left: 0; z-index: 8; background: var(--freeze-bg, var(--bg-surface));
+  box-shadow: 1px 0 0 var(--border-subtle);
+}
+.sheet-freeze-target table.data-table tbody tr:hover td.name-col { background: var(--bg-sunken); }
+.sheet-freeze-target table.data-table td.name-col input { background: transparent; }
+.sheet-table-workspace { position: relative; }
+.sheet-table-workspace.sheet-fullscreen {
+  position: fixed; inset: 0; z-index: 1000; background: var(--bg-app, #f6f6f8);
+  padding: 14px; overflow: auto;
+}
+.sheet-table-workspace.sheet-fullscreen .data-table-wrap { max-height: calc(100vh - 120px); }
+/* Excel-style horizontal freeze for the three requested work queues.
+   Only the patient/name column stays visible when scrolling left/right.
+   The header scrolls normally and is NOT frozen vertically. */
+.legacy-cl-freeze-target table.cl-table { border-collapse: separate; border-spacing: 0; }
+.legacy-cl-freeze-target table.cl-table thead th { position: static; }
+.legacy-cl-freeze-target table.cl-table thead th[data-col="Patient"],
+.legacy-cl-freeze-target table.cl-table thead th[data-col="MEDICARE - Patient Name"],
+.legacy-cl-freeze-target table.cl-table thead th[data-col="Patient Name"],
+.legacy-cl-freeze-target table.cl-table thead th.cl-freeze-name-th {
+  position: sticky; left: 0; z-index: 15; background: var(--bg-sunken); box-shadow: 1px 0 0 var(--border-subtle);
+}
+.legacy-cl-freeze-target table.cl-table thead th.cl-sel-th,
+.legacy-cl-freeze-target table.cl-table tbody td.cl-sel-td {
+  position: static !important;
+  left: auto !important;
+  z-index: auto !important;
+}
+.legacy-cl-freeze-target table.cl-table tbody td.name-col {
+  position: sticky; left: 0; z-index: 14; background: var(--freeze-bg, var(--bg-surface)); box-shadow: 1px 0 0 var(--border-subtle);
+}
+.legacy-cl-freeze-target table.cl-table tbody tr:hover td.name-col { background: var(--bg-sunken); }
+/* DG Infusion PAs: freeze the FIRST DATA COLUMN (the column immediately after
+   the selection checkbox). The selection column itself scrolls normally. */
+.legacy-cl-infusion-freeze table.cl-table thead th.cl-freeze-name-th,
+.legacy-cl-infusion-freeze table.cl-table tbody td.name-col {
+  position: sticky !important;
+  left: 46px !important;
+  box-shadow: 1px 0 0 var(--border-subtle);
+}
+.legacy-cl-infusion-freeze table.cl-table thead th.cl-freeze-name-th {
+  z-index: 15 !important;
+  background: var(--bg-sunken);
+}
+.legacy-cl-infusion-freeze table.cl-table tbody td.name-col,
+.legacy-cl-infusion-freeze table.cl-table tbody td:nth-child(2) {
+  position: sticky !important;
+  left: 46px !important;
+  z-index: 14 !important;
+  background: var(--freeze-bg, var(--bg-surface));
+  box-shadow: 1px 0 0 var(--border-subtle);
+}
+.legacy-cl-infusion-freeze table.cl-table tbody tr:hover td.name-col,
+.legacy-cl-infusion-freeze table.cl-table tbody tr:hover td:nth-child(2) {
+  background: var(--freeze-bg, var(--bg-sunken));
+}
+/* The selection column is never sticky. */
+.legacy-cl-infusion-freeze table.cl-table th.cl-sel-th,
+.legacy-cl-infusion-freeze table.cl-table td.cl-sel-td {
+  position: static !important;
+  left: auto !important;
+  z-index: auto !important;
+}
+/* Keep the frozen patient cell visually synchronized with its row highlight. */
+table.cl-table tbody tr.cl-row-y { --freeze-bg: #fff8d6; }
+table.cl-table tbody tr.cl-row-hi { --freeze-bg: #ffe1dc; }
+table.cl-table tbody tr.cl-row-progress { --freeze-bg: #fffbe8; }
+table.cl-table tbody tr.cl-row-y.cl-row-sel,
+table.cl-table tbody tr.cl-row-hi.cl-row-sel { --freeze-bg: var(--accent-soft, #f3dde0); }
+table.cl-table tbody tr.cl-hl { --freeze-bg: var(--hl-bg); }
+table.cl-table tbody tr.cl-hl.cl-row-sel { --freeze-bg: var(--accent-soft, #f3dde0); }
+.legacy-cl-freeze-target table.cl-table tbody td.name-col,
+.legacy-cl-infusion-freeze table.cl-table tbody td:nth-child(2) {
+  background: var(--freeze-bg, var(--bg-surface));
+}
+.legacy-cl-freeze-target table.cl-table tbody tr:hover td.name-col,
+.legacy-cl-infusion-freeze table.cl-table tbody tr:hover td:nth-child(2) {
+  background: var(--freeze-bg, var(--bg-sunken));
+}
+/* User-configurable freeze panes: any number of columns + optional whole header. */
+.cl-user-freeze-reset table.cl-table thead th,
+.cl-user-freeze-reset table.cl-table tbody td.name-col,
+.cl-user-freeze-reset table.cl-table tbody td:nth-child(2) {
+  position: static !important;
+  left: auto !important;
+  z-index: auto !important;
+  box-shadow: none !important;
+}
+/* IMPORTANT: frozen cells are an opaque layer. Without a real background,
+   horizontally scrolling cells can paint through the frozen columns. */
+.cl-user-freeze-col {
+  position: sticky !important;
+  left: var(--freeze-left, 0px) !important;
+  z-index: 30 !important;
+  background: var(--freeze-bg, var(--bg-surface, #fff)) !important;
+  background-color: var(--freeze-bg, var(--bg-surface, #fff)) !important;
+  background-clip: padding-box !important;
+  box-shadow: 1px 0 0 var(--border-subtle) !important;
+}
+.cl-user-freeze-col::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: inherit;
+  pointer-events: none;
+}
+.cl-user-freeze-header .cl-table-wrap {
+  position: relative;
+}
+.cl-user-freeze-header table.cl-table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+.cl-user-freeze-header table.cl-table thead {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 55 !important;
+}
+.cl-user-freeze-header table.cl-table thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 60 !important;
   background: var(--bg-sunken) !important;
 }
-.cl-table-freeze-col {
-  position: sticky !important; z-index: 8 !important;
-}
-.cl-table-freeze-header th.cl-table-freeze-col { z-index: 14 !important; }
-.cl-freeze-list { display:grid; gap:7px; max-height:52vh; overflow:auto; padding:4px 2px; }
-.cl-freeze-item { display:flex; align-items:center; gap:9px; padding:8px 10px; border:1px solid var(--border-subtle); border-radius:8px; background:var(--bg-surface); cursor:pointer; }
-.cl-freeze-item:hover { background:var(--bg-sunken); }
-.cl-freeze-item input { width:16px; height:16px; margin:0; accent-color:var(--accent); }
-
-/* Full-screen table view */
-#cl-table-region.cl-table-maximized {
-  position: fixed; inset: 0; z-index: 1000; background: var(--bg-app);
-  padding: 12px; box-sizing: border-box; overflow: hidden;
-}
-#cl-table-region.cl-table-maximized .cl-table-wrap {
-  max-height: none; height: calc(100vh - 56px); overflow: auto;
-}
-#cl-table-region.cl-table-maximized .pagination { margin-bottom: 0; }
-.cl-maximize-close {
-  position: absolute; top: 10px; right: 12px; z-index: 1020;
-}
-body.cl-table-maximized-open { overflow: hidden; }
-
+.cl-user-freeze-header table.cl-table thead th.cl-user-freeze-col { z-index: 70 !important; }
+.cl-user-freeze-col:hover { filter: brightness(.98); }
 table.cl-table { table-layout: fixed; min-width: 100%; }
-table.cl-table th { position: static; padding-right: 14px; overflow: hidden; text-overflow: ellipsis; }
+table.cl-table th { position: sticky; padding-right: 14px; overflow: hidden; text-overflow: ellipsis; }
 table.cl-table th.cl-dragging { opacity: 0.4; }
 .cl-th-note { display: block; font-size: 10px; font-weight: 600; line-height: 1.25; text-transform: none; letter-spacing: 0; color: #b45309; white-space: normal; }
 td.cl-inf-td { text-align: center; }
@@ -1348,6 +1492,9 @@ textarea.ac-in { resize: vertical; }
           <div class="name">DG Master Pt List</div>
           <div class="subname">Operations Console</div>
         </div>
+        <button type="button" class="sidebar-collapse-btn" id="sidebar-collapse-btn" aria-label="Minimize navigation" aria-expanded="true" title="Minimize navigation">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
       <nav class="sidebar-scroll" id="sidebar-nav"></nav>
     </aside>
@@ -3141,6 +3288,27 @@ window.addEventListener("hashchange", render);
 // ---------------------------------------------------------------------------
 // Sidebar
 // ---------------------------------------------------------------------------
+const SIDEBAR_COLLAPSED_KEY = "dg_sidebar_collapsed";
+function setSidebarCollapsed(collapsed, persist = true) {
+  document.body.classList.toggle("sidebar-collapsed", !!collapsed);
+  const btn = document.getElementById("sidebar-collapse-btn");
+  if (btn) {
+    btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    btn.setAttribute("aria-label", collapsed ? "Expand navigation" : "Minimize navigation");
+    btn.title = collapsed ? "Expand navigation" : "Minimize navigation";
+    btn.innerHTML = collapsed
+      ? '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+  if (persist) { try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0"); } catch (e) {} }
+}
+function initSidebarCollapse() {
+  let collapsed = false;
+  try { collapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1"; } catch (e) {}
+  setSidebarCollapsed(collapsed, false);
+  const btn = document.getElementById("sidebar-collapse-btn");
+  if (btn) btn.addEventListener("click", () => setSidebarCollapsed(!document.body.classList.contains("sidebar-collapsed")));
+}
 function renderSidebar() {
   const { view, param } = parseHash();
   const stats = getDashboardStats();
@@ -3580,6 +3748,15 @@ function getSheetColumns(cfg) {
   return headers;
 }
 
+function sheetViewLayout(cfg) {
+  const key = "dg_sheet_view_" + cfg.id;
+  const v = lsGet(key, {});
+  return { hidden: Array.isArray(v.hidden) ? v.hidden : [] };
+}
+function sheetSaveViewLayout(cfg, layout) {
+  lsSet("dg_sheet_view_" + cfg.id, { hidden: [...new Set(layout.hidden || [])] });
+}
+
 function renderSheetTable(cfg) {
   const state = getSheetPageState(cfg.id);
   const allRecords = getAllRecords().filter((r) => r.sheetId === cfg.id);
@@ -3617,42 +3794,49 @@ function renderSheetTable(cfg) {
   // Every column from the source sheet is shown — nothing from the original
   // Excel file is hidden or dropped, even on wide sheets (those just scroll
   // horizontally; see .data-table-wrap).
-  const displayCols = columns;
+  const viewLayout = sheetViewLayout(cfg);
+  const hiddenSet = new Set(viewLayout.hidden);
+  const displayCols = columns.filter((c) => !hiddenSet.has(c));
 
   const region = document.getElementById("sheet-table-region");
+  region.classList.toggle("sheet-freeze-target", cfg.group === "diagnosis");
   region.innerHTML = `
-    <div class="table-toolbar">
-      <div class="table-search">
-        <span class="icon">${searchIconSvg()}</span>
-        <input type="text" id="sheet-search-input" placeholder="Search ${esc(cfg.label)}…" value="${esc(state.search)}" />
+    <div class="sheet-table-workspace" id="sheet-table-workspace">
+      <div class="table-toolbar">
+        <div class="table-search">
+          <span class="icon">${searchIconSvg()}</span>
+          <input type="text" id="sheet-search-input" placeholder="Search ${esc(cfg.label)}…" value="${esc(state.search)}" />
+        </div>
+        ${showStatusCol ? `
+        <select class="filter-select" id="sheet-status-filter">
+          <option value="">All statuses</option>
+          ${Object.keys(STATUS_META).map((s) => `<option value="${s}" ${state.statusFilter === s ? "selected" : ""}>${STATUS_META[s].label}</option>`).join("")}
+        </select>` : ""}
+        <button class="btn sm ghost" id="reset-filters" title="Clear search, filters, and sorting; go back to page 1">${resetIconSvg()} Reset</button>
+        <button class="btn sm ghost" id="sheet-manage-cols" title="Show or hide columns">⚙ Columns</button>
+        <button class="btn sm ghost" id="sheet-fullscreen" title="Maximize this table">⛶ Maximize Table</button>
+        <span class="text-muted" style="margin-left:auto;font-size:12.5px">${fmtNum(total)} record${total === 1 ? "" : "s"}</span>
       </div>
-      ${showStatusCol ? `
-      <select class="filter-select" id="sheet-status-filter">
-        <option value="">All statuses</option>
-        ${Object.keys(STATUS_META).map((s) => `<option value="${s}" ${state.statusFilter === s ? "selected" : ""}>${STATUS_META[s].label}</option>`).join("")}
-      </select>` : ""}
-      <button class="btn sm ghost" id="reset-filters" title="Clear search, filters, and sorting; go back to page 1">${resetIconSvg()} Reset</button>
-      <span class="text-muted" style="margin-left:auto;font-size:12.5px">${fmtNum(total)} record${total === 1 ? "" : "s"}</span>
-    </div>
-    <div class="data-table-wrap">
-      <table class="data-table">
-        <thead><tr>
-          ${displayCols.map((c) => `<th data-field="${esc(c)}">${esc(c)}${sortArrow(state, c)}</th>`).join("")}
-          ${showStatusCol ? `<th data-field="__status">Status${sortArrow(state, "__status")}</th>` : ""}
-          <th>Actions</th>
-        </tr></thead>
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead><tr>
+            ${displayCols.map((c) => `<th data-field="${esc(c)}">${esc(c)}${sortArrow(state, c)}<button type="button" class="cl-col-remove" data-sheet-remove-col="${esc(c)}" title="Hide this column from your view" aria-label="Hide column ${esc(c)}">×</button></th>`).join("")}
+            ${showStatusCol ? `<th data-field="__status">Status${sortArrow(state, "__status")}</th>` : ""}
+            <th>Actions</th>
+          </tr></thead>
         <tbody>
           ${pageRows.length ? pageRows.map((r) => sheetRowHtml(cfg, r, displayCols, showStatusCol)).join("") : `<tr><td colspan="${displayCols.length + 2}"><div class="empty-state">${emptyIcon()}<div class="title">No records match your filters</div><div class="desc">Try clearing search or status filters.</div></div></td></tr>`}
         </tbody>
       </table>
-    </div>
-    <div class="pagination">
-      <span>Page ${state.page} of ${totalPages}</span>
-      <div class="pager-btns">
-        <button data-page="1" ${state.page === 1 ? "disabled" : ""}>«</button>
-        <button data-page="${state.page - 1}" ${state.page === 1 ? "disabled" : ""}>‹</button>
-        <button data-page="${state.page + 1}" ${state.page === totalPages ? "disabled" : ""}>›</button>
-        <button data-page="${totalPages}" ${state.page === totalPages ? "disabled" : ""}>»</button>
+      </div>
+      <div class="pagination">
+        <span>Page ${state.page} of ${totalPages}</span>
+        <div class="pager-btns">
+          <button data-page="1" ${state.page === 1 ? "disabled" : ""}>«</button>
+          <button data-page="${state.page - 1}" ${state.page === 1 ? "disabled" : ""}>‹</button>
+          <button data-page="${state.page + 1}" ${state.page === totalPages ? "disabled" : ""}>›</button>
+          <button data-page="${totalPages}" ${state.page === totalPages ? "disabled" : ""}>»</button>
+        </div>
       </div>
     </div>
   `;
@@ -3672,6 +3856,34 @@ function renderSheetTable(cfg) {
     renderSheetTable(cfg);
     toast("Filters and sorting reset");
   });
+  region.querySelector("#sheet-fullscreen")?.addEventListener("click", () => {
+    const ws = document.getElementById("sheet-table-workspace");
+    if (!ws) return;
+    const on = ws.classList.toggle("sheet-fullscreen");
+    const b = region.querySelector("#sheet-fullscreen");
+    if (b) b.textContent = on ? "⛶ Exit Maximize" : "⛶ Maximize Table";
+    document.body.classList.toggle("cl-table-is-fullscreen", on);
+  });
+  region.querySelector("#sheet-manage-cols")?.addEventListener("click", () => {
+    const all = columns.slice();
+    const hidden = new Set(sheetViewLayout(cfg).hidden);
+    const rows = all.map((c) => `<label class="cl-col-manage-row"><input type="checkbox" data-sheet-col-visibility="${esc(c)}" ${hidden.has(c) ? "" : "checked"}/> <span>${esc(c)}</span>${hidden.has(c) ? '<span class="badge neutral">Hidden</span>' : ""}</label>`).join("");
+    const modal = openModal(`<div class="modal-header"><div><h3>Manage columns</h3><p>Choose which columns you want visible. Hiding a column does not delete its data.</p></div></div><div class="modal-body"><div class="cl-col-manage-list">${rows}</div></div><div class="modal-footer"><button class="btn" id="sheet-col-cancel">Cancel</button><button class="btn primary" id="sheet-col-save">Save changes</button></div>`);
+    modal.querySelector("#sheet-col-cancel").addEventListener("click", closeModal);
+    modal.querySelector("#sheet-col-save").addEventListener("click", () => {
+      sheetSaveViewLayout(cfg, { hidden: [...modal.querySelectorAll("[data-sheet-col-visibility]")].filter((x) => !x.checked).map((x) => x.dataset.sheetColVisibility || x.getAttribute("data-sheet-col-visibility")) });
+      closeModal(); renderSheetTable(cfg); toast("Column visibility saved");
+    });
+  });
+  region.querySelectorAll("[data-sheet-remove-col]").forEach((btn) => btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const col = btn.dataset.sheetRemoveCol;
+    const layout = sheetViewLayout(cfg);
+    layout.hidden = [...new Set([...(layout.hidden || []), col])];
+    sheetSaveViewLayout(cfg, layout);
+    renderSheetTable(cfg);
+    toast(`"${col}" hidden from your view`);
+  }));
   region.querySelectorAll("thead th[data-field]").forEach((th) => {
     th.addEventListener("click", () => {
       const field = th.dataset.field;
@@ -5952,137 +6164,9 @@ function clApply(uid, patch, opts = {}) {
 // ---------------------------------------------------------------------------
 // Column layout: shared custom columns + per-browser order/width
 // ---------------------------------------------------------------------------
-function clFreezeKey() { return `dg_freeze_panes#${CALL_SHEET_ID}`; }
-function clFreezeLoad() {
-  const key = clFreezeKey();
-  const memory = window.__dgFreezePanes?.[key];
-  const s = memory || lsGet(key, {});
-  return { header: !!s.header, cols: Array.isArray(s.cols) ? [...new Set(s.cols.filter(Boolean))] : [] };
-}
-function clFreezeSave(state) {
-  const normalized = { header: !!state.header, cols: Array.isArray(state.cols) ? [...new Set(state.cols.filter(Boolean))] : [] };
-  lsSet(clFreezeKey(), normalized);
-  // Keep an in-memory copy too. This makes the setting survive any iframe/storage
-  // restriction during the current session, while localStorage preserves it across reloads.
-  window.__dgFreezePanes = window.__dgFreezePanes || {};
-  window.__dgFreezePanes[clFreezeKey()] = normalized;
-}
-
-function clFreezeColumnOptions(cfg) {
-  return clColumns(cfg).filter((c) => c && c !== '__status' && c !== '__infusion' && c !== '__month' && c !== CL.ACTION);
-}
-function clFreezeApply() {
-  const region = document.getElementById('cl-table-region');
-  const table = region?.querySelector('table.cl-table');
-  if (!table) return;
-
-  const state = clFreezeLoad();
-  table.classList.toggle('cl-table-freeze-header', !!state.header);
-
-  // Always clear the previous column-freeze styles first.
-  table.querySelectorAll('.cl-table-freeze-col').forEach((el) => {
-    el.classList.remove('cl-table-freeze-col');
-    el.style.left = '';
-    el.style.backgroundColor = '';
-    el.style.zIndex = '';
-  });
-
-  const selected = [...new Set((state.cols || []).filter(Boolean))];
-  if (!selected.length) return;
-
-  const heads = [...table.querySelectorAll('thead th[data-col]')];
-  // The checkbox/select column is deliberately not offered as a freeze option,
-  // but frozen data columns must begin AFTER it so they do not cover the checkbox.
-  const selectTh = table.querySelector('thead th.cl-sel-th');
-  let left = selectTh ? selectTh.getBoundingClientRect().width : 0;
-
-  selected.forEach((colKey, idx) => {
-    const th = heads.find((h) => h.dataset.col === colKey);
-    if (!th) return;
-
-    const width = th.getBoundingClientRect().width;
-    const selector = `[data-col="${CSS.escape(colKey)}"]`;
-    table.querySelectorAll(selector).forEach((cell) => {
-      cell.classList.add('cl-table-freeze-col');
-      cell.style.left = `${left}px`;
-      cell.style.zIndex = cell.tagName === 'TH' ? '14' : '8';
-
-      // Preserve the exact background/highlight of the corresponding row.
-      // Row highlight rules are applied to TDs, so reading the TR background
-      // would often return transparent. Read an unfrozen cell from the same row.
-      if (cell.tagName !== 'TH') {
-        const tr = cell.closest('tr');
-        const source = tr ? [...tr.children].find((td) => !td.classList.contains('cl-table-freeze-col')) : null;
-        const bg = source ? getComputedStyle(source).backgroundColor : '';
-        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
-          cell.style.backgroundColor = bg;
-        } else {
-          cell.style.backgroundColor = getComputedStyle(table).backgroundColor || 'var(--bg-surface)';
-        }
-      }
-    });
-    left += width;
-  });
-}
-function clMaximizeTable() {
-  const region = document.getElementById('cl-table-region');
-  if (!region) return;
-  const open = !region.classList.contains('cl-table-maximized');
-  region.classList.toggle('cl-table-maximized', open);
-  document.body.classList.toggle('cl-table-maximized-open', open);
-  let close = region.querySelector('.cl-maximize-close');
-  if (open) {
-    if (!close) {
-      close = document.createElement('button');
-      close.type = 'button';
-      close.className = 'btn sm cl-maximize-close';
-      close.textContent = '✕ Exit Maximize';
-      close.title = 'Return to normal table view';
-      close.addEventListener('click', clMaximizeTable);
-      region.appendChild(close);
-    }
-    close.style.display = '';
-    requestAnimationFrame(() => { clFreezeApply(); clGrowAll(); });
-  } else if (close) {
-    close.style.display = 'none';
-    requestAnimationFrame(() => { clFreezeApply(); clGrowAll(); });
-  }
-}
-
-function clOpenFreezePanesModal(cfg) {
-  const state = clFreezeLoad();
-  const cols = clFreezeColumnOptions(cfg);
-  const modal = openModal(`
-    <div class="modal-header"><div><h3>Freeze Panes</h3><p>Choose what stays visible while you scroll this table.</p></div></div>
-    <div class="modal-body">
-      <label class="cl-freeze-item"><input type="checkbox" id="cl-freeze-header" ${state.header ? 'checked' : ''}> <span><strong>Freeze Table Header</strong><br><small class="text-muted">Keep the actual column-header row visible while scrolling vertically.</small></span></label>
-      <div style="margin:18px 0 8px;font-weight:700;font-size:13px">Freeze Columns</div>
-      <div class="text-muted" style="font-size:12px;margin-bottom:9px">Select one or more columns. The selection checkbox column and Actions are not included.</div>
-      <div class="cl-freeze-list" id="cl-freeze-cols">
-        ${cols.map((c) => `<label class="cl-freeze-item"><input type="checkbox" data-freeze-col="${esc(c)}" ${state.cols.includes(c) ? 'checked' : ''}> <span>${esc(clColLabel(c))}</span></label>`).join('')}
-      </div>
-    </div>
-    <div class="modal-footer"><button class="btn" id="cl-freeze-unfreeze">Unfreeze All</button><span style="flex:1"></span><button class="btn" id="cl-freeze-cancel">Cancel</button><button class="btn primary" id="cl-freeze-save">Apply</button></div>`, { wide: true });
-  modal.querySelector('#cl-freeze-cancel').addEventListener('click', closeModal);
-  modal.querySelector('#cl-freeze-unfreeze').addEventListener('click', () => {
-    modal.querySelector('#cl-freeze-header').checked = false;
-    modal.querySelectorAll('[data-freeze-col]').forEach((x) => { x.checked = false; });
-  });
-  modal.querySelector('#cl-freeze-save').addEventListener('click', () => {
-    const next = {
-      header: !!modal.querySelector('#cl-freeze-header')?.checked,
-      cols: [...modal.querySelectorAll('[data-freeze-col]:checked')].map((x) => x.dataset.freezeCol)
-    };
-    clFreezeSave(next);
-    closeModal();
-    requestAnimationFrame(clFreezeApply);
-    toast('Freeze Panes updated');
-  });
-}
-
 function clLayoutLoad() {
   const l = lsGet(CL.LS_LAYOUT, {});
-  let order = l.order || [], widths = l.widths || {};
+  let order = l.order || [], widths = l.widths || {}, hidden = Array.isArray(l.hidden) ? l.hidden : [];
   if (CL.LAYOUT_UID === "__layout#dg_infusion_pas") {
     // old column names -> new ones; an order saved under the old names is dropped so the new column order shows
     if (order.some((k) => k in INF_OLD_TO_NEW)) order = [];
@@ -6091,7 +6175,13 @@ function clLayoutLoad() {
     widths = w2;
   }
   if ((l.rev || 0) !== (acColCfg(CALL_SHEET_ID).rev || 0)) order = [];
-  return { order, widths };
+  // Keep freeze-pane preferences independent of column-layout revisions.
+  // A revision may reset saved column order/widths, but it must never
+  // silently uncheck the user's Freeze Columns / Freeze Header selections.
+  const freezeCols = Array.isArray(l.freezeCols) ? l.freezeCols.slice() : (l.freezeCol ? [l.freezeCol] : []);
+  const freezeCol = l.freezeCol || "";
+  const freezeHeader = !!l.freezeHeader;
+  return { order, widths, hidden, freezeCols, freezeCol, freezeHeader, rev: l.rev || 0 };
 }
 function clLayoutSave(l) { l.rev = acColCfg(CALL_SHEET_ID).rev || 0; lsSet(CL.LS_LAYOUT, l); }
 function clCustomColumns() {
@@ -6157,6 +6247,8 @@ function clColumns(cfg, withHidden) {
     if (o.length) { const rk = (k) => { const i = o.indexOf(k); return i < 0 ? 9999 : i; }; all = all.map((k, i) => [k, i]).sort((a, b) => rk(a[0]) - rk(b[0]) || a[1] - b[1]).map((x) => x[0]); }
     if (withHidden) return all;
   }
+  const userHidden = new Set(clLayoutLoad().hidden || []);
+  if (userHidden.size) all = all.filter((k) => !userHidden.has(k));
   const out = [];
   clLayoutLoad().order.forEach((k) => { if (all.includes(k) && !out.includes(k)) out.push(k); });
   all.forEach((k) => {
@@ -6484,6 +6576,7 @@ function renderCallListPage(cfg) {
       <a class="link-inline" href="#/duplicates/${esc(cfg.id)}" style="margin-left:8px;font-size:12.5px">Review duplicates in this tab →</a>
     </div>` : ""}
 
+    <div class="cl-table-workspace" id="cl-table-workspace">
     <div class="table-toolbar cl-toolbar" id="cl-toolbar">
       <div class="table-search">
         <span class="icon">${searchIconSvg()}</span>
@@ -6501,8 +6594,9 @@ function renderCallListPage(cfg) {
       </select>
       <button class="btn sm ghost" id="cl-reset" title="Clear search, filters and sorting">${resetIconSvg()} Reset</button>
       <button class="btn sm" id="cl-add-col" title="Add an editable column">${plusIconSvg()} Add Column</button>
-      <button class="btn sm" id="cl-freeze-panes" title="Freeze the table header or selected columns">❄ Freeze Panes</button>
-      <button class="btn sm" id="cl-maximize-table" title="Maximize this table">⛶ Maximize Table</button>
+      <button class="btn sm ghost" id="cl-manage-cols" title="Show, restore, or remove built-in or added columns">⚙ Manage Columns</button>
+      <button class="btn sm ghost" id="cl-freeze-panes" title="Choose any columns and whether the whole table header should stay frozen">❄ Freeze Panes</button>
+      <button class="btn sm primary" id="cl-fullscreen" title="Maximize the table to the full screen">⛶ Maximize Table</button>
  <label class="cl-selall" title="Select every record that matches the current filters"><input type="checkbox" id="cl-selall" /> Select all</label>
  <button class="btn sm danger" id="cl-del-sel" disabled title="Delete the selected records">${trashIconSvg()} Delete selected<span class="cl-del-n"></span></button>
       ${clIsDays() ? `<button class="btn sm" id="cl-setday" title="Move the ticked patients to a clinic day">Set Clinic Day</button>` : ""}
@@ -6516,7 +6610,9 @@ function renderCallListPage(cfg) {
       </div>
     </div>
     <div id="cl-table-region"></div>
+    </div>
   `;
+
 }
 
 function clSortValue(r, col) {
@@ -6647,7 +6743,12 @@ function clRowHtml(cfg, r, cols) {
     const val = r.data[c] || "";
     const isDate = clIsDateCol(cfg, c);
     const dexa = clIsDexaCol(c) && clDexaYes(val);
-    return `<td class="inline-cell${c === cfg.nameField ? " name-col" : ""}${dexa ? " cl-dexa-yes" : ""}" data-col="${esc(c)}">
+    const freezeNameCell = clIsCombinedInfusion()
+      ? String(c) === String(cols[0] || "")
+      : cfg.group === "diagnosis"
+        ? String(c).trim().toLowerCase() === String((cfg.nameField || "Patient Name")).trim().toLowerCase() || ["patient name", "medicare - patient name", "patient", "name"].includes(String(c).trim().toLowerCase()) && cols.some((x) => String(x).trim().toLowerCase() === String(c).trim().toLowerCase())
+        : String(c).trim().toLowerCase() === String(cfg.nameField || "").trim().toLowerCase();
+    return `<td class="inline-cell${freezeNameCell ? " name-col" : ""}${dexa ? " cl-dexa-yes" : ""}" data-col="${esc(c)}">
       <div class="inline-cell-wrap">
         <input type="text" class="inline-edit-input" data-uid="${r.uid}" data-field="${esc(c)}" value="${esc(val)}" placeholder="—" title="${esc(val)}" ${c === CL.TEAM ? 'list="cl-team-list"' : clIsDays() && c === DAY_FIELD ? 'list="cl-day-list"' : ""} />
         ${dexa ? '<span class="cl-dexa">' + esc(biText("dexa", "chip")) + '</span>' : ""}
@@ -6707,12 +6808,13 @@ function clRefreshRow(uid) {
    }
  }
  if (clIsInfusion()) { clRefreshCorr(tr, r); tr.querySelectorAll("textarea.cl-wrap-input").forEach(clGrow); }
- clFreezeApply();
 }
 
 function clRenderTable(cfg) {
   const region = document.getElementById("cl-table-region");
   if (!region) return;
+  region.classList.toggle("cl-freeze-target", ["dg_pharmacy", "dg_infusion_pas", "dg_osteoporosis_pas"].includes(CALL_SHEET_ID) || SHEET_BY_ID[CALL_SHEET_ID]?.group === "diagnosis");
+  region.classList.toggle("cl-infusion-freeze", CALL_SHEET_ID === "dg_infusion_pas");
   const cols = clColumns(cfg);
   const customNames = new Set(clCustomColumns().map((c) => c.name));
   const everything = clRecords();
@@ -6731,8 +6833,17 @@ function clRenderTable(cfg) {
   const tableW = widths.reduce((a, b) => a + b, 0) + CL_ACTIONS_COL_W + CL_SEL_COL_W;
   const teams = [...new Set([...(clIsOsteo() ? ["JP", "SU", "Cancelled"] : []), ...(clAssignMeta() ? clAssignMeta().suggest : []), ...everything.map((r) => String(r.data[CL.TEAM] || "").trim()).filter(Boolean)])].sort();
 
-  const th = (c) => `<th data-col="${esc(c)}" draggable="true" title="Drag to reorder · drag the edge to resize · click to sort">
-      <span class="cl-th-label">${esc(clColLabel(c))}</span>${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}${customNames.has(c) ? `<button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Remove this column" aria-label="Remove column ${esc(c)}">×</button>` : ""}
+  const freezeNameKey = clIsCombinedInfusion()
+    ? (cols[0] || "")
+    : cfg.group === "diagnosis" ? (
+      [cfg.nameField, "Patient Name", "MEDICARE - Patient Name", "Patient", "Name"]
+        .filter(Boolean)
+        .find((k) => cols.some((c) => String(c).trim().toLowerCase() === String(k).trim().toLowerCase()))
+        || cols.find((x) => !String(x).startsWith("__"))
+    ) : cfg.nameField;
+  const freezeNameCol = (c) => !!freezeNameKey && String(c).trim().toLowerCase() === String(freezeNameKey).trim().toLowerCase();
+  const th = (c) => `<th class="${freezeNameCol(c) ? "cl-freeze-name-th" : ""}" data-col="${esc(c)}" draggable="true" title="Drag to reorder · drag the edge to resize · click to sort">
+      <span class="cl-th-label">${esc(clColLabel(c))}</span>${sortArrow(clState.sort ? { sort: clState.sort } : {}, c)}${c.startsWith("__") ? "" : `<button type="button" class="cl-col-remove" data-remove-col="${esc(c)}" title="Remove this column from your view" aria-label="Remove column ${esc(clColLabel(c))}">×</button>`}
       <span class="cl-resize" data-col="${esc(c)}" role="separator" aria-orientation="vertical" aria-label="Resize ${esc(clColLabel(c))} column"></span>
     </th>`;
 
@@ -6764,6 +6875,14 @@ function clRenderTable(cfg) {
     </div>`}
   `;
 
+  // Apply the user's freeze settings only after the table exists in the DOM.
+  // This is intentionally after innerHTML so every selected column/header cell
+  // can be measured and made sticky.
+  clApplyFreezeSettings(cfg);
+
+  // Freeze behavior is fully user-configurable now; no tab has a hard-coded
+  // frozen column. The selection checkbox column remains excluded.
+
   // PSA Call Status uses a dedicated direct listener. This avoids the generic
   // Action handler intercepting the click and makes the status button reliably
   // clickable even when the table is rebuilt.
@@ -6782,8 +6901,7 @@ function clRenderTable(cfg) {
   }
 
   clSyncSel();
-  clFreezeApply();
-  clGrowAll(); requestAnimationFrame(() => { clGrowAll(); clFreezeApply(); });
+  clGrowAll(); requestAnimationFrame(clGrowAll);
   const count = document.getElementById("cl-count");
   if (count) count.textContent = `${fmtNum(total)} record${total === 1 ? "" : "s"}${total !== everything.length ? ` of ${fmtNum(everything.length)}` : ""}`;
   document.querySelectorAll("#cl-rv button").forEach((b) => b.setAttribute("aria-pressed", String(String(clState.pageSize) === b.dataset.size)));
@@ -6824,8 +6942,16 @@ function wireCallListPage(cfg) {
     toast("Filters and sorting reset");
   });
   document.getElementById("cl-add-col").addEventListener("click", () => clOpenAddColumnModal(cfg));
-  document.getElementById("cl-freeze-panes").addEventListener("click", () => clOpenFreezePanesModal(cfg));
-  document.getElementById("cl-maximize-table")?.addEventListener("click", clMaximizeTable);
+  document.getElementById("cl-manage-cols")?.addEventListener("click", () => clOpenManageColumnsModal(cfg));
+  document.getElementById("cl-freeze-panes")?.addEventListener("click", () => clOpenFreezePanesModal(cfg));
+  document.getElementById("cl-fullscreen")?.addEventListener("click", () => {
+    const ws = document.getElementById("cl-table-workspace");
+    if (!ws) return;
+    const on = ws.classList.toggle("cl-fullscreen");
+    const b = document.getElementById("cl-fullscreen");
+    if (b) { b.textContent = on ? "⛶ Exit Maximize" : "⛶ Maximize Table"; b.title = on ? "Exit maximized table" : "Maximize the table"; }
+    document.body.classList.toggle("cl-table-is-fullscreen", on);
+  });
   document.getElementById("btn-completion-criteria")?.addEventListener("click", () => openCompletionCriteriaModal(cfg));
  document.getElementById("cl-selall").addEventListener("change", (e) => clSelectAll(cfg, e.target.checked));
  document.getElementById("cl-del-sel").addEventListener("click", () => clDeleteSelected(cfg));
@@ -6939,17 +7065,7 @@ function wireCallListPage(cfg) {
     const pager = t.closest(".pager-btns button[data-page]");
     if (pager) { clState.page = +pager.dataset.page; clRenderTable(cfg); return; }
     const rm = t.closest("[data-remove-col]");
-    if (rm) {
-      const name = rm.dataset.removeCol;
-      if ((acColCfg(cfg.id).added || []).some((c) => c.name === name)) { toast("This column is managed in the Admin page.", "error"); return; }
-      confirmDialog("Remove this column?", `"${name}" will be hidden for everyone. Values already typed into it stay saved in the records.`, () => {
-        clSaveCustomColumns(clCustomColumns().filter((c) => c.name !== name));
-        logChange({ sheetId: cfg.id, action: "column", summary: `Removed column "${name}" from ${cfg.label}` });
-        toast("Column removed");
-        clRenderTable(cfg);
-      });
-      return;
-    }
+    if (rm) { clRemoveColumn(cfg, rm.dataset.removeCol); return; }
     if (t.closest(".cl-resize")) return;
     const corrBtn = t.closest("[data-cl-corr]");
  if (corrBtn) { clSetCorrection(corrBtn.dataset.uid, corrBtn.dataset.clCorr); return; }
@@ -7112,6 +7228,223 @@ function clExport(cfg) {
   XLSX.utils.book_append_sheet(wb, ws, cfg.label.slice(0, 31));
   XLSX.writeFile(wb, `${cfg.label.replace(/[^\w\- ]/g, "")}.xlsx`);
   toast(`Exported ${fmtNum(rows.length)} record${rows.length === 1 ? "" : "s"} (current filters and column order)`);
+}
+
+// ---------------------------------------------------------------------------
+// User-configurable freeze panes
+// ---------------------------------------------------------------------------
+function clFreezeConfig() {
+  const l = clLayoutLoad();
+  let cols = Array.isArray(l.freezeCols) ? l.freezeCols.slice() : [];
+  if (!cols.length && l.freezeCol) cols = [l.freezeCol];
+  return { cols, header: !!l.freezeHeader };
+}
+function clFreezeOpaqueBackground(tr, el, table) {
+  if (!tr || !el) return;
+
+  const trStyle = getComputedStyle(tr);
+  const tableStyle = getComputedStyle(table);
+  let bg = '';
+
+  // Match the existing row-highlighting rules first.
+  if (tr.classList.contains('cl-row-sel')) {
+    bg = tableStyle.getPropertyValue('--accent-soft').trim() || '#f3dde0';
+  } else if (tr.classList.contains('cl-row-hi')) {
+    bg = '#ffe1dc';
+  } else if (tr.classList.contains('cl-row-y')) {
+    bg = '#fff8d6';
+  } else if (tr.classList.contains('cl-row-progress')) {
+    bg = '#fffbe8';
+  } else if (tr.classList.contains('cl-hl')) {
+    bg = trStyle.getPropertyValue('--hl-bg').trim();
+  }
+
+  // Preserve any custom row background already produced by the table.
+  if (!bg) {
+    const source = [...tr.children].find(td =>
+      td.tagName === 'TD' && !td.classList.contains('cl-user-freeze-col') && !td.classList.contains('cl-sel-td')
+    );
+    if (source) {
+      const sourceBg = getComputedStyle(source).backgroundColor;
+      if (sourceBg && sourceBg !== 'transparent' && sourceBg !== 'rgba(0, 0, 0, 0)') bg = sourceBg;
+    }
+  }
+
+  // Final fallback is always opaque. Never leave a frozen cell transparent.
+  if (!bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') {
+    bg = tableStyle.getPropertyValue('--bg-surface').trim() || '#fff';
+  }
+
+  el.style.setProperty('background', bg, 'important');
+  el.style.setProperty('background-color', bg, 'important');
+  el.style.setProperty('background-clip', 'padding-box', 'important');
+}
+
+function clApplyFreezeSettings(cfg) {
+  const region = document.getElementById("cl-table-region");
+  if (!region) return;
+  const { cols, header } = clFreezeConfig();
+  const table = region.querySelector("table.cl-table");
+  if (!table) return;
+
+  // Clear every previous user-freeze state, including inline styles.
+  region.classList.add("cl-user-freeze-reset");
+  region.classList.toggle("cl-user-freeze-header", header);
+  region.querySelectorAll(".cl-user-freeze-col").forEach(el => {
+    el.classList.remove("cl-user-freeze-col");
+    el.style.removeProperty("--freeze-left");
+    el.style.removeProperty("position");
+    el.style.removeProperty("left");
+    el.style.removeProperty("z-index");
+    el.style.removeProperty("background");
+    el.style.removeProperty("background-color");
+    el.style.removeProperty("background-clip");
+    el.style.removeProperty("box-shadow");
+  });
+
+  // Freeze the ENTIRE column-header row when the user checks Freeze Table Header.
+  const headerCells = [...table.querySelectorAll("thead th")];
+  headerCells.forEach(th => {
+    th.style.removeProperty("position");
+    th.style.removeProperty("top");
+    th.style.removeProperty("z-index");
+    th.style.removeProperty("background");
+  });
+  const thead = table.querySelector("thead");
+  if (thead) {
+    thead.style.removeProperty("position");
+    thead.style.removeProperty("top");
+    thead.style.removeProperty("z-index");
+    thead.style.setProperty("position", header ? "sticky" : "static", "important");
+    if (header) {
+      thead.style.setProperty("top", "0px", "important");
+      thead.style.setProperty("z-index", "55", "important");
+    }
+  }
+  if (header) {
+    table.style.setProperty("border-collapse", "separate", "important");
+    table.style.setProperty("border-spacing", "0", "important");
+    headerCells.forEach(th => {
+      th.style.setProperty("position", "sticky", "important");
+      th.style.setProperty("top", "0px", "important");
+      th.style.setProperty("z-index", "60", "important");
+      th.style.setProperty("background", "var(--bg-sunken, #f5f6f8)", "important");
+      th.style.setProperty("background-color", "var(--bg-sunken, #f5f6f8)", "important");
+    });
+  } else {
+    table.style.removeProperty("border-collapse");
+    table.style.removeProperty("border-spacing");
+  }
+
+  const selectedCols = cols.filter(c => c && !String(c).startsWith("__"));
+  if (!selectedCols.length) return;
+
+  // Sticky table cells behave much more reliably when the table is separated.
+  // This also prevents the scrolling cells from visually bleeding through.
+  table.style.setProperty("border-collapse", "separate", "important");
+  table.style.setProperty("border-spacing", "0", "important");
+
+  const headCells = [...table.querySelectorAll("thead th[data-col]")];
+  let left = 0;
+  const lastSelected = selectedCols[selectedCols.length - 1];
+
+  for (const col of selectedCols) {
+    const th = headCells.find(h => h.dataset.col === col);
+    if (!th || th.classList.contains("cl-sel-th")) continue;
+    const width = Math.ceil(th.getBoundingClientRect().width || th.offsetWidth || 0);
+    region.querySelectorAll(`th[data-col="${CSS.escape(col)}"], td[data-col="${CSS.escape(col)}"]`).forEach(el => {
+      if (el.classList.contains("cl-sel-th") || el.classList.contains("cl-sel-td")) return;
+      el.classList.add("cl-user-freeze-col");
+      el.style.setProperty("--freeze-left", `${left}px`);
+      el.style.setProperty("position", "sticky", "important");
+      el.style.setProperty("left", `${left}px`, "important");
+      el.style.setProperty("z-index", header ? "70" : "30", "important");
+
+      if (el.tagName === "TH") {
+        // Header remains an opaque header layer.
+        el.style.setProperty("background", "var(--bg-sunken, #f5f6f8)", "important");
+        el.style.setProperty("background-color", "var(--bg-sunken, #f5f6f8)", "important");
+      } else {
+        // Body frozen cells get the exact row highlight as an opaque background.
+        clFreezeOpaqueBackground(el.closest("tr"), el, table);
+      }
+
+      if (col === lastSelected) {
+        el.style.setProperty("box-shadow", "2px 0 0 var(--border-subtle), 3px 0 6px rgba(16,24,40,.08)", "important");
+      } else {
+        el.style.setProperty("box-shadow", "1px 0 0 var(--border-subtle)", "important");
+      }
+    });
+    left += width;
+  }
+}
+
+function clOpenFreezePanesModal(cfg) {
+  const cols = clColumns(cfg).filter(c => !String(c).startsWith("__"));
+  const current = clFreezeConfig();
+  const selected = new Set(current.cols);
+  const rows = cols.map(c => `<label class="cl-col-manage-row"><input type="checkbox" class="cl-freeze-col-check" value="${esc(c)}" ${selected.has(c) ? "checked" : ""}/> <span>${esc(clColLabel(c))}</span></label>`).join("");
+  const modal = openModal(`
+    <div class="modal-header"><div><h3>Freeze panes</h3><p>Choose which columns stay visible while scrolling left/right.</p></div></div>
+    <div class="modal-body">
+      <label class="cl-col-manage-row" style="margin-bottom:10px"><input type="checkbox" id="cl-freeze-header-check" ${current.header ? "checked" : ""}/> <span><strong>Freeze Table Header</strong></span></label>
+      <div class="form-hint" style="margin-bottom:10px">Freezes the entire table header while scrolling up/down and keeps it visible while moving left/right.</div>
+      <div class="form-group"><label><strong>Freeze Columns</strong></label><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px 14px;max-height:45vh;overflow:auto;padding:4px 2px">${rows || '<span class="form-hint">No data columns available.</span>'}</div><div class="form-hint">Select any number of columns. The selection checkbox column is never frozen.</div></div>
+    </div>
+    <div class="modal-footer"><button class="btn" id="cl-freeze-cancel">Cancel</button><button class="btn ghost" id="cl-freeze-clear">Unfreeze all</button><button class="btn primary" id="cl-freeze-save">Save</button></div>`);
+  modal.querySelector("#cl-freeze-cancel").addEventListener("click", closeModal);
+  modal.querySelector("#cl-freeze-clear").addEventListener("click", () => {
+    const l = clLayoutLoad(); l.freezeCols = []; l.freezeCol = ""; l.freezeHeader = false; clLayoutSave(l); closeModal(); clRenderTable(cfg); toast("Freeze panes cleared");
+  });
+  modal.querySelector("#cl-freeze-save").addEventListener("click", () => {
+    const l = clLayoutLoad();
+    l.freezeCols = [...modal.querySelectorAll(".cl-freeze-col-check:checked")].map(x => x.value);
+    l.freezeCol = "";
+    l.freezeHeader = !!modal.querySelector("#cl-freeze-header-check").checked;
+    clLayoutSave(l); closeModal(); clRenderTable(cfg); toast("Freeze panes saved");
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Column visibility / user view
+// ---------------------------------------------------------------------------
+function clRemoveColumn(cfg, name) {
+  if (!name || String(name).startsWith("__")) return;
+  const label = clColLabel(name);
+  confirmDialog(
+    "Remove this column from your view?",
+    `"${label}" will be hidden for your view only. The underlying data is NOT deleted and can be restored from Columns.`,
+    () => {
+      const l = clLayoutLoad();
+      l.hidden = [...new Set([...(l.hidden || []), name])];
+      l.order = (l.order || []).filter((x) => x !== name);
+      clLayoutSave(l);
+      logChange({ sheetId: cfg.id, action: "column", summary: `Hidden column "${label}" from this user's view of ${cfg.label}` });
+      toast(`"${label}" hidden from your view`);
+      clRenderTable(cfg);
+    }
+  );
+}
+function clOpenManageColumnsModal(cfg) {
+  const all = clColumns(cfg, true).filter((c) => !String(c).startsWith("__"));
+  const hidden = new Set(clLayoutLoad().hidden || []);
+  const rows = all.map((c) => {
+    const label = clColLabel(c);
+    const isHidden = hidden.has(c);
+    return `<label class="cl-col-manage-row"><input type="checkbox" data-col-visibility="${esc(c)}" ${isHidden ? "" : "checked"}/> <span>${esc(label)}</span>${isHidden ? '<span class="badge neutral">Hidden</span>' : ""}</label>`;
+  }).join("");
+  const modal = openModal(`<div class="modal-header"><div><h3>Manage columns</h3><p>Choose which columns you want visible. Hiding a column does not delete its data.</p></div></div>
+    <div class="modal-body"><div class="cl-col-manage-list">${rows || '<div class="form-hint">No columns available.</div>'}</div></div>
+    <div class="modal-footer"><button class="btn" id="cl-col-manage-cancel">Cancel</button><button class="btn primary" id="cl-col-manage-save">Save changes</button></div>`);
+  modal.querySelector("#cl-col-manage-cancel").addEventListener("click", closeModal);
+  modal.querySelector("#cl-col-manage-save").addEventListener("click", () => {
+    const l = clLayoutLoad();
+    l.hidden = [...modal.querySelectorAll("[data-col-visibility]")].filter((x) => !x.checked).map((x) => x.dataset.col);
+    clLayoutSave(l);
+    closeModal();
+    clRenderTable(cfg);
+    toast("Column visibility saved");
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -8784,6 +9117,8 @@ function acPreviewBanner() {
 // ============================================================================
 window.navigate = navigate;
 window.closeModal = closeModal;
+
+initSidebarCollapse();
 
 (async function boot() {
   $root.innerHTML = `<div class="empty-state" style="margin-top:120px"><div class="spinner" style="width:28px;height:28px;border-width:3px;margin:0 auto 16px"></div><div class="title">Loading…</div></div>`;
