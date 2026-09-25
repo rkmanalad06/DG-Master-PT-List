@@ -1052,51 +1052,51 @@ body.cl-table-is-fullscreen { overflow: hidden; }
 /* Excel-style horizontal freeze for the three requested work queues.
    Only the patient/name column stays visible when scrolling left/right.
    The header scrolls normally and is NOT frozen vertically. */
-.cl-freeze-target table.cl-table { border-collapse: separate; border-spacing: 0; }
-.cl-freeze-target table.cl-table thead th { position: static; }
-.cl-freeze-target table.cl-table thead th[data-col="Patient"],
-.cl-freeze-target table.cl-table thead th[data-col="MEDICARE - Patient Name"],
-.cl-freeze-target table.cl-table thead th[data-col="Patient Name"],
-.cl-freeze-target table.cl-table thead th.cl-freeze-name-th {
+.legacy-cl-freeze-target table.cl-table { border-collapse: separate; border-spacing: 0; }
+.legacy-cl-freeze-target table.cl-table thead th { position: static; }
+.legacy-cl-freeze-target table.cl-table thead th[data-col="Patient"],
+.legacy-cl-freeze-target table.cl-table thead th[data-col="MEDICARE - Patient Name"],
+.legacy-cl-freeze-target table.cl-table thead th[data-col="Patient Name"],
+.legacy-cl-freeze-target table.cl-table thead th.cl-freeze-name-th {
   position: sticky; left: 0; z-index: 15; background: var(--bg-sunken); box-shadow: 1px 0 0 var(--border-subtle);
 }
-.cl-freeze-target table.cl-table thead th.cl-sel-th,
-.cl-freeze-target table.cl-table tbody td.cl-sel-td {
+.legacy-cl-freeze-target table.cl-table thead th.cl-sel-th,
+.legacy-cl-freeze-target table.cl-table tbody td.cl-sel-td {
   position: static !important;
   left: auto !important;
   z-index: auto !important;
 }
-.cl-freeze-target table.cl-table tbody td.name-col {
+.legacy-cl-freeze-target table.cl-table tbody td.name-col {
   position: sticky; left: 0; z-index: 14; background: var(--freeze-bg, var(--bg-surface)); box-shadow: 1px 0 0 var(--border-subtle);
 }
-.cl-freeze-target table.cl-table tbody tr:hover td.name-col { background: var(--bg-sunken); }
+.legacy-cl-freeze-target table.cl-table tbody tr:hover td.name-col { background: var(--bg-sunken); }
 /* DG Infusion PAs: freeze the FIRST DATA COLUMN (the column immediately after
    the selection checkbox). The selection column itself scrolls normally. */
-.cl-infusion-freeze table.cl-table thead th.cl-freeze-name-th,
-.cl-infusion-freeze table.cl-table tbody td.name-col {
+.legacy-cl-infusion-freeze table.cl-table thead th.cl-freeze-name-th,
+.legacy-cl-infusion-freeze table.cl-table tbody td.name-col {
   position: sticky !important;
   left: 46px !important;
   box-shadow: 1px 0 0 var(--border-subtle);
 }
-.cl-infusion-freeze table.cl-table thead th.cl-freeze-name-th {
+.legacy-cl-infusion-freeze table.cl-table thead th.cl-freeze-name-th {
   z-index: 15 !important;
   background: var(--bg-sunken);
 }
-.cl-infusion-freeze table.cl-table tbody td.name-col,
-.cl-infusion-freeze table.cl-table tbody td:nth-child(2) {
+.legacy-cl-infusion-freeze table.cl-table tbody td.name-col,
+.legacy-cl-infusion-freeze table.cl-table tbody td:nth-child(2) {
   position: sticky !important;
   left: 46px !important;
   z-index: 14 !important;
   background: var(--freeze-bg, var(--bg-surface));
   box-shadow: 1px 0 0 var(--border-subtle);
 }
-.cl-infusion-freeze table.cl-table tbody tr:hover td.name-col,
-.cl-infusion-freeze table.cl-table tbody tr:hover td:nth-child(2) {
+.legacy-cl-infusion-freeze table.cl-table tbody tr:hover td.name-col,
+.legacy-cl-infusion-freeze table.cl-table tbody tr:hover td:nth-child(2) {
   background: var(--freeze-bg, var(--bg-sunken));
 }
 /* The selection column is never sticky. */
-.cl-infusion-freeze table.cl-table th.cl-sel-th,
-.cl-infusion-freeze table.cl-table td.cl-sel-td {
+.legacy-cl-infusion-freeze table.cl-table th.cl-sel-th,
+.legacy-cl-infusion-freeze table.cl-table td.cl-sel-td {
   position: static !important;
   left: auto !important;
   z-index: auto !important;
@@ -1109,12 +1109,12 @@ table.cl-table tbody tr.cl-row-y.cl-row-sel,
 table.cl-table tbody tr.cl-row-hi.cl-row-sel { --freeze-bg: var(--accent-soft, #f3dde0); }
 table.cl-table tbody tr.cl-hl { --freeze-bg: var(--hl-bg); }
 table.cl-table tbody tr.cl-hl.cl-row-sel { --freeze-bg: var(--accent-soft, #f3dde0); }
-.cl-freeze-target table.cl-table tbody td.name-col,
-.cl-infusion-freeze table.cl-table tbody td:nth-child(2) {
+.legacy-cl-freeze-target table.cl-table tbody td.name-col,
+.legacy-cl-infusion-freeze table.cl-table tbody td:nth-child(2) {
   background: var(--freeze-bg, var(--bg-surface));
 }
-.cl-freeze-target table.cl-table tbody tr:hover td.name-col,
-.cl-infusion-freeze table.cl-table tbody tr:hover td:nth-child(2) {
+.legacy-cl-freeze-target table.cl-table tbody tr:hover td.name-col,
+.legacy-cl-infusion-freeze table.cl-table tbody tr:hover td:nth-child(2) {
   background: var(--freeze-bg, var(--bg-sunken));
 }
 /* User-configurable freeze panes: any number of columns + optional whole header. */
@@ -7249,7 +7249,7 @@ function clOpenFreezePanesModal(cfg) {
     <div class="modal-header"><div><h3>Freeze panes</h3><p>Choose which columns stay visible while scrolling left/right.</p></div></div>
     <div class="modal-body">
       <label class="cl-col-manage-row" style="margin-bottom:10px"><input type="checkbox" id="cl-freeze-header-check" ${current.header ? "checked" : ""}/> <span><strong>Freeze Table Header</strong></span></label>
-      <div class="form-hint" style="margin-bottom:10px">Freezes the entire table header while scrolling up/down.</div>
+      <div class="form-hint" style="margin-bottom:10px">Freezes the entire table header while scrolling up/down and keeps it visible while moving left/right.</div>
       <div class="form-group"><label><strong>Freeze Columns</strong></label><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px 14px;max-height:45vh;overflow:auto;padding:4px 2px">${rows || '<span class="form-hint">No data columns available.</span>'}</div><div class="form-hint">Select any number of columns. The selection checkbox column is never frozen.</div></div>
     </div>
     <div class="modal-footer"><button class="btn" id="cl-freeze-cancel">Cancel</button><button class="btn ghost" id="cl-freeze-clear">Unfreeze all</button><button class="btn primary" id="cl-freeze-save">Save</button></div>`);
