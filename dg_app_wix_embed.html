@@ -1158,6 +1158,15 @@ table.cl-table tbody tr.cl-hl.cl-row-sel { --freeze-bg: var(--accent-soft, #f3dd
   background: var(--bg-sunken) !important;
 }
 .cl-user-freeze-header table.cl-table thead th.cl-user-freeze-col { z-index: 70 !important; }
+/* The frozen header cell must be sticky in both axes and sit above body cells. */
+.cl-user-freeze-header table.cl-table thead th.cl-user-freeze-col {
+  position: sticky !important;
+  top: 0 !important;
+  background: var(--bg-sunken, #f5f6f8) !important;
+  background-color: var(--bg-sunken, #f5f6f8) !important;
+  opacity: 1 !important;
+  background-image: none !important;
+}
 .cl-user-freeze-col:hover { filter: brightness(.98); }
 table.cl-table { table-layout: fixed; min-width: 100%; }
 table.cl-table th { position: sticky; padding-right: 14px; overflow: hidden; text-overflow: ellipsis; }
@@ -7280,8 +7289,10 @@ function clSaveGlobalFreezeConfig(cols, header) {
 function clFreezeOpaqueBackground(tr, el, table) {
   if (!tr || !el) return;
 
-  // Keep the actual rendered row/cell color, but make the frozen cell itself
-  // an opaque layer so scrolling columns cannot visually bleed through it.
+  // The frozen cell must visually follow the FIRST non-frozen data cell in the
+  // same row. That is important for rows whose highlight is applied to the
+  // regular data cells rather than the <tr> itself. It also guarantees the
+  // frozen Patient Name cell matches the color immediately beside it.
   const cells = [...tr.children].filter(td =>
     td.tagName === "TD" &&
     !td.classList.contains("cl-user-freeze-col") &&
@@ -7289,24 +7300,22 @@ function clFreezeOpaqueBackground(tr, el, table) {
   );
 
   let bg = "";
-  for (const cell of cells) {
-    const c = getComputedStyle(cell).backgroundColor;
-    if (c && c !== "transparent" && c !== "rgba(0, 0, 0, 0)") {
-      bg = c;
-      break;
-    }
+  const nextCell = cells.find(td => td.dataset && td.dataset.col);
+  if (nextCell) {
+    const c = getComputedStyle(nextCell).backgroundColor;
+    if (c && c !== "transparent" && c !== "rgba(0, 0, 0, 0)") bg = c;
   }
 
-  // If the row itself carries the highlight, use that rendered value.
+  // If the immediate next data cell is transparent, use the row highlight.
   if (!bg) {
     const trBg = getComputedStyle(tr).backgroundColor;
     if (trBg && trBg !== "transparent" && trBg !== "rgba(0, 0, 0, 0)") bg = trBg;
   }
 
-  // Normal table background.
+  // Final fallback to the table surface.
   if (!bg) {
     const tableBg = getComputedStyle(table).backgroundColor;
-    bg = (tableBg && tableBg !== "transparent" && tableBg !== "rgba(0, 0, 0, 0)")
+    bg = (tableBg && tableBg !== "transparent" && tableBg !== "rgba(0, 0, 0, 0)" )
       ? tableBg
       : "#ffffff";
   }
@@ -7364,6 +7373,8 @@ function clApplyFreezeSettings(cfg) {
   if (header) {
     table.style.setProperty("border-collapse", "separate", "important");
     table.style.setProperty("border-spacing", "0", "important");
+    // Use sticky on EACH header cell, rather than relying on a sticky <thead>.
+    // This is more reliable across the Wix iframe/browser combinations.
     headerCells.forEach(th => {
       th.style.setProperty("position", "sticky", "important");
       th.style.setProperty("top", "0px", "important");
@@ -7401,12 +7412,11 @@ function clApplyFreezeSettings(cfg) {
       el.style.setProperty("position", "sticky", "important");
       el.style.setProperty("left", `${left}px`, "important");
       el.style.setProperty("z-index", header ? "70" : "30", "important");
-      if (el.tagName === "TH" && header) {
-        el.style.setProperty("top", "0px", "important");
-      }
-
       if (el.tagName === "TH") {
-        // Header remains an opaque header layer.
+        // A selected frozen column header always stays vertically frozen when
+        // Freeze Table Header is enabled, exactly like every other header.
+        // Its horizontal left position remains the same as its body column.
+        if (header) el.style.setProperty("top", "0px", "important");
         el.style.setProperty("background", "var(--bg-sunken, #f5f6f8)", "important");
         el.style.setProperty("background-color", "var(--bg-sunken, #f5f6f8)", "important");
       } else {
