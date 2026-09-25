@@ -1120,7 +1120,9 @@ table.cl-table tbody tr.cl-hl.cl-row-sel { --freeze-bg: var(--accent-soft, #f3dd
 /* User-configurable freeze panes: any number of columns + optional whole header. */
 .cl-user-freeze-reset table.cl-table thead th,
 .cl-user-freeze-reset table.cl-table tbody td.name-col,
-.cl-user-freeze-reset table.cl-table tbody td:nth-child(2) {
+.cl-user-freeze-reset table.cl-table tbody td:nth-child(2),
+.cl-user-freeze-reset table.cl-table thead th.cl-sel-th,
+.cl-user-freeze-reset table.cl-table tbody td.cl-sel-td {
   position: static !important;
   left: auto !important;
   z-index: auto !important;
@@ -1141,6 +1143,12 @@ table.cl-table tbody tr.cl-hl.cl-row-sel { --freeze-bg: var(--accent-soft, #f3dd
 }
 .cl-user-freeze-header .cl-table-wrap {
   position: relative;
+  /* Let the page/content scroller control vertical movement so the frozen
+     header is not trapped by the 60vh table viewport. Horizontal scrolling
+     remains available for wide tables. */
+  max-height: none !important;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
 }
 .cl-user-freeze-header table.cl-table {
   border-collapse: separate !important;
@@ -6882,6 +6890,7 @@ function clRenderTable(cfg) {
   // This is intentionally after innerHTML so every selected column/header cell
   // can be measured and made sticky.
   clApplyFreezeSettings(cfg);
+  clKeepFreezeHeaderVisible();
 
   // Freeze behavior is fully user-configurable now; no tab has a hard-coded
   // frozen column. The selection checkbox column remains excluded.
@@ -7268,7 +7277,7 @@ function clFreezeConfig() {
   }
 
   return {
-    cols: [...new Set(cols)],
+    cols: [...new Set(cols.filter(c => c === "__selection__" || (c && !String(c).startsWith("__"))) )],
     header: shared ? !!shared.freezeHeader : !!l.freezeHeader
   };
 }
@@ -7277,7 +7286,7 @@ function clSaveGlobalFreezeConfig(cols, header) {
   const root = Store.editedRows[CL_GLOBAL_FREEZE_UID] || {};
   const tabs = root.tabs && typeof root.tabs === "object" ? { ...root.tabs } : {};
   tabs[CALL_SHEET_ID] = {
-    freezeCols: [...new Set((cols || []).filter(c => c && !String(c).startsWith("__")))],
+    freezeCols: [...new Set((cols || []).filter(c => c === "__selection__" || (c && !String(c).startsWith("__"))) )],
     freezeHeader: !!header,
     updatedAt: new Date().toISOString()
   };
@@ -7387,7 +7396,7 @@ function clApplyFreezeSettings(cfg) {
     table.style.removeProperty("border-spacing");
   }
 
-  const selectedCols = cols.filter(c => c && !String(c).startsWith("__"));
+  const selectedCols = cols.filter(c => c === "__selection__" || (c && !String(c).startsWith("__")));
   if (!selectedCols.length) return;
 
   // Sticky table cells behave much more reliably when the table is separated.
@@ -7396,17 +7405,42 @@ function clApplyFreezeSettings(cfg) {
   table.style.setProperty("border-spacing", "0", "important");
 
   const headCells = [...table.querySelectorAll("thead th[data-col]")];
-  // The selection checkbox column is the first 46px of the table and is NEVER frozen.
-  // Start frozen data columns after it so Patient Name does not overlap the checkbox/header.
-  let left = CL_SEL_COL_W;
+  const selectionTh = table.querySelector("thead th.cl-sel-th");
+  // The selection checkbox column occupies the first 46px. It can now be
+  // optionally frozen; when it is not frozen, data columns still begin at 46px.
+  let left = 0;
+  const selectionFrozen = selectedCols.includes("__selection__");
   const lastSelected = selectedCols[selectedCols.length - 1];
 
+  if (selectionFrozen && selectionTh) {
+    selectionTh.classList.add("cl-user-freeze-col");
+    selectionTh.style.setProperty("--freeze-left", "0px");
+    selectionTh.style.setProperty("position", "sticky", "important");
+    selectionTh.style.setProperty("left", "0px", "important");
+    selectionTh.style.setProperty("z-index", header ? "80" : "40", "important");
+    if (header) selectionTh.style.setProperty("top", "0px", "important");
+    selectionTh.style.setProperty("background", "var(--bg-sunken, #f5f6f8)", "important");
+    selectionTh.style.setProperty("background-color", "var(--bg-sunken, #f5f6f8)", "important");
+    left = CL_SEL_COL_W;
+    region.querySelectorAll("tbody td.cl-sel-td").forEach(el => {
+      el.classList.add("cl-user-freeze-col");
+      el.style.setProperty("--freeze-left", "0px");
+      el.style.setProperty("position", "sticky", "important");
+      el.style.setProperty("left", "0px", "important");
+      el.style.setProperty("z-index", "40", "important");
+      clFreezeOpaqueBackground(el.closest("tr"), el, table);
+      el.style.setProperty("box-shadow", lastSelected === "__selection__" ? "2px 0 0 var(--border-subtle), 3px 0 6px rgba(16,24,40,.08)" : "1px 0 0 var(--border-subtle)", "important");
+    });
+  } else {
+    left = CL_SEL_COL_W;
+  }
+
   for (const col of selectedCols) {
+    if (col === "__selection__") continue;
     const th = headCells.find(h => h.dataset.col === col);
-    if (!th || th.classList.contains("cl-sel-th")) continue;
+    if (!th) continue;
     const width = Math.ceil(th.getBoundingClientRect().width || th.offsetWidth || 0);
     region.querySelectorAll(`th[data-col="${CSS.escape(col)}"], td[data-col="${CSS.escape(col)}"]`).forEach(el => {
-      if (el.classList.contains("cl-sel-th") || el.classList.contains("cl-sel-td")) return;
       el.classList.add("cl-user-freeze-col");
       el.style.setProperty("--freeze-left", `${left}px`);
       el.style.setProperty("position", "sticky", "important");
@@ -7415,12 +7449,10 @@ function clApplyFreezeSettings(cfg) {
       if (el.tagName === "TH") {
         // A selected frozen column header always stays vertically frozen when
         // Freeze Table Header is enabled, exactly like every other header.
-        // Its horizontal left position remains the same as its body column.
         if (header) el.style.setProperty("top", "0px", "important");
         el.style.setProperty("background", "var(--bg-sunken, #f5f6f8)", "important");
         el.style.setProperty("background-color", "var(--bg-sunken, #f5f6f8)", "important");
       } else {
-        // Body frozen cells get the exact row highlight as an opaque background.
         clFreezeOpaqueBackground(el.closest("tr"), el, table);
       }
 
@@ -7434,23 +7466,59 @@ function clApplyFreezeSettings(cfg) {
   }
 }
 
+function clKeepFreezeHeaderVisible() {
+  const region = document.getElementById("cl-table-region");
+  const wrap = region?.querySelector(".cl-table-wrap");
+  const table = wrap?.querySelector("table.cl-table");
+  if (!region || !wrap || !table || !region.classList.contains("cl-user-freeze-header")) return;
+
+  // The table list lives inside the scrollable main content area. The native
+  // sticky header can otherwise be clipped by the table wrapper near the end
+  // of the page. Keep the wrapper's vertical overflow visible while the
+  // header-freeze mode is active; the main content remains the vertical
+  // scroller and the table wrapper remains the horizontal scroller.
+  wrap.style.setProperty("max-height", "none", "important");
+  wrap.style.setProperty("overflow-y", "visible", "important");
+  wrap.style.setProperty("overflow-x", "auto", "important");
+
+  const header = table.querySelector("thead");
+  if (!header) return;
+  const ths = [...header.querySelectorAll("th")];
+  ths.forEach((th) => {
+    th.style.setProperty("position", "sticky", "important");
+    th.style.setProperty("top", "0px", "important");
+    th.style.setProperty("background", "var(--bg-sunken, #f5f6f8)", "important");
+    th.style.setProperty("background-color", "var(--bg-sunken, #f5f6f8)", "important");
+    th.style.setProperty("opacity", "1", "important");
+    th.style.setProperty("z-index", th.classList.contains("cl-user-freeze-col") ? "70" : "60", "important");
+  });
+}
+
+
+if (!window.__dgFreezeHeaderViewportSync) {
+  window.__dgFreezeHeaderViewportSync = true;
+  window.addEventListener("scroll", () => requestAnimationFrame(clKeepFreezeHeaderVisible), true);
+  window.addEventListener("resize", () => requestAnimationFrame(clKeepFreezeHeaderVisible));
+}
+
 function clOpenFreezePanesModal(cfg) {
   const cols = clColumns(cfg).filter(c => !String(c).startsWith("__"));
   const current = clFreezeConfig();
   const selected = new Set(current.cols);
-  const rows = cols.map(c => `<label class="cl-col-manage-row"><input type="checkbox" class="cl-freeze-col-check" value="${esc(c)}" ${selected.has(c) ? "checked" : ""}/> <span>${esc(clColLabel(c))}</span></label>`).join("");
+  const selectionRow = `<label class="cl-col-manage-row"><input type="checkbox" class="cl-freeze-col-check" value="__selection__" ${selected.has("__selection__") ? "checked" : ""}/> <span><strong>Selection Checkbox</strong></span></label>`;
+  const rows = selectionRow + cols.map(c => `<label class="cl-col-manage-row"><input type="checkbox" class="cl-freeze-col-check" value="${esc(c)}" ${selected.has(c) ? "checked" : ""}/> <span>${esc(clColLabel(c))}</span></label>`).join("");
   const modal = openModal(`
     <div class="modal-header"><div><h3>Freeze panes</h3><p>Choose which columns stay visible while scrolling left/right. If Freeze Table Header is enabled, the column headers (including Patient Name) stay visible while scrolling up/down.</p></div></div>
     <div class="modal-body">
       <label class="cl-col-manage-row" style="margin-bottom:10px"><input type="checkbox" id="cl-freeze-header-check" ${current.header ? "checked" : ""}/> <span><strong>Freeze Table Header</strong></span></label>
       <div class="form-hint" style="margin-bottom:10px">Freezes the entire table header while scrolling up/down and keeps it visible while moving left/right.</div>
-      <div class="form-group"><label><strong>Freeze Columns</strong></label><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px 14px;max-height:45vh;overflow:auto;padding:4px 2px">${rows || '<span class="form-hint">No data columns available.</span>'}</div><div class="form-hint">Select any number of columns. The selection checkbox column is never frozen.</div></div>
+      <div class="form-group"><label><strong>Freeze Columns</strong></label><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px 14px;max-height:45vh;overflow:auto;padding:4px 2px">${rows || '<span class="form-hint">No data columns available.</span>'}</div><div class="form-hint">Select any number of columns. You can also freeze the Selection Checkbox column.</div></div>
     </div>
     <div class="modal-footer"><button class="btn" id="cl-freeze-cancel">Cancel</button><button class="btn ghost" id="cl-freeze-clear">Unfreeze all</button><button class="btn primary" id="cl-freeze-save">Save</button></div>`);
   modal.querySelector("#cl-freeze-cancel").addEventListener("click", closeModal);
   modal.querySelector("#cl-freeze-clear").addEventListener("click", () => {
     // Clear the SHARED configuration so every user gets the same result after
-    // refresh. The selection checkbox column is never part of this list.
+    // refresh.
     clSaveGlobalFreezeConfig([], false);
     closeModal();
     clRenderTable(cfg);
